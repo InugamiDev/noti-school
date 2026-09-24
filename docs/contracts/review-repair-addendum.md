@@ -19,8 +19,10 @@ These are frozen repair requirements, not a claim of completed implementation or
 
 ## Questions and Recovery
 
-- The input ceiling is 4,000 UTF-16 code units (the HTML/JavaScript length convention), at most
-  16,000 UTF-8 bytes. Tab, LF and CR are permitted; other ASCII control characters are not.
+- The input ceiling is 4,000 Unicode scalar values, at most 16,000 UTF-8 bytes. The pinned Zod
+  version counts code points, matching JSON Schema; do not use JavaScript string.length as the
+  character count or cap the textarea at 4,000 UTF-16 units. Tab, LF and CR are permitted;
+  other ASCII control characters are not.
   Rust validates the same rules before reservations or paid calls. Reject an oversized serialized
   question-only evidence envelope before inference, and terminate evidence trimming when empty.
 - Locator offsets are Unicode scalar-value offsets within the normalized chunk, half-open
