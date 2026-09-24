@@ -49,9 +49,29 @@ values, so the coordinator must start from a clean environment. No populated env
   Revocation is checked on every call; user headers do not establish identity. No token/email/roles
   appear in this response. Failure is 401 or dependency failure 503; responses are no-store.
 - Limits: 16 KiB headers/body, 8 KiB URL, 100 connections, bounded request/header/socket timeouts,
-  separate listener quotas (public 120/min, internal 600/min) and Better Auth endpoint quotas.
-  Forwarded IP headers are stripped; socket peer replaces the private rate-limit header. The shared
-  tunnel peer therefore shares conservative quotas until the coordinator audits a real proxy policy.
+  48 active public requests and a separate 16 active internal requests. Route/method, header, CSRF,
+  body size and JSON-object checks precede public flow quota consumption. Internal authenticated paths
+  each allow 600/min. Public paths each allow 120/min per verified user or signed anonymous admission;
+  email login allows 10/min, signup/reset-request/verification-resend 5/min. Those four email paths also
+  enforce a normalized target-email quota, so rotating anonymous cookies does not bypass password or
+  mail abuse limits. A user's other sessions share their account quota. Callback, reset-token links,
+  session reads and unrelated paths have separate buckets; reset-token URL variations share one bucket.
+  Each quota table has at most 4096 entries, expires entries after 60 seconds and rejects new keys when
+  full. Anonymous and verified-user maps are separate. Better Auth's peer-IP limiter is replaced by
+  these `createService` limits; the raw library handler must never be exposed outside this boundary.
+- Anonymous admission uses a server-random ID, HMAC signature and ten-minute expiry in a host-only,
+  HttpOnly, SameSite=Lax cookie scoped to `/api/auth` (Secure in production). New issuance is globally
+  capped at 120/min; valid existing admissions and verified sessions bypass that issuance bucket.
+  The process-local signing key rotates on restart. The cookie grants no account or tenant access;
+  Better Auth still validates callback state, tokens and sessions. Forwarded IP headers are stripped
+  at the listener and are never used to establish quota identity. The loopback peer is not a student ID.
+- Remaining anonymous/distributed limits: attackers can exhaust **new admission issuance**, target an
+  email's login/recovery quota, churn issued cookies within the issuance ceiling, or saturate shared
+  connections/concurrency/CPU. A first-time or expired-cookie browser may therefore receive 429/503.
+  Process-local quotas reset on restart and are not coordinated across replicas; signed admissions
+  are not proof of a unique human. Trusted ingress identity, edge rate limits and distributed admission
+  remain coordinator release work. The regression proves quota isolation for existing verified sessions
+  and admitted callbacks, not immunity to connection floods or fairness for unadmitted anonymous users.
 - `/healthz` is process liveness; `/readyz` checks the DB and returns unavailable without core config,
   degraded with core config. Config presence does not claim successful provider/mail operation.
   Missing core configuration permits liveness but rejects protected work. SIGTERM/SIGINT close the

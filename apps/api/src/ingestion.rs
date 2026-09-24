@@ -85,6 +85,17 @@ pub fn text_chunks(bytes: &[u8]) -> Result<Vec<String>> {
         .map(|s| s.iter().collect::<String>())
         .collect())
 }
+
+// intent: cancellation and known precommit failure remove only this request's original.
+// Once COMMIT is dispatched its outcome may be ambiguous, so an operator must reconcile it.
+struct OriginalGuard(Option<std::path::PathBuf>);
+impl Drop for OriginalGuard {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0 {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
 pub async fn upload(
     State(s): State<AppState>,
     Path((i, source)): Path<(Uuid, Uuid)>,
@@ -135,7 +146,7 @@ pub async fn upload(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn ingest(
+pub(crate) async fn ingest(
     s: &AppState,
     i: Uuid,
     source: Uuid,
@@ -163,6 +174,9 @@ async fn ingest(
     } else {
         vec![]
     };
+    if chunks.len() > 512 {
+        return Err(Error("payload_too_large"));
+    }
     let sha = format!("{:x}", Sha256::digest(bytes));
     let mut hash = Sha256::new();
     hash.update(source.as_bytes());
@@ -228,13 +242,15 @@ async fn ingest(
         return Err(Error("core_unavailable"));
     }
     let path = root.join(&storage);
-    let mut output = tokio::fs::OpenOptions::new()
+    use std::os::unix::fs::OpenOptionsExt;
+    let output = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .mode(0o600)
         .open(&path)
-        .await
         .map_err(|_| Error("core_unavailable"))?;
+    let mut original = OriginalGuard(Some(path.clone()));
+    let mut output = tokio::fs::File::from_std(output);
     output
         .write_all(bytes)
         .await
@@ -288,11 +304,9 @@ async fn ingest(
     // An ambiguous DB commit retains the private orphan for operator reconciliation, never exposes it.
     sqlx::query("INSERT INTO product.source_versions(id,institution_id,source_id,label,sha256,storage_key,status,indexing,effective_from,effective_until,language) VALUES($1,$2,$3,$4,$5,$6,$7,$10,$8,$9,$11)")
         .bind(version).bind(i).bind(source).bind(b.label).bind(sha).bind(storage).bind(status).bind(b.effective_from).bind(b.effective_until).bind(indexing).bind(&b.language).execute(&mut *tx).await?;
-    let mut offsets = std::collections::BTreeMap::new();
     for (ordinal, (page, chunk)) in chunks.iter().enumerate() {
-        let start = *offsets.get(page).unwrap_or(&0i32);
-        let end = start + chunk.chars().count() as i32;
-        offsets.insert(*page, end);
+        let start = 0i32;
+        let end = chunk.chars().count() as i32;
         if chunk.trim().is_empty() {
             continue;
         }
@@ -308,6 +322,7 @@ async fn ingest(
     let job = json!({"id":operation,"institution_id":i,"version_id":version,"state":state,"error_code":error});
     sqlx::query("INSERT INTO product.ingestion_jobs(id,institution_id,version_id,state,error_code) VALUES($1,$2,$3,$4,$5)").bind(operation).bind(i).bind(version).bind(state).bind(error).execute(&mut *tx).await?;
     sqlx::query("UPDATE product.idempotency_keys SET state='completed',response=$4 WHERE institution_id=$1 AND user_id=$2 AND key=$3").bind(i).bind(user).bind(key).bind(&job).execute(&mut *tx).await?;
+    original.0 = None;
     tx.commit().await?;
     Ok((StatusCode::ACCEPTED, Json(job)))
 }
@@ -336,16 +351,20 @@ pub async fn action(
     let status: String = row.try_get("status")?;
     let source: Uuid = row.try_get("source_id")?;
     if b.action == "retry_index" {
-        s.config.ai_keys()?;
+        crate::budget::admit(&s).await?;
         if status != b.expected_status || !["pending_review", "approved"].contains(&status.as_str())
         {
             return Err(Error("conflict"));
         }
-        let job: Option<Uuid> = sqlx::query_scalar("UPDATE product.ingestion_jobs j SET state='queued',error_code=NULL,updated_at=now() WHERE j.institution_id=$1 AND j.version_id=$2 AND j.state IN ('failed','disabled') AND j.attempt<3 AND EXISTS(SELECT 1 FROM product.idempotency_keys k WHERE k.operation_id=j.id AND k.user_id=$3) AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p JOIN product.ai_reservations r ON r.operation_id=p.id WHERE p.root_operation_id=j.id AND r.state IN ('dispatched','uncertain')) RETURNING j.id")
-            .bind(i).bind(id).bind(&u.user_id).fetch_optional(&mut *tx).await?;
+        let job: Option<Uuid> = sqlx::query_scalar("UPDATE product.ingestion_jobs j SET state='queued',error_code=NULL,updated_at=now() WHERE j.institution_id=$1 AND j.version_id=$2 AND j.state IN ('failed','disabled') AND j.attempt<3 AND EXISTS(SELECT 1 FROM product.idempotency_keys k WHERE k.operation_id=j.id AND k.institution_id=j.institution_id) AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p JOIN product.ai_reservations r ON r.operation_id=p.id WHERE p.root_operation_id=j.id AND r.state IN ('dispatched','uncertain')) RETURNING j.id")
+            .bind(i).bind(id).fetch_optional(&mut *tx).await?;
         let job = job.ok_or(Error("conflict"))?;
         // Explicit administrator recovery extends the indexing operation, never an answer replay window.
-        sqlx::query("UPDATE product.idempotency_keys SET expires_at=now()+interval '24 hours' WHERE operation_id=$1 AND user_id=$2 AND state='completed'").bind(job).bind(&u.user_id).execute(&mut *tx).await?;
+        let recovered = sqlx::query("UPDATE product.idempotency_keys SET user_id=$2,key=$3,state='completed',response=jsonb_build_object('id',$1::uuid,'institution_id',$4::uuid,'version_id',$5::uuid,'state','queued','error_code',NULL,'recovery_actor',$2::text,'recovered_at',now()),expires_at=now()+interval '24 hours' WHERE operation_id=$1 AND institution_id=$4")
+            .bind(job).bind(&u.user_id).bind(Uuid::new_v4()).bind(i).bind(id).execute(&mut *tx).await?.rows_affected();
+        if recovered != 1 {
+            return Err(Error("conflict"));
+        }
         sqlx::query("UPDATE product.source_versions SET indexing='pending' WHERE institution_id=$1 AND id=$2").bind(i).bind(id).execute(&mut *tx).await?;
         tx.commit().await?;
         return Ok((
@@ -396,7 +415,7 @@ pub async fn download(
     h: HeaderMap,
 ) -> Result<Response> {
     let u = auth::member(&s, &h, i, false).await?;
-    let key:String=sqlx::query_scalar("SELECT v.storage_key FROM product.source_versions v JOIN product.sources s ON s.institution_id=v.institution_id AND s.id=v.source_id JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.id=$2 AND (m.role='admin' OR (s.visibility='institution' AND v.status IN ('approved','archived')))")
+    let key:String=sqlx::query_scalar("SELECT v.storage_key FROM product.source_versions v JOIN product.sources s ON s.institution_id=v.institution_id AND s.id=v.source_id JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.id=$2 AND (m.role='admin' OR (s.visibility='institution' AND v.approved_at IS NOT NULL AND v.status IN ('approved','archived')))")
         .bind(i).bind(id).bind(u.user_id).fetch_optional(s.pool()?).await?.ok_or(Error("not_found"))?;
     if key != id.to_string() {
         return Err(Error("not_found"));

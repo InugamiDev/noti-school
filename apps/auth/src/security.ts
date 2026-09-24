@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 export function equalSecret(actual: string, expected: string) {
@@ -32,5 +32,24 @@ export class RateLimit {
       this.counts.set(key, entry);
     }
     return ++entry.count <= this.maximum;
+  }
+}
+
+// intent: bounded anonymous admission without assigning every tunnel user the loopback address.
+// status: implemented; next: trusted ingress must supply distributed abuse protection.
+export class Admission {
+  private readonly secret = randomBytes(32);
+  private readonly issuance = new RateLimit(120);
+  private readonly name = 'noti.admission';
+  private sign(value: string) { return createHmac('sha256', this.secret).update(value).digest('hex'); }
+  identify(headers: Headers, secure: boolean, now = Date.now()) {
+    const token = headers.get('cookie')?.split(';').map(v => v.trim()).find(v => v.startsWith(`${this.name}=`))?.slice(this.name.length + 1);
+    if (token && /^[a-f0-9]{32}\.[0-9]{13}\.[a-f0-9]{64}$/.test(token)) {
+      const [id, expiry, signature] = token.split('.');
+      if (Number(expiry) > now && Number(expiry) <= now + 600_000 && equalSecret(signature!, this.sign(`${id}.${expiry}`))) return { id: id! };
+    }
+    if (!this.issuance.allow('new', now)) return null;
+    const id = randomBytes(16).toString('hex'), value = `${id}.${now + 600_000}`;
+    return { id, cookie: `${this.name}=${value}.${this.sign(value)}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=600${secure ? '; Secure' : ''}` };
   }
 }

@@ -7,6 +7,7 @@ pub mod error;
 pub mod graph;
 pub mod http;
 pub mod ingestion;
+pub mod input;
 pub mod invitations;
 pub mod pagination;
 pub mod pdf;
@@ -44,6 +45,8 @@ pub struct AppState {
     pub slots: Arc<tokio::sync::Semaphore>,
     pub pipeline_slots: Arc<tokio::sync::Semaphore>,
     pub providers: provider_http::ProviderHttp,
+    #[cfg(test)]
+    pub(crate) pricing_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 impl AppState {
     pub fn new(config: config::Config) -> Result<Self> {
@@ -72,6 +75,8 @@ impl AppState {
             slots: Arc::new(tokio::sync::Semaphore::new(8)),
             pipeline_slots: Arc::new(tokio::sync::Semaphore::new(2)),
             providers: provider_http::ProviderHttp::new()?,
+            #[cfg(test)]
+            pricing_at: None,
         })
     }
     pub fn pool(&self) -> Result<&PgPool> {
@@ -138,6 +143,10 @@ pub fn router(s: AppState) -> Router {
             get(ingestion::download),
         )
         .route(
+            "/api/v1/institutions/{institution_id}/versions/{version_id}/chunks",
+            get(retrieval::chunks),
+        )
+        .route(
             "/api/v1/institutions/{institution_id}/versions/{version_id}/actions",
             post(ingestion::action),
         )
@@ -174,6 +183,10 @@ pub fn router(s: AppState) -> Router {
         .route(
             "/api/v1/institutions/{institution_id}/feedback/{feedback_id}",
             axum::routing::patch(personal::feedback_action),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/feedback/{feedback_id}/context",
+            get(personal::feedback_context),
         )
         .route(
             "/api/v1/institutions/{institution_id}/budget",
@@ -254,10 +267,10 @@ async fn capabilities(State(s): State<AppState>) -> Json<Value> {
     let mut ai = json!({"state":"disabled","reason":"paid_calls_disabled"});
     if s.config.mode == "live" {
         ai = json!({"state":"unavailable","reason":"not_configured"});
-        if let Ok((_, _, model)) = s.config.ai_keys()
+        if let Ok((_, _, _)) = s.config.ai_keys()
             && let Some(db) = &s.db
         {
-            let priced: bool = sqlx::query_scalar("SELECT count(DISTINCT (provider,model,component))=5 FROM product.ai_prices WHERE effective_at<=now() AND valid_until>now() AND ((provider='openai' AND model=$1 AND component IN ('input_tokens','output_tokens')) OR (provider='openai' AND model='text-embedding-3-small' AND component='embedding_tokens') OR (provider='jev' AND model='jev-1.13.0' AND component IN ('jev_input_tokens','jev_output_tokens')))").bind(model).fetch_one(db).await.unwrap_or(false);
+            let priced = budget::priced(&s).await.unwrap_or(false);
             let available: bool = sqlx::query_scalar("SELECT coalesce((SELECT spent_micro_usd FROM product.ai_months WHERE month=date_trunc('month',now() AT TIME ZONE 'UTC')::date),0)+coalesce((SELECT sum(reserved_micro_usd) FROM product.ai_months),0)<50000000").fetch_one(db).await.unwrap_or(false);
             ai = if identity["identity"]["state"] != "available" {
                 fail.clone()
@@ -265,6 +278,8 @@ async fn capabilities(State(s): State<AppState>) -> Json<Value> {
                 json!({"state":"unavailable","reason":"pricing_missing"})
             } else if !available {
                 json!({"state":"unavailable","reason":"budget_exhausted"})
+            } else if s.providers.failed() {
+                json!({"state":"unavailable","reason":"provider_failed"})
             } else {
                 json!({"state":"available","reason":"ready"})
             };

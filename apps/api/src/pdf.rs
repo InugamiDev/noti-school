@@ -1,5 +1,12 @@
 use crate::error::{Error, Result};
 use std::{path::Path, time::Duration};
+pub(crate) static PARSERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+struct ExtractionOutput(std::path::PathBuf);
+impl Drop for ExtractionOutput {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
 // intent: untrusted decompression runs in a disposable resource-limited process, not the API heap.
 pub fn extract_child(input: &Path, output: &Path) -> Result<()> {
     use std::io::Write;
@@ -58,10 +65,17 @@ pub async fn extract_html(input: &Path) -> Result<Vec<String>> {
     extract_process(input, "--extract-html").await
 }
 async fn extract_process(input: &Path, flag: &str) -> Result<Vec<String>> {
-    static PARSERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
     let _permit = PARSERS.try_acquire().map_err(|_| Error("rate_limited"))?;
     let output = input.with_extension("extracted");
+    let _cleanup = ExtractionOutput(output.clone());
     let exe = std::env::current_exe().map_err(|_| Error("core_unavailable"))?;
+    // Cargo's library test harness cannot serve the parser CLI; use the same-source native binary.
+    #[cfg(test)]
+    let exe = exe
+        .parent()
+        .and_then(Path::parent)
+        .ok_or(Error("core_unavailable"))?
+        .join("noti-school-api");
     let mut command = tokio::process::Command::new("/usr/bin/prlimit");
     command
         .args([
@@ -81,7 +95,7 @@ async fn extract_process(input: &Path, flag: &str) -> Result<Vec<String>> {
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
     let outcome = tokio::time::timeout(Duration::from_secs(7), command.status()).await;
-    let result = if outcome.is_ok_and(|r| r.is_ok_and(|s| s.success())) {
+    if outcome.is_ok_and(|r| r.is_ok_and(|s| s.success())) {
         match tokio::fs::metadata(&output).await {
             Ok(m) if m.len() <= 4 * 1024 * 1024 => tokio::fs::read(&output)
                 .await
@@ -91,7 +105,5 @@ async fn extract_process(input: &Path, flag: &str) -> Result<Vec<String>> {
         }
     } else {
         Err(Error("unsupported_media"))
-    };
-    let _ = tokio::fs::remove_file(output).await;
-    result
+    }
 }

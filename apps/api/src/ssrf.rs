@@ -25,6 +25,7 @@ pub fn public_ip(ip: IpAddr) -> bool {
             v.to_ipv4_mapped().is_none()
                 && o[0] & 0xe000 == 0x2000
                 && o[0] != 0x2002
+                && !(o[0] == 0x3fff && o[1] & 0xf000 == 0)
                 && !(o[0] == 0x2001 && (o[1] < 0x200 || o[1] == 0xdb8))
         }
     }

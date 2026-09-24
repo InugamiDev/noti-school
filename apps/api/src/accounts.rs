@@ -37,7 +37,7 @@ pub async fn delete(
         .bind(&b.user_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("UPDATE product.pipeline_stages p SET result=NULL FROM product.idempotency_keys k WHERE k.operation_id=p.root_operation_id AND k.user_id=$1").bind(&b.user_id).execute(&mut *tx).await?;
+    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE product.pipeline_stages p SET result=NULL FROM product.idempotency_keys k WHERE k.operation_id=p.root_operation_id AND k.user_id=$1 AND NOT {recoverable}", recoverable=crate::budget::RECOVERABLE_EMBEDDING))).bind(&b.user_id).execute(&mut *tx).await?;
     sqlx::query("UPDATE product.idempotency_keys SET user_id='deleted:'||operation_id::text,state='failed',response='{}' WHERE user_id=$1").bind(&b.user_id).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM product.memberships WHERE user_id=$1")
         .bind(&b.user_id)

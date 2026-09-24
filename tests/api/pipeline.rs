@@ -28,6 +28,9 @@ const MIGRATOR: &str =
     "postgresql://noti_school_migrator:synthetic-test-only@127.0.0.1:54390/noti_school_test_api2";
 const SECRET: &str = "synthetic-internal-secret-test-only-0000";
 
+#[path = "repairs.rs"]
+mod repairs;
+
 async fn call(
     s: &AppState,
     method: &str,
@@ -63,6 +66,9 @@ async fn call(
         .await
         .unwrap();
     let status = response.status();
+    if path.ends_with("/context") || path.contains("/chunks") {
+        assert_eq!(response.headers()["cache-control"], "no-store");
+    }
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let value = serde_json::from_slice(&bytes).unwrap();
     (status, value)
@@ -465,6 +471,10 @@ async fn runtime_sql_and_complete_pipeline() {
     assert_eq!(status, 200, "{answer}");
     assert_eq!(answer["status"], "answered");
     assert_eq!(hits.load(Ordering::SeqCst) - before, 4);
+    let (chunk_page, feedback_context) = repairs::runtime_repairs(
+        &s, &pool, i, other, &admin, &student, &outsider, &source, &answer, &hits,
+    )
+    .await;
     assert_eq!(
         answer["claims"][0]["evidence_ids"][0],
         answer["evidence"][0]["id"]
@@ -486,6 +496,11 @@ async fn runtime_sql_and_complete_pipeline() {
     assert_eq!(hits.load(Ordering::SeqCst), count);
     let stage_count:i64=sqlx::query_scalar("SELECT count(*) FROM product.pipeline_stages p JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1").bind(key).fetch_one(&pool).await.unwrap();
     assert_eq!(stage_count, 4);
+    let embedding_units:i64=sqlx::query_scalar("SELECT (r.plan->0->>'units')::bigint FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND p.stage='question_embedding'").bind(key).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        embedding_units, 16_000,
+        "accepted UTF-8 bytes, not scalar count, bound the reservation"
+    );
     let stages_settled:i64=sqlx::query_scalar("SELECT count(*) FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state='settled'").bind(key).fetch_one(&pool).await.unwrap();
     assert_eq!(stages_settled, 4);
     let other_key = Uuid::new_v4();
@@ -599,6 +614,7 @@ async fn runtime_sql_and_complete_pipeline() {
         );
     }
     mode.store(3, Ordering::SeqCst);
+    s.providers.expire_cooldown();
     let error_key = Uuid::new_v4();
     let before = hits.load(Ordering::SeqCst);
     assert_eq!(
@@ -634,6 +650,58 @@ async fn runtime_sql_and_complete_pipeline() {
     );
     mode.store(0, Ordering::SeqCst);
     let answer_id = id(&answer, "id");
+    let (_, failed_caps) = call(&s, "GET", "/api/v1/capabilities", &student, json!({}), None).await;
+    assert_eq!(failed_caps["answers"]["reason"], "provider_failed");
+    assert_eq!(failed_caps["indexing"]["reason"], "provider_failed");
+    let cooldown_hits = hits.load(Ordering::SeqCst);
+    let cooldown_key = Uuid::new_v4();
+    assert_eq!(
+        call(
+            &s,
+            "POST",
+            "/api/v1/answers",
+            &student,
+            ask.clone(),
+            Some(cooldown_key)
+        )
+        .await
+        .0,
+        503
+    );
+    assert_eq!(hits.load(Ordering::SeqCst), cooldown_hits);
+    let cooldown_roots: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM product.idempotency_keys WHERE key=$1")
+            .bind(cooldown_key)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(cooldown_roots, 0);
+    s.providers.expire_cooldown();
+    assert_eq!(
+        call(&s, "GET", "/api/v1/capabilities", &student, json!({}), None)
+            .await
+            .1["answers"]["reason"],
+        "provider_failed"
+    );
+    assert_eq!(
+        call(
+            &s,
+            "POST",
+            "/api/v1/answers",
+            &student,
+            ask.clone(),
+            Some(cooldown_key)
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        call(&s, "GET", "/api/v1/capabilities", &student, json!({}), None)
+            .await
+            .1["answers"]["state"],
+        "available"
+    );
     let conv = id(&answer, "conversation_id");
     assert_eq!(
         call(
@@ -1113,8 +1181,8 @@ async fn runtime_sql_and_complete_pipeline() {
     );
     assert_eq!([one.0, two.0].iter().filter(|s| s.is_success()).count(), 1);
     // The global ceiling is enforced by actual concurrent runtime-role transactions, including free components.
-    let input_price:String=sqlx::query_scalar("SELECT id FROM product.ai_prices WHERE model='synthetic-model' AND component='input_tokens' ORDER BY effective_at DESC LIMIT 1").fetch_one(&pool).await.unwrap();
-    let free_price:String=sqlx::query_scalar("SELECT id FROM product.ai_prices WHERE model='jev-1.13.0' AND component='jev_output_tokens' ORDER BY effective_at DESC LIMIT 1").fetch_one(&pool).await.unwrap();
+    let input_price:String=sqlx::query_scalar("SELECT id FROM product.ai_prices WHERE model='synthetic-model' AND component='input_tokens' AND effective_at<=clock_timestamp() AND valid_until>clock_timestamp() ORDER BY effective_at DESC LIMIT 1").fetch_one(&pool).await.unwrap();
+    let free_price:String=sqlx::query_scalar("SELECT id FROM product.ai_prices WHERE model='jev-1.13.0' AND component='jev_output_tokens' AND effective_at<=clock_timestamp() AND valid_until>clock_timestamp() ORDER BY effective_at DESC LIMIT 1").fetch_one(&pool).await.unwrap();
     let committed:i64=sqlx::query_scalar("SELECT coalesce((SELECT spent_micro_usd FROM product.ai_months WHERE month=date_trunc('month',now() AT TIME ZONE 'UTC')::date),0)+coalesce((SELECT sum(reserved_micro_usd)::bigint FROM product.ai_months),0)").fetch_one(&pool).await.unwrap();
     let expected = (50_000_000 - committed) / 5_000_000;
     let mut tasks = Vec::new();
@@ -1257,7 +1325,8 @@ async fn runtime_sql_and_complete_pipeline() {
             .0,
         401
     );
-    let artifacts = json!({"Answer":answer,"GraphEdge":approved_edge,"Source":source,"Job":job,"Capabilities":caps});
+    // Synthetic runtime SQL and loopback-provider wire fixtures; no live quality claim.
+    let artifacts = json!({"Answer":answer,"GraphEdge":approved_edge,"Source":source,"Job":job,"Capabilities":caps,"ChunkPage":chunk_page,"FeedbackContext":feedback_context});
     tokio::fs::write(
         concat!(
             env!("CARGO_MANIFEST_DIR"),

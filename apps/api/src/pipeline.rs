@@ -63,9 +63,7 @@ impl Run<'_> {
     }
     pub async fn embed(&self, stage: &str, input: &str) -> Result<Vec<f32>> {
         let (key, _, _) = self.state.config.ai_keys()?;
-        if input.is_empty() || input.len() > 8000 {
-            return Err(Error("invalid_request"));
-        }
+        crate::input::validate(input)?;
         if let Some(v) = self.cached(stage, input.as_bytes()).await? {
             return serde_json::from_value(v).map_err(|_| Error("internal_error"));
         }
@@ -145,6 +143,8 @@ pub async fn execute(
     user: String,
     operation: Uuid,
 ) -> Result<Value> {
+    crate::input::pack(&b.question, vec![])?;
+    crate::budget::admit(&s).await?;
     let run = Run {
         state: &s,
         institution: b.institution_id,
@@ -152,14 +152,10 @@ pub async fn execute(
         operation,
     };
     let vector = run.embed("question_embedding", &b.question).await?;
-    let mut evidence = candidates(&s, b.institution_id, &user, &b.question, &vector).await?;
-    while serde_json::to_vec(&json!({"question":b.question,"evidence":evidence}))
-        .map_err(crate::error::invalid)?
-        .len()
-        > 20000
-    {
-        evidence.pop();
-    }
+    let mut evidence = crate::input::pack(
+        &b.question,
+        candidates(&s, b.institution_id, &user, &b.question, &vector).await?,
+    )?;
     let mut claims = Vec::new();
     let mut explanation = Some(if b.language == "vi" {
         "Chưa có đủ bằng chứng hiện hành để trả lời. Vui lòng liên hệ đơn vị phụ trách của trường."

@@ -44,9 +44,9 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
       crossSubDomainCookies: { enabled: false },
       ipAddress: { ipAddressHeaders: ['x-noti-peer-ip'] },
     },
-    rateLimit: { enabled: true, storage: 'memory', window: 60, max: 60,
-      customRules: { '/sign-in/email': { window: 60, max: 10 }, '/sign-up/email': { window: 60, max: 5 },
-        '/request-password-reset': { window: 60, max: 5 }, '/send-verification-email': { window: 60, max: 5 } } },
+    // createService enforces bounded account/admission + per-route limits. Better Auth's
+    // peer-IP limiter would pool all tunnel users behind the same loopback address.
+    rateLimit: { enabled: false },
     session: { cookieCache: { enabled: false }, expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 },
     account: { accountLinking: { enabled: false }, storeStateStrategy: 'database', skipStateCookieCheck: false,
       storeAccountCookie: false, encryptOAuthTokens: true },

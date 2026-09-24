@@ -1,17 +1,38 @@
-import { createSignal, For, Show } from 'solid-js';
+import { createSignal, For, Show, onCleanup } from 'solid-js';
 import { createRemoteResource as createResource } from './resource';
 import { SourceCreate, VersionCreate, VersionAction, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction } from '@noti/contracts';
-import { get, post, request, errorText } from './api';
+import { get, post, request, errorText, readAnswer, safeLink } from './api';
 import { Schemas } from '@noti/contracts';
 import { scoped } from './App';
 import Pagination, { pageSuffix } from './Pagination';
 export default function Admin(props: { institution: string; allowed: boolean }) {
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
   const [selected, setSelected] = createSignal(''),
     [message, setMessage] = createSignal(''),
     [busy, setBusy] = createSignal(false),
     [jobId, setJobId] = createSignal('');
   const [sourceCursor,setSourceCursor]=createSignal(''),[versionCursor,setVersionCursor]=createSignal(''),[feedbackCursor,setFeedbackCursor]=createSignal('');
   const [graphCursor, setGraphCursor] = createSignal(''), [entityId, setEntityId] = createSignal('');
+  const [reviewVersion, setReviewVersion] = createSignal(''), [chunkCursor, setChunkCursor] = createSignal('');
+  const [reportId, setReportId] = createSignal('');
+  const [chunks] = createResource(
+    () => props.allowed && reviewVersion() ? { institution: props.institution, version: reviewVersion(), cursor: chunkCursor() } : false,
+    async key => {
+      const page = await get(scoped(key.institution, '/versions/{version_id}/chunks', { version_id: key.version }) + pageSuffix(key.cursor), 'ChunkPage');
+      if (page.items.some(c => c.institution_id !== key.institution || c.version_id !== key.version)) throw new Error('Scope mismatch');
+      return page;
+    },
+  );
+  const [context, { refetch: refreshContext }] = createResource(
+    () => props.allowed && reportId() ? { institution: props.institution, report: reportId() } : false,
+    async key => {
+      const value = await get(scoped(key.institution, '/feedback/{feedback_id}/context', { feedback_id: key.report }), 'FeedbackContext');
+      const answer = readAnswer(value.answer);
+      if (value.feedback.id !== key.report || value.feedback.institution_id !== key.institution || answer.institution_id !== key.institution || value.feedback.answer_id !== answer.id) throw new Error('Scope mismatch');
+      return { ...value, answer };
+    },
+  );
   const [graph, { refetch: refreshGraph }] = createResource(
     () => props.allowed && props.institution ? { id: props.institution, cursor: graphCursor() } : false,
     key => get(scoped(key.id, '/graph') + pageSuffix(key.cursor), 'GraphEdgePage'),
@@ -47,11 +68,11 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
     setMessage('');
     try {
       await work();
-      setMessage('Action accepted. Check the updated status below.');
+      if (!disposed) setMessage('Action accepted. Check the updated status below.');
     } catch (e) {
-      setMessage(errorText(e));
+      if (!disposed) setMessage(errorText(e));
     } finally {
-      setBusy(false);
+      if (!disposed) setBusy(false);
     }
   }
   return (
@@ -118,7 +139,7 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
             </form>
             <label class="stack">
               Select source
-              <select value={selected()} onChange={(e) => {setSelected(e.currentTarget.value);setVersionCursor('');}}>
+              <select value={selected()} onChange={(e) => {setSelected(e.currentTarget.value);setVersionCursor('');setReviewVersion('');setChunkCursor('');}}>
                 <option value="">Choose a source</option>
                 <For each={sources()?.items}>
                   {(s) => (
@@ -206,6 +227,7 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                     {v.status} · Indexing: {v.indexing}
                   </p>
                   <div class="actions">
+                    <button onClick={() => { setReviewVersion(v.id); setChunkCursor(''); }}>Review passages</button>
                     <For each={['approve', 'archive', 'retry_index'] as const}>
                       {(action) => (
                         <button
@@ -242,6 +264,26 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
               )}
             </For>
             <Pagination cursor={versionCursor()} next={versions()?.next_cursor} change={setVersionCursor} label="Version pages"/>
+            <Show when={reviewVersion()}>
+              <section class="reader" aria-label="Extracted passages">
+                <h3>Extracted passages</h3>
+                <p class="muted">Read each page before deciding whether to approve this version. Opening this view does not mark it reviewed.</p>
+                <a href={scoped(props.institution, '/versions/{version_id}/file', { version_id: reviewVersion() })} target="_blank" rel="noopener noreferrer">Open original file</a>
+                <Show when={chunks.loading}><p role="status">Loading passages…</p></Show>
+                <Show when={chunks.error}><p role="alert">{errorText(chunks.error)}</p></Show>
+                <Show when={chunks()}>{page => <>
+                  <For each={page().items} fallback={<p>No extracted text on this page. Inspect the original file; extraction may need attention.</p>}>{chunk => <article class="version-row">
+                    <h4>Passage {chunk.ordinal + 1}</h4>
+                    <p>{chunk.locator.page ? `Page ${chunk.locator.page}` : 'Page not supplied'}{chunk.locator.section ? ` · ${chunk.locator.section}` : ''}</p>
+                    <p class="passage">{chunk.text}</p>
+                    <label class="stack">Evidence chunk ID<input readonly value={chunk.id} onFocus={e => e.currentTarget.select()}/></label>
+                    <label class="stack">Version ID<input readonly value={chunk.version_id}/></label>
+                    <label class="stack">Source ID<input readonly value={chunk.source_id}/></label>
+                  </article>}</For>
+                  <Pagination cursor={chunkCursor()} next={page().next_cursor} change={setChunkCursor} label="Passage pages"/>
+                </>}</Show>
+              </section>
+            </Show>
             <Show when={jobId()}>
               <h3>Indexing status</h3>
               <p>
@@ -273,11 +315,33 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                   <h3>{f.category}</h3>
                   <p>{f.comment}</p>
                   <p>{f.status}</p>
+                  <button onClick={() => reportId() === f.id ? void refreshContext() : setReportId(f.id)}>Review report context</button>
+                  <Show when={reportId() === f.id}>
+                    <Show when={context.loading}><p role="status">Loading report context…</p></Show>
+                    <Show when={context.error}><p role="alert">Report context unavailable. Review status has not been changed. {errorText(context.error)}</p></Show>
+                    <Show when={context()}>{c => <section class="reader" aria-label="Report context">
+                      <h4>Reported question</h4><p class="passage">{c().question}</p>
+                      <h4>Reported answer</h4><p>{c().answer.status}</p>
+                      <For each={c().answer.claims}>{claim => <p class="passage">{claim.text}</p>}</For>
+                      <Show when={c().answer.explanation}><p class="notice">{c().answer.explanation}</p></Show>
+                      <h4>Current citations</h4>
+                      <For each={c().answer.evidence} fallback={<p>No citations currently accessible.</p>}>{evidence => <article class="version-row">
+                        <h4>{evidence.title} · {evidence.version_label}</h4>
+                        <p>{evidence.locator.page ? `Page ${evidence.locator.page}` : ''}{evidence.locator.section ? ` · ${evidence.locator.section}` : ''}</p>
+                        <blockquote>{evidence.quote}</blockquote>
+                        <div class="actions">
+                          <a href={`${scoped(props.institution, '/versions/{version_id}/file', { version_id: evidence.version_id })}${evidence.locator.page ? `#page=${evidence.locator.page}` : ''}`} target="_blank" rel="noopener noreferrer">Open cited original</a>
+                          <Show when={safeLink(evidence.original_url)}>{url => <a href={url()} target="_blank" rel="noopener noreferrer">Original website</a>}</Show>
+                        </div>
+                        <label class="stack">Citation ID<input readonly value={evidence.id}/></label>
+                      </article>}</For>
+                    </section>}</Show>
+                  </Show>
                   <div class="actions">
                     <For each={['reviewed', 'resolved'] as const}>
                       {(status) => (
                         <button
-                          disabled={busy()}
+                          disabled={busy() || reportId() !== f.id || !context() || context.loading || !!context.error}
                           onClick={() =>
                             void act(async () => {
                               await request(

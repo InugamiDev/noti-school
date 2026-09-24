@@ -3,6 +3,25 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+// Institutional chunk vectors are recoverable work, not the uploader's personal answer cache.
+pub(crate) const RECOVERABLE_EMBEDDING: &str = "EXISTS(SELECT 1 FROM product.ingestion_jobs j JOIN product.source_versions v ON v.institution_id=j.institution_id AND v.id=j.version_id JOIN product.chunks c ON c.institution_id=j.institution_id AND c.version_id=j.version_id WHERE j.id=p.root_operation_id AND p.stage='chunk_'||c.id::text AND j.state IN ('queued','running','failed','disabled') AND j.attempt<3 AND v.status IN ('pending_review','approved'))";
+
+pub async fn priced(s: &crate::AppState) -> Result<bool> {
+    let (_, _, model) = s.config.ai_keys()?;
+    #[cfg(test)]
+    let at = s.pricing_at;
+    #[cfg(not(test))]
+    let at: Option<chrono::DateTime<chrono::Utc>> = None;
+    Ok(sqlx::query_scalar("WITH at AS (SELECT coalesce($2::timestamptz,clock_timestamp()) AS now) SELECT count(DISTINCT (provider,model,component))=5 FROM product.ai_prices,at WHERE effective_at<=at.now AND valid_until>at.now AND ((provider='openai' AND model=$1 AND component IN ('input_tokens','output_tokens')) OR (provider='openai' AND model='text-embedding-3-small' AND component='embedding_tokens') OR (provider='jev' AND model='jev-1.13.0' AND component IN ('jev_input_tokens','jev_output_tokens')))").bind(model).bind(at).fetch_one(s.pool()?).await?)
+}
+
+pub async fn admit(s: &crate::AppState) -> Result<()> {
+    if !priced(s).await? {
+        return Err(Error("pricing_unavailable"));
+    }
+    s.providers.admit()
+}
+
 // intent: a committed reservation is not permission to send; only a committed one-time dispatch is.
 pub struct Attempt {
     pool: PgPool,
@@ -42,7 +61,8 @@ impl Attempt {
             OperationKind::Embedding => (
                 "openai",
                 "text-embedding-3-small",
-                &[("embedding_tokens", 8192)],
+                // UTF-8 bytes conservatively bound byte-level tokens; scalars do not.
+                &[("embedding_tokens", 16000)],
             ),
             OperationKind::Generation => (
                 "openai",
@@ -120,8 +140,17 @@ impl Attempt {
             .await?;
         // Deletion/revocation may race a provider reply. Settle money regardless, but never restore
         // cached personal text after cleanup. Row locks serialize this with account deletion.
-        let active: Option<Uuid> = sqlx::query_scalar("SELECT p.id FROM product.pipeline_stages p JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id JOIN product.memberships m ON m.institution_id=k.institution_id AND m.user_id=k.user_id AND m.revoked_at IS NULL WHERE p.id=(SELECT operation_id FROM product.ai_reservations WHERE id=$1) AND k.state IN ('pending','completed') AND k.expires_at>now() FOR SHARE OF k,m")
+        let mut active: Option<Uuid> = sqlx::query_scalar("SELECT p.id FROM product.pipeline_stages p JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id JOIN product.memberships m ON m.institution_id=k.institution_id AND m.user_id=k.user_id AND m.revoked_at IS NULL WHERE p.id=(SELECT operation_id FROM product.ai_reservations WHERE id=$1) AND k.state IN ('pending','completed') AND k.expires_at>now() FOR SHARE OF k,m")
             .bind(self.id).fetch_optional(&mut *tx).await?;
+        if active.is_none()
+            && self.kind == OperationKind::Embedding
+            && serde_json::from_value::<Vec<f32>>(result.clone()).is_ok_and(|v| {
+                v.len() == 1536 && v.iter().all(|n| n.is_finite()) && v.iter().any(|n| *n != 0.0)
+            })
+        {
+            active = sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT p.id FROM product.pipeline_stages p WHERE p.id=(SELECT operation_id FROM product.ai_reservations WHERE id=$1) AND {RECOVERABLE_EMBEDDING} FOR UPDATE OF p")))
+                .bind(self.id).fetch_optional(&mut *tx).await?;
+        }
         if let Some(stage) = active {
             sqlx::query("UPDATE product.pipeline_stages SET result=$2 WHERE id=$1")
                 .bind(stage)

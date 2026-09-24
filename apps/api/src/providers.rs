@@ -56,9 +56,15 @@ pub fn jev_request(evidence: Value, questions: BTreeMap<String, String>) -> Resu
     {
         return Err(Error("invalid_request"));
     }
-    Ok(
-        json!({"model":JEV_MODEL,"state":evidence,"questions":questions.into_iter().map(|(id,instructions)|(id,json!({"type":"noul","instructions":instructions}))).collect::<BTreeMap<_,_>>()}),
-    )
+    let body = json!({"model":JEV_MODEL,"state":evidence,"questions":questions.into_iter().map(|(id,instructions)|(id,json!({"type":"noul","instructions":instructions}))).collect::<BTreeMap<_,_>>()});
+    if serde_json::to_vec(&body)
+        .map_err(crate::error::invalid)?
+        .len()
+        > 30_000
+    {
+        return Err(Error("invalid_request"));
+    }
+    Ok(body)
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

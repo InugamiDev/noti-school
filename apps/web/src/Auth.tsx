@@ -1,4 +1,4 @@
-import { createSignal, Show, For } from 'solid-js';
+import { createSignal, Show, For, onCleanup } from 'solid-js';
 import { z } from 'zod';
 import type { Schemas } from '@noti/contracts';
 import { request, post, errorText, takeAuthCallback } from './api';
@@ -20,7 +20,10 @@ export default function Auth(props: {
   capabilities: z.infer<typeof Schemas.Capabilities> | undefined;
   authenticated: boolean;
   refresh: () => void;
+  signedOut: () => void;
 }) {
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
   const callback = props.callback ?? takeAuthCallback(location.href);
   window.history.replaceState(null, '', callback.clean);
   const [resetToken, setResetToken] = createSignal(callback.token);
@@ -44,6 +47,8 @@ export default function Auth(props: {
         body: JSON.stringify(body),
         ...(invitation ? { headers: { 'X-Noti-Invitation': invitation } } : {}),
       });
+      if (disposed) return;
+      const ended = path === 'sign-out' || (path === 'delete-user' && !!deleteToken());
       setMessage(
         path === 'sign-out'
           ? 'Signed out.'
@@ -59,13 +64,15 @@ export default function Auth(props: {
       );
       if (path === 'reset-password') setResetToken('');
       if (path === 'delete-user') setDeleteToken('');
+      if (ended) props.signedOut();
       props.refresh();
     } catch (e) {
+      if (disposed) return;
       const confirmingDeletion = path === 'delete-user' && !!deleteToken();
       if (confirmingDeletion) setDeleteToken('');
       setMessage(errorText(e) + (confirmingDeletion ? ' Request a new email confirmation before retrying deletion.' : ''));
     } finally {
-      setBusy(false);
+      if (!disposed) setBusy(false);
     }
   }
   return (
@@ -119,10 +126,11 @@ export default function Auth(props: {
             setBusy(true);
             try {
               await post('/api/auth/invitations/redeem', 'Membership', { token });
+              if (disposed) return;
               setMessage('Invitation redeemed. Your collection access has been updated.');
               props.refresh();
             } catch (err) {
-              setMessage(errorText(err));
+              if (!disposed) setMessage(errorText(err));
             } finally {
               setBusy(false);
             }
@@ -261,6 +269,7 @@ export default function Auth(props: {
                     : {}),
                 },
               );
+              if (disposed) return;
               const url = new URL(value.url);
               if (url.protocol !== 'https:' || url.hostname !== 'accounts.google.com')
                 throw new Error('Unsafe redirect');

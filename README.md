@@ -2,7 +2,7 @@
 
 Answers students can trace. A connection universities can rebuild.
 
-noti.school is an evidence-grounded university knowledge assistant in development. Students will ask about regulations, handbooks, courses, forms and procedures. Its planned answer pipeline retrieves approved institutional evidence, checks it with Jev, and uses OpenAI to compose a cited answer. A bounded knowledge graph connects related documents and institutional entities without replacing source evidence.
+noti.school is an evidence-grounded university knowledge assistant in development. Students ask about regulations, handbooks, courses, forms and procedures. Its answer pipeline retrieves approved institutional evidence, checks it with Jev, and uses OpenAI to compose a cited answer. A bounded knowledge graph connects related documents and institutional entities without replacing source evidence. Live inference and real institutional coverage still require configuration and evaluation.
 
 For universities: **Reconnect with your students.**
 
@@ -12,7 +12,7 @@ For students: **Your university questions, answered with sources.**
 
 The application includes an animated SolidJS/Three.js landing and student/admin interface, Better Auth identity service, and a Rust evidence pipeline: document extraction/indexing, hybrid retrieval, approved graph expansion, Jev evidence and claim checks, and OpenAI cited answers. Account setup, history, feedback, guarded migrations and a persistent budget ledger are implemented. Optional OpenAI web discovery is not implemented and remains visibly disabled; administrators can propose and fetch allowed official URLs for review.
 
-Coordinator reruns pass 19 identity tests, two PostgreSQL identity/operator scenarios, one comprehensive PostgreSQL evidence-pipeline scenario, and 13 motion/browser tests. Provider and email fixtures are synthetic. Combined-schema checks and three independent reviews are pending on this snapshot. Live providers, approved HCMIU coverage, human-labeled bilingual quality, and production release gates remain unverified. Nothing is publicly deployed.
+Automated checks exercise actual PostgreSQL runtime roles and Better Auth, synthetic provider/email transports, browser workflows, and animation pixels/lifecycle. Three independent reviews identified security, privacy, recovery and interface defects; their repairs require combined verification and independent re-review. Coordinator reruns of the identity repairs pass 19 identity tests and seven integration tests. The repair-only web suite passed 40 browser scenarios; the combined animation/fallback suite is a separate gate. Live providers, approved HCMIU coverage, human-labeled bilingual quality, and production release gates remain unverified. Nothing is publicly deployed.
 
 The first pilot targets HCMIU and English/Vietnamese questions. Application services, files and PostgreSQL will run in HomeLab. OpenAI and TypeSafe's Jev remain external inference services. Worldwide SaaS access is a later release, gated on testing, privacy and operational readiness.
 

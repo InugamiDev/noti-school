@@ -74,8 +74,8 @@ export async function retainIdentityData(client: pg.Client, input: unknown) {
   await client.query('BEGIN');
   try {
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const sessions = await client.query('DELETE FROM auth.session WHERE id IN (SELECT id FROM auth.session WHERE "expiresAt" < now() ORDER BY "expiresAt",id LIMIT $1 FOR UPDATE SKIP LOCKED)', [limit]);
-    const verification = await client.query('DELETE FROM auth.verification WHERE id IN (SELECT id FROM auth.verification WHERE "expiresAt" < now() ORDER BY "expiresAt",id LIMIT $1 FOR UPDATE SKIP LOCKED)', [limit]);
+    const sessions = await client.query('WITH selected AS MATERIALIZED (SELECT id FROM auth.session WHERE "expiresAt" < now() ORDER BY "expiresAt",id LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM auth.session USING selected WHERE session.id=selected.id', [limit]);
+    const verification = await client.query('WITH selected AS MATERIALIZED (SELECT id FROM auth.verification WHERE "expiresAt" < now() ORDER BY "expiresAt",id LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM auth.verification USING selected WHERE verification.id=selected.id', [limit]);
     await client.query('COMMIT'); return { sessions: sessions.rowCount, verification: verification.rowCount };
   } catch (error) { await client.query('ROLLBACK'); throw error; }
 }
@@ -87,15 +87,42 @@ export async function retainPersonalData(client: pg.Client, input: unknown) {
     await client.query("SET LOCAL statement_timeout = '5s'");
     // Each table slice is bounded. Conversation cascades intentionally remove its answers/citations/feedback.
     await client.query('SELECT pg_advisory_xact_lock(718443901)');
-    const conversations = await client.query("DELETE FROM product.conversations WHERE id IN (SELECT id FROM product.conversations WHERE created_at < now()-$1*interval '1 day' ORDER BY created_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)", [days, limit]);
-    const feedback = await client.query("DELETE FROM product.feedback WHERE id IN (SELECT id FROM product.feedback WHERE created_at < now()-$1*interval '1 day' ORDER BY created_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)", [days, limit]);
-    const invitations = await client.query("DELETE FROM product.invitations WHERE id IN (SELECT id FROM product.invitations WHERE expires_at < now()-$1*interval '1 day' ORDER BY expires_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)", [days, limit]);
-    // Stage-linked roots are operational audit records; their FK must survive cache expiry.
-    // Unresolved charges also keep legacy replay fences. Neither path releases reserved funds.
-    const idempotency = await client.query("DELETE FROM product.idempotency_keys WHERE ctid IN (SELECT k.ctid FROM product.idempotency_keys k WHERE k.expires_at < now() AND k.state IN ('completed','failed') AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id) AND NOT EXISTS(SELECT 1 FROM product.ai_reservations WHERE state IN ('reserved','dispatched','uncertain')) ORDER BY k.expires_at LIMIT $1 FOR UPDATE OF k SKIP LOCKED)", [limit]);
-    const issuers = await client.query("DELETE FROM product.memberships m WHERE m.ctid IN (SELECT p.ctid FROM product.memberships p WHERE p.user_id LIKE 'operator:%' AND NOT EXISTS(SELECT 1 FROM product.invitations i WHERE i.created_by=p.user_id) LIMIT $1 FOR UPDATE SKIP LOCKED)", [limit]);
+    // Materialize selections: a locking LIMIT inside IN can be rescanned by a nested-loop plan.
+    const conversations = await client.query("WITH selected AS MATERIALIZED (SELECT id FROM product.conversations WHERE created_at < now()-$1*interval '1 day' ORDER BY created_at,id LIMIT $2 FOR UPDATE SKIP LOCKED) DELETE FROM product.conversations USING selected WHERE conversations.id=selected.id", [days, limit]);
+    const feedback = await client.query("WITH selected AS MATERIALIZED (SELECT id FROM product.feedback WHERE created_at < now()-$1*interval '1 day' ORDER BY created_at,id LIMIT $2 FOR UPDATE SKIP LOCKED) DELETE FROM product.feedback USING selected WHERE feedback.id=selected.id", [days, limit]);
+    const invitations = await client.query("WITH selected AS MATERIALIZED (SELECT id FROM product.invitations WHERE expires_at < now()-$1*interval '1 day' ORDER BY expires_at,id LIMIT $2 FOR UPDATE SKIP LOCKED) DELETE FROM product.invitations USING selected WHERE invitations.id=selected.id", [days, limit]);
+    // intent: retain recovery/dispatch fences while bounding terminal personal metadata.
+    // status: implemented; next: operator schedules daily batches and reconciles exemptions.
+    // A completed enqueue response is not a completed ingestion job, even before a paid stage.
+    const idempotency = await client.query(`WITH selected AS MATERIALIZED (
+      SELECT k.ctid FROM product.idempotency_keys k WHERE k.expires_at < now() AND k.state IN ('completed','failed')
+      AND NOT EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state<>'succeeded')
+      AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id)
+      AND NOT EXISTS(SELECT 1 FROM product.ai_reservations r WHERE r.operation_id=k.operation_id)
+      ORDER BY k.expires_at,k.operation_id LIMIT $1 FOR UPDATE OF k SKIP LOCKED)
+      DELETE FROM product.idempotency_keys k USING selected WHERE k.ctid=selected.ctid`, [limit]);
+    // Age both creation and replay expiry: the schema has no terminal-transition timestamp.
+    // Root and stage IDs remain stable; no money or dispatch state is changed.
+    const terminal = await client.query<{ operation_id: string }>(`SELECT k.operation_id FROM product.idempotency_keys k
+      WHERE greatest(k.created_at,k.expires_at)<now()-interval '13 months' AND k.state IN ('completed','failed')
+      AND NOT EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state<>'succeeded')
+      AND NOT EXISTS(SELECT 1 FROM product.ai_reservations r WHERE r.state IN ('reserved','dispatched','uncertain')
+        AND (r.operation_id=k.operation_id OR r.operation_id IN (SELECT p.id FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id)))
+      AND (k.user_id<>('retained:'||k.operation_id::text) OR k.request_sha256<>repeat('0',64) OR k.response IS DISTINCT FROM '{}'::jsonb
+        OR EXISTS(SELECT 1 FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id AND (p.result IS NOT NULL OR p.input_sha256<>repeat('0',64))))
+      ORDER BY greatest(k.created_at,k.expires_at),k.operation_id LIMIT $1 FOR UPDATE OF k SKIP LOCKED`, [limit]);
+    const operations = terminal.rows.map(row => row.operation_id);
+    // Stage slices have their own row limit; leave the root eligible until every stage is scrubbed.
+    const stages = await client.query(`WITH selected AS MATERIALIZED (SELECT id FROM product.pipeline_stages WHERE root_operation_id=ANY($1::uuid[])
+        AND (result IS NOT NULL OR input_sha256<>repeat('0',64)) ORDER BY created_at,id LIMIT $2 FOR UPDATE SKIP LOCKED)
+      UPDATE product.pipeline_stages p SET result=NULL,input_sha256=repeat('0',64) FROM selected WHERE p.id=selected.id`, [operations, limit]);
+    const pseudonymized = await client.query(`UPDATE product.idempotency_keys SET user_id='retained:'||operation_id::text,
+      request_sha256=repeat('0',64),response='{}'::jsonb WHERE operation_id=ANY($1::uuid[])
+      AND (user_id<>('retained:'||operation_id::text) OR request_sha256<>repeat('0',64) OR response IS DISTINCT FROM '{}'::jsonb)`, [operations]);
+    const issuers = await client.query("WITH selected AS MATERIALIZED (SELECT p.ctid FROM product.memberships p WHERE p.user_id LIKE 'operator:%' AND NOT EXISTS(SELECT 1 FROM product.invitations i WHERE i.created_by=p.user_id) LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM product.memberships m USING selected WHERE m.ctid=selected.ctid", [limit]);
     await client.query('COMMIT');
-    return { conversations: conversations.rowCount, feedback: feedback.rowCount, invitations: invitations.rowCount, idempotency: idempotency.rowCount, issuers: issuers.rowCount };
+    return { conversations: conversations.rowCount, feedback: feedback.rowCount, invitations: invitations.rowCount, idempotency: idempotency.rowCount, issuers: issuers.rowCount,
+      pseudonymized: pseudonymized.rowCount, stages: stages.rowCount };
   } catch (error) { await client.query('ROLLBACK'); throw error; }
 }
 

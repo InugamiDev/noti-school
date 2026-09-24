@@ -86,6 +86,29 @@ pub async fn feedback_action(
         .bind(i).bind(id).bind(u.user_id).bind(b.status).fetch_optional(s.pool()?).await?.ok_or(Error("not_found"))?;
     Ok(Json(row))
 }
+
+// intent: a report grants only its own answer context, retaining the author's evidence restrictions.
+pub async fn feedback_context(
+    State(s): State<AppState>,
+    Path((i, report)): Path<(Uuid, Uuid)>,
+    h: HeaderMap,
+) -> Result<Json<Value>> {
+    use sqlx::Row;
+    let u = auth::member(&s, &h, i, true).await?;
+    let mut tx = s.pool()?.begin().await?;
+    let row = sqlx::query("SELECT to_jsonb(f)-'user_id' AS feedback,a.id,a.question,c.user_id FROM product.feedback f JOIN product.answers a ON a.institution_id=f.institution_id AND a.id=f.answer_id JOIN product.conversations c ON c.institution_id=a.institution_id AND c.id=a.conversation_id JOIN product.memberships m ON m.institution_id=f.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE f.institution_id=$1 AND f.id=$2 FOR SHARE OF f,a,c,m")
+        .bind(i).bind(report).bind(&u.user_id).fetch_optional(&mut *tx).await?.ok_or(Error("not_found"))?;
+    let answer = crate::answers::assemble(
+        &s,
+        i,
+        row.try_get("id")?,
+        &row.try_get::<String, _>("user_id")?,
+    )
+    .await?;
+    let response = serde_json::json!({"feedback":row.try_get::<Value,_>("feedback")?,"question":row.try_get::<String,_>("question")?,"answer":answer});
+    tx.commit().await?;
+    Ok(Json(response))
+}
 pub async fn budget(
     State(s): State<AppState>,
     Path(i): Path<Uuid>,

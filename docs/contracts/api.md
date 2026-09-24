@@ -104,9 +104,14 @@ retains reservation. No retry on schema-invalid replies unless explicitly budget
 `jev-1.13.0`; validate expected question IDs exactly and finite probabilities in [0,1]. Never send auth
 secrets or treat retrieved instructions as authority. English and Vietnamese need separate live evaluation.
 
-Default retention: conversations/answers/feedback 30 days, idempotency records 24h; operational usage
-ledger 13 months without question text. Account deletion revokes auth sessions, deletes product personal
-content and memberships; originals follow institution retention, not student deletion. No raw chat logs.
+Default retention: conversations/answers/feedback 30 days; ordinary terminal idempotency records expire
+after 24h, subject to recovery and financial-fence exemptions. After both creation and replay expiry
+are older than 13 calendar months, bounded operator batches pseudonymize eligible terminal personal
+metadata and clear stage content/hashes. Unfinished jobs and unresolved money remain exempt; financial
+receipts and stable dispatch identifiers remain for reconciliation. See [operator commands](operator.md)
+for exact eligibility, retained fields and the daily cadence, which is not yet deployed. Account deletion
+revokes auth sessions, deletes product personal content and memberships; originals follow institution
+retention, not student deletion. No raw chat logs.
 
 ## Integration extensions (v1 compatible)
 

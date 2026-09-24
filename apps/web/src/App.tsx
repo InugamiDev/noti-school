@@ -1,5 +1,5 @@
-import { createEffect, createSignal, For, Show, onCleanup } from 'solid-js';
-import { createRemoteResource as createResource } from './resource';
+import { createComputed, createEffect, createSignal, For, Show, onCleanup, untrack } from 'solid-js';
+import { createRemoteResource as createResource, accessScope, setAccessScope } from './resource';
 import {
   ArrowUp,
   ArrowUpRight,
@@ -13,9 +13,9 @@ import {
   MessageSquare,
   ExternalLink,
 } from 'lucide-solid';
-import { AskRequest, type AnswerOutput, type Schemas } from '@noti/contracts';
+import { AskRequest, QUESTION_MAX_CHARACTERS, QUESTION_MAX_BYTES, type AnswerOutput, type Schemas } from '@noti/contracts';
 import type { z } from 'zod';
-import { get, post, request, readAnswer, errorText, loadDraft, saveDraft, endpoint, takeAuthCallback } from './api';
+import { get, post, request, readAnswer, errorText, loadDraft, saveDraft, loadDraftConversation, endpoint, takeAuthCallback, operationKey, clearOperations, retainOperations, requestScope } from './api';
 import Archive from './Archive';
 import Sources from './Sources';
 import Auth from './Auth';
@@ -46,7 +46,7 @@ export default function App() {
     cancel(false);
     clearTimeout(transitionTimer);
     setTransitioning(false);
-    if (route() === '/') {setAnswer(undefined);setConversation(undefined);}
+    if (route() === '/') {setAnswer(undefined);setConversation(undefined);saveDraft(draft(), draftOwner);}
     setHistoryCursor('');
     queueMicrotask(() => document.querySelector<HTMLElement>('main h1, main h2')?.focus());
   };
@@ -54,7 +54,11 @@ export default function App() {
   onCleanup(() => window.removeEventListener('hashchange', hash));
   const [capabilities, { refetch: refreshCapabilities }] = createResource(() => get('/api/v1/capabilities', 'Capabilities'));
   const [institutions] = createResource(() => get('/api/v1/institutions', 'InstitutionPage'));
-  const [me, { refetch: refreshMe }] = createResource(() => get('/api/v1/me', 'Me'));
+  const [me, { refetch: refreshMe, mutate: setMe }] = createResource(() => get('/api/v1/me', 'Me'));
+  const revalidate = () => { if (document.visibilityState === 'visible') void refreshMe(); };
+  window.addEventListener('focus', revalidate);
+  document.addEventListener('visibilitychange', revalidate);
+  onCleanup(() => { window.removeEventListener('focus', revalidate); document.removeEventListener('visibilitychange', revalidate); });
   const [institution, setInstitution] = createSignal('');
   createEffect(() => {
     const first = institutions()?.items[0];
@@ -68,14 +72,19 @@ export default function App() {
   createEffect(() => {
     if (institution()) writePreference('institution', institution());
   });
-  const [draft, setDraft] = createSignal(loadDraft());
+  const [draft, setDraft] = createSignal('');
   const updateDraft = (text: string) => {
     setDraft(text);
-    saveDraft(text);
+    saveDraft(text, draftOwner, conversation());
   };
   const [paused, setPaused] = createSignal(false),
     [zoom, setZoom] = createSignal(0),
     [transitioning, setTransitioning] = createSignal(false);
+  const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  const [reduced, setReduced] = createSignal(motionQuery.matches);
+  const motionChange = () => setReduced(motionQuery.matches);
+  motionQuery.addEventListener('change', motionChange);
+  onCleanup(() => motionQuery.removeEventListener('change', motionChange));
   let transitionTimer: ReturnType<typeof setTimeout> | undefined;
   const [busy, setBusy] = createSignal(false),
     [error, setError] = createSignal(''),
@@ -87,25 +96,58 @@ export default function App() {
     [feedbackMessage, setFeedbackMessage] = createSignal('');
   const [listCursor, setListCursor] = createSignal('');
   const [history, { refetch: refreshHistory }] = createResource(
-    () => route().startsWith('/history') && institution() && me()
+    () => route().startsWith('/history') && institution() && member()
       ? { institution: institution(), cursor: listCursor(), user: me()!.identity.user_id } : false,
     async key => ({ ...await get(scoped(key.institution, '/conversations') + pageSuffix(key.cursor), 'ConversationPage'), owner: key.user, institution: key.institution }),
   );
   const visibleHistory = () => history()?.owner === me()?.identity.user_id && history()?.institution === institution() ? history() : undefined;
-  let lastUser: string | undefined;
-  createEffect(() => {
-    const user = me()?.identity.user_id;
-    if (user !== lastUser) { setAnswer(undefined); setConversation(undefined); setListCursor(''); }
-    lastUser = user;
-  });
+  function member() { return me()?.memberships.some(m => m.institution_id === institution()); }
+  let draftOwner = 'anonymous';
+  let initialized = false;
   let controller: AbortController | undefined;
+  createComputed(() => {
+    if (!institution() || (me.loading && !me())) return;
+    const user = me()?.identity.user_id;
+    const memberships = me()?.memberships.map(m => `${m.institution_id}:${m.role}`).sort() || [];
+    const anonymous = `anonymous:${institution()}`;
+    const owner = user ? JSON.stringify([user, institution(), memberships]) : anonymous;
+    const scope = JSON.stringify([owner, institution()]);
+    untrack(() => {
+      if (scope === accessScope()) return;
+      cancel(false);
+      const adopt = (draftOwner === 'anonymous' || draftOwner === anonymous) && !!user;
+      const nextDraft = !initialized ? draft() || loadDraft(owner, adopt ? anonymous : undefined) : adopt ? draft() : '';
+      const restoredConversation = !initialized && route() === '/answer' ? loadDraftConversation(owner) : undefined;
+      if (initialized) { clearOperations(); clearAuthCallback(); }
+      else retainOperations(scope);
+      draftOwner = owner;
+      initialized = true;
+      setDraft(nextDraft);
+      saveDraft(nextDraft, owner, restoredConversation);
+      setAnswer(undefined); setConversation(restoredConversation); setCitation(''); setError('');
+      setFeedback(false); setFeedbackMessage(''); setListCursor(''); setHistoryCursor('');
+      setAccessScope(scope);
+    });
+  });
+  function clearAuthCallback() {
+    const callback = authCallback();
+    if (callback) setAuthCallback({ ...callback, token: '', deletion: '', error: false });
+  }
+  function signedOut() {
+    cancel(false); clearOperations(); setDraft(''); setMe(undefined);
+    clearAuthCallback();
+    setAnswer(undefined); setConversation(undefined); setCitation('');
+    setFeedback(false); setFeedbackMessage(''); setError(''); setListCursor(''); setHistoryCursor('');
+    draftOwner = `anonymous:${institution()}`;
+    setAccessScope(JSON.stringify([draftOwner, institution()]));
+  }
   let composer!: HTMLTextAreaElement;
   function cancel(announce = true) {
     if (controller) {
       controller.abort();
       controller = undefined;
       setBusy(false);
-      if (announce) setError('Request cancelled. Your draft is safe.');
+      if (announce) setError('Stopped waiting. Processing may continue. Submit the same question to check the same operation.');
     }
   }
   onCleanup(() => {
@@ -114,7 +156,7 @@ export default function App() {
   });
   async function ask(event: SubmitEvent) {
     event.preventDefault();
-    if (busy()) return;
+    if (busy() || accessScope() === 'initial') return;
     setError('');
     setCitation('');
     setFeedback(false);
@@ -125,25 +167,31 @@ export default function App() {
     const previous = conversation();
     const parsed = AskRequest.safeParse({
       institution_id: institution(),
-      question: draft().trim(),
+      question: draft(),
       language: language(),
       ...(previous?.institution === institution()
         ? { conversation_id: previous.id }
         : {}),
       discover: false,
     });
-    if (!parsed.success) {
-      setError('Enter a question of 1–4,000 characters.');
+    if (!parsed.success || !draft().trim() || new TextEncoder().encode(draft()).length > QUESTION_MAX_BYTES || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(draft())) {
+      setError(`Enter 1–${QUESTION_MAX_CHARACTERS.toLocaleString('en')} Unicode characters, at most ${QUESTION_MAX_BYTES.toLocaleString('en')} UTF-8 bytes. Only tab and line breaks are allowed as control characters.`);
       return;
     }
     setBusy(true);
     setAnswer(undefined);
     const active = new AbortController();
     controller = active;
+    saveDraft(draft(), draftOwner, previous);
+    const owner = accessScope();
+    let key: string;
+    try { key = await operationKey(owner, parsed.data, active.signal); }
+    catch { if (controller === active) { controller = undefined; setBusy(false); } return; }
+    if (active.signal.aborted || owner !== accessScope()) return;
     // The request starts before any visual transition. No automatic retries of paid work.
     const pending = post('/api/v1/answers', 'Answer', parsed.data, {
       signal: active.signal,
-      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      headers: { 'Idempotency-Key': key },
     });
     setTransitioning(!matchMedia('(prefers-reduced-motion: reduce)').matches && !paused());
     setZoom((v) => v + 1);
@@ -154,12 +202,12 @@ export default function App() {
     queueMicrotask(() => document.getElementById('answer-heading')?.focus());
     try {
       const result = readAnswer(await pending);
-      if (active.signal.aborted) return;
+      if (active.signal.aborted || owner !== accessScope() || controller !== active) return;
       if (result.institution_id !== institution()) throw new Error('Scope mismatch');
       setAnswer(result);
       setConversation({id:result.conversation_id,institution:result.institution_id});
     } catch (e) {
-      if (!active.signal.aborted) setError(errorText(e));
+      if (!active.signal.aborted && owner === accessScope() && controller === active) setError(errorText(e));
     } finally {
       if (controller === active) {
         controller = undefined;
@@ -172,12 +220,15 @@ export default function App() {
   );
   createEffect(() => writePreference('language', language()));
   const [prior] = createResource(
-    () => (route().startsWith('/history/') && institution() ? {id:route().split('/')[2]!,cursor:historyCursor()} : false),
-    (key) =>
-      get(
-        scoped(institution(), '/conversations/{conversation_id}/answers', { conversation_id: key.id })+pageSuffix(key.cursor),
+    () => (/^\/history\/[^/]+$/.test(route()) && institution() && member() ? {id:route().split('/')[2]!,cursor:historyCursor(), institution:institution(), owner:accessScope()} : false),
+    async (key) => {
+      const page = await get(
+        scoped(key.institution, '/conversations/{conversation_id}/answers', { conversation_id: key.id })+pageSuffix(key.cursor),
         'AnswerPage',
-      ),
+      );
+      if (page.items.some(a => a.institution_id !== key.institution || a.conversation_id !== key.id)) throw new Error('Scope mismatch');
+      return { ...page, items: page.items.map(readAnswer) };
+    },
   );
   const form = () => (
     <form class="composer" onSubmit={ask}>
@@ -185,7 +236,7 @@ export default function App() {
       <textarea
         id="question"
         ref={composer}
-        maxLength={4000}
+        aria-describedby="question-limits"
         value={draft()}
         onInput={(e) => updateDraft(e.currentTarget.value)}
         placeholder={
@@ -193,6 +244,7 @@ export default function App() {
         }
         required
       />
+      <span id="question-limits" class="sr-only">Up to {QUESTION_MAX_CHARACTERS} Unicode characters and {QUESTION_MAX_BYTES} UTF-8 bytes. Tabs and line breaks are allowed.</span>
       <div class="composer-tools">
         <select
           aria-label="Answer language"
@@ -205,13 +257,13 @@ export default function App() {
         <Show
           when={busy()}
           fallback={
-            <button class="primary" type="submit" title="Ask noti.school">
+            <button class="primary" type="submit" title="Ask noti.school" disabled={accessScope() === 'initial'}>
               Ask <ArrowUp size={18} />
             </button>
           }
         >
           <button type="button" onClick={() => cancel()}>
-            <X size={18} /> Cancel
+            <X size={18} /> Stop waiting
           </button>
         </Show>
       </div>
@@ -334,10 +386,13 @@ export default function App() {
               title={paused() ? 'Resume animation' : 'Pause animation'}
               aria-label={paused() ? 'Resume animation' : 'Pause animation'}
               aria-pressed={paused()}
+              disabled={reduced()}
+              aria-describedby={reduced() ? 'system-motion' : undefined}
               onClick={() => setPaused((v) => !v)}
             >
               {paused() ? <Play size={16} /> : <Pause size={16} />}
             </button>
+            <Show when={reduced()}><span id="system-motion" class="sr-only">Animation is disabled by your system’s reduced-motion preference.</span></Show>
           </section>
           <section class="collection-preview">
             <div>
@@ -427,6 +482,7 @@ export default function App() {
                         onSubmit={async (e) => {
                           e.preventDefault();
                           const data = new FormData(e.currentTarget);
+                          const owner = requestScope();
                           setFeedbackMessage('Sending…');
                           try {
                             await post(scoped(institution(), '/feedback'), 'Feedback', {
@@ -434,9 +490,9 @@ export default function App() {
                               category: data.get('category'),
                               comment: data.get('comment'),
                             });
-                            setFeedbackMessage('Feedback received. Thank you.');
+                            if (!owner.aborted) setFeedbackMessage('Feedback received. Thank you.');
                           } catch (err) {
-                            setFeedbackMessage(errorText(err));
+                            if (!owner.aborted) setFeedbackMessage(errorText(err));
                           }
                         }}
                       >
@@ -485,36 +541,37 @@ export default function App() {
                 </For>
               </Show>
               <Show when={citation()}>
-                <Sources institution={institution()} citation={citation()} />
+                <Show when={accessScope()} keyed>{_scope => <Sources institution={institution()} citation={citation()} />}</Show>
               </Show>
             </aside>
           </div>
         </Show>
         <Show when={route().startsWith('/sources')}>
           <div class="page">
-            <Sources institution={institution()} source={route().split('/')[2] || ''} />
+            <Show when={accessScope()} keyed>{_scope => <Sources institution={institution()} source={route().split('/')[2] || ''} />}</Show>
           </div>
         </Show>
         <Show when={route().startsWith('/auth') ? authCallback() : undefined} keyed>
           <div class="page">
-            <Auth
+            <Show when={accessScope()} keyed>{_scope => <Auth
               callback={authCallback()}
               capabilities={capabilities()}
               authenticated={!!me()}
               refresh={() => { void refreshMe(); void refreshCapabilities(); }}
-            />
+              signedOut={signedOut}
+            />}</Show>
           </div>
         </Show>
         <Show when={route().startsWith('/admin')}>
           <div class="page">
-            <Admin
+            <Show when={accessScope()} keyed>{_scope => <Admin
               institution={institution()}
               allowed={
-                !me.loading && (me()?.memberships.some(
+                (me()?.memberships.some(
                   (m) => m.institution_id === institution() && m.role === 'admin',
                 ) ?? false)
               }
-            />
+            />}</Show>
           </div>
         </Show>
         <Show when={route().startsWith('/history')}>
@@ -560,6 +617,7 @@ export default function App() {
               <button
                 onClick={async () => {
                   if (!confirm('Delete this conversation?')) return;
+                  const owner = requestScope(), path = route();
                   try {
                     await request(
                       scoped(institution(), '/conversations/{conversation_id}', {
@@ -568,10 +626,12 @@ export default function App() {
                       null,
                       { method: 'DELETE' },
                     );
+                    if (owner.aborted || path !== route()) return;
                     await refreshHistory();
+                    if (owner.aborted || path !== route()) return;
                     location.hash = '/history';
                   } catch (e) {
-                    setError(errorText(e));
+                    if (!owner.aborted && path === route()) setError(errorText(e));
                   }
                 }}
               >

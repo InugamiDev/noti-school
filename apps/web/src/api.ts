@@ -1,9 +1,15 @@
 import { z } from 'zod';
-import { ApiError, Schemas, validateAnswer } from '@noti/contracts';
+import { ApiError, Schemas, validateAnswer, ANSWER_WAIT_MS } from '@noti/contracts';
 import registry from '../../../docs/contracts/endpoints.json';
 
 // intent: enforce the frozen public boundary; status: implemented; next: integrate real services.
 type SchemaName = keyof typeof Schemas;
+let scopeController = new AbortController();
+export const requestScope = () => scopeController.signal;
+export function invalidateRequests() {
+  scopeController.abort();
+  scopeController = new AbortController();
+}
 export class RequestError extends Error {
   constructor(
     message: string,
@@ -34,19 +40,23 @@ export async function request<T>(
   if (init.body && !(init.body instanceof FormData))
     headers.set('Content-Type', 'application/json');
   let response: Response;
+  const owned = !['/api/v1/me', '/api/v1/capabilities', '/api/v1/institutions'].includes(path);
+  const scope = scopeController.signal;
+  const timeout = path === '/api/v1/answers' && init.method === 'POST' ? ANSWER_WAIT_MS : 45000;
+  const signal = AbortSignal.any([AbortSignal.timeout(timeout), ...(init.signal ? [init.signal] : []), ...(owned ? [scope] : [])]);
   try {
     response = await fetch(path, {
       ...init,
-      signal: init.signal
-        ? AbortSignal.any([init.signal, AbortSignal.timeout(45000)])
-        : AbortSignal.timeout(45000),
+      signal,
       headers,
       credentials: 'same-origin',
       redirect: 'error',
     });
   } catch (error) {
-    if (init.signal?.aborted) throw error;
-    throw new RequestError('Connection unavailable. Your draft is safe; please try again.');
+    if (init.signal?.aborted || (owned && scope.aborted)) throw error;
+    throw new RequestError(path === '/api/v1/answers'
+      ? 'Stopped waiting for a response. Processing may continue. Submit the same question to check the same operation.'
+      : 'Connection unavailable. Please try again.');
   }
   if (response.status === 204 && schema === null) return undefined as T;
   let value: unknown;
@@ -55,6 +65,7 @@ export async function request<T>(
   } catch {
     throw new RequestError('This service is unavailable. Please try again later.', response.status);
   }
+  signal.throwIfAborted();
   if (!response.ok) {
     const parsed = ApiError.safeParse(value);
     const code = parsed.success ? parsed.data.error.code : 'unavailable';
@@ -113,19 +124,56 @@ export function errorText(value: unknown) {
     ? value.message
     : 'This action could not be completed. Please try again.';
 }
-export function saveDraft(value: string) {
+export function saveDraft(value: string, owner = 'anonymous', conversation?: { id: string; institution: string }) {
   try {
-    sessionStorage.setItem('noti.draft', value);
+    sessionStorage.setItem('noti.owned-draft', JSON.stringify({ owner, value, conversation }));
   } catch {
     /* Storage is optional. */
   }
 }
-export function loadDraft() {
+export function loadDraftConversation(owner: string) {
   try {
-    return sessionStorage.getItem('noti.draft') || '';
+    const saved = JSON.parse(sessionStorage.getItem('noti.owned-draft') || 'null');
+    const conversation = z.object({ id: z.uuid(), institution: z.uuid() }).safeParse(saved?.conversation);
+    return saved?.owner === owner && conversation.success ? conversation.data : undefined;
+  } catch { return undefined; }
+}
+export function loadDraft(owner = 'anonymous', anonymousOwner?: string) {
+  try {
+    sessionStorage.removeItem('noti.draft'); // Unscoped legacy text cannot establish ownership.
+    const saved = JSON.parse(sessionStorage.getItem('noti.owned-draft') || 'null');
+    return saved && (saved.owner === owner || (anonymousOwner && saved.owner === anonymousOwner)) && typeof saved.value === 'string' ? saved.value : '';
   } catch {
     return '';
   }
+}
+
+export function clearOwnedStorage() {
+  try { for (const key of ['noti.draft', 'noti.owned-draft', 'noti.operations']) sessionStorage.removeItem(key); } catch { /* Optional tab storage. */ }
+}
+// Persist fingerprints, never question text. Retain ambiguous identities until the owner changes.
+const operations = new Map<string, string>();
+export function clearOperations() { operations.clear(); clearOwnedStorage(); }
+export function retainOperations(owner: string) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('noti.operations') || 'null');
+    if (saved?.owner !== owner) { operations.clear(); sessionStorage.removeItem('noti.operations'); }
+  } catch { operations.clear(); }
+}
+export async function operationKey(owner: string, payload: unknown, signal?: AbortSignal) {
+  const scope = scopeController.signal;
+  const bytes = new TextEncoder().encode(JSON.stringify([owner, payload]));
+  const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
+  scope.throwIfAborted(); signal?.throwIfAborted();
+  let saved: Record<string, string> = {};
+  try {
+    const stored = JSON.parse(sessionStorage.getItem('noti.operations') || '{}');
+    if (stored.owner === owner && stored.keys && typeof stored.keys === 'object') saved = stored.keys;
+  } catch { /* Optional tab storage. */ }
+  const key = operations.get(fingerprint) || saved[fingerprint] || crypto.randomUUID();
+  operations.set(fingerprint, key);
+  try { sessionStorage.setItem('noti.operations', JSON.stringify({ owner, keys: { ...saved, [fingerprint]: key } })); } catch { /* Memory still preserves explicit retries. */ }
+  return key;
 }
 
 // Consume callbacks synchronously before rendering; never persist credential-bearing query strings.

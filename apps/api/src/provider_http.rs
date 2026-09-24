@@ -9,12 +9,15 @@ use std::{collections::BTreeSet, time::Duration};
 #[derive(Clone)]
 pub struct ProviderHttp {
     client: reqwest::Client,
+    failures:
+        std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, std::time::Instant>>>,
     #[cfg(test)]
     pub(crate) endpoint: Option<String>,
 }
 impl ProviderHttp {
     pub fn new() -> Result<Self> {
         Ok(Self {
+            failures: Default::default(),
             #[cfg(test)]
             endpoint: None,
             client: reqwest::Client::builder()
@@ -25,6 +28,40 @@ impl ProviderHttp {
                 .build()
                 .map_err(|_| Error("core_unavailable"))?,
         })
+    }
+    pub fn failed(&self) -> bool {
+        !self
+            .failures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty()
+    }
+    pub fn admit(&self) -> Result<()> {
+        if self
+            .failures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .any(|at| at.elapsed() < Duration::from_secs(30))
+        {
+            return Err(Error("provider_unavailable"));
+        }
+        Ok(())
+    }
+    #[cfg(test)]
+    pub(crate) fn expire_cooldown(&self) {
+        for at in self.failures.lock().unwrap().values_mut() {
+            *at = std::time::Instant::now() - Duration::from_secs(31);
+        }
+    }
+    fn observe<T>(&self, provider: &str, result: Result<T>) -> Result<T> {
+        let mut failures = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+        if result.is_ok() {
+            failures.remove(provider);
+        } else {
+            failures.insert(provider.into(), std::time::Instant::now());
+        }
+        result
     }
     pub async fn jev(
         &self,
@@ -50,7 +87,7 @@ impl ProviderHttp {
         let bytes = self
             .exchange(providers::JEV_URL, key, body, Duration::from_secs(15))
             .await?;
-        let response = providers::validate_jev(&bytes, ids)?;
+        let response = self.observe("jev", providers::validate_jev(&bytes, ids))?;
         attempt
             .settle(
                 vec![response.usage.input_tokens, response.usage.output_tokens],
@@ -60,7 +97,8 @@ impl ProviderHttp {
         Ok(response)
     }
     pub async fn embedding(&self, key: &str, input: &str, attempt: Attempt) -> Result<Vec<f32>> {
-        if !attempt.is_for(OperationKind::Embedding) || input.is_empty() || input.len() > 8000 {
+        crate::input::validate(input)?;
+        if !attempt.is_for(OperationKind::Embedding) {
             return Err(Error("invalid_request"));
         }
         let body = serde_json::json!({"model":"text-embedding-3-small","input":input,"dimensions":1536,"encoding_format":"float"});
@@ -72,7 +110,7 @@ impl ProviderHttp {
                 Duration::from_secs(30),
             )
             .await?;
-        let vector = providers::validate_embedding(&bytes)?;
+        let vector = self.observe("openai", providers::validate_embedding(&bytes))?;
         let response: Value =
             serde_json::from_slice(&bytes).map_err(|_| Error("provider_unavailable"))?;
         attempt
@@ -105,7 +143,8 @@ impl ProviderHttp {
                 Duration::from_secs(45),
             )
             .await?;
-        let (result, usage) = providers::validate_generation(&bytes, model)?;
+        let (result, usage) =
+            self.observe("openai", providers::validate_generation(&bytes, model))?;
         attempt
             .settle(
                 usage,
@@ -121,6 +160,11 @@ impl ProviderHttp {
         body: &Value,
         timeout: Duration,
     ) -> Result<Vec<u8>> {
+        let provider = if url.contains("typesafe") {
+            "jev"
+        } else {
+            "openai"
+        };
         // Tests cannot reach production providers, even if the process inherited real credentials.
         #[cfg(test)]
         let mapped = self
@@ -145,19 +189,30 @@ impl ProviderHttp {
         {
             return Err(Error("invalid_request"));
         }
-        let response = self
-            .client
-            .post(url)
-            .bearer_auth(key)
-            .json(body)
-            .timeout(timeout)
-            .send()
-            .await
-            .map_err(|_| Error("provider_unavailable"))?;
-        if !response.status().is_success() {
-            return Err(Error("provider_unavailable"));
+        let result = async {
+            let response = self
+                .client
+                .post(url)
+                .bearer_auth(key)
+                .json(body)
+                .timeout(timeout)
+                .send()
+                .await
+                .map_err(|_| Error("provider_unavailable"))?;
+            if !response.status().is_success() {
+                return Err(Error("provider_unavailable"));
+            }
+            crate::http::limited_body(response, 512 * 1024).await
         }
-        crate::http::limited_body(response, 512 * 1024).await
+        .await;
+        // Successful HTTP alone does not clear failures; validated provider output does.
+        if result.is_err() {
+            self.failures
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(provider.into(), std::time::Instant::now());
+        }
+        result
     }
 }
 #[cfg(test)]

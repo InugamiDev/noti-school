@@ -2,6 +2,7 @@
 
 Only starts this checkout's binary, with an empty service environment. No database,
 identity, mail, or AI provider is contacted. Refuses an occupied loopback port.
+All generated wire data is explicitly synthetic; no live quality claim.
 """
 import json
 import pathlib
@@ -17,6 +18,16 @@ import jsonschema
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / "packages/contracts/schema.json").read_text())
+for name, field in [("AskRequest", "question"), ("SearchRequest", "query")]:
+    validator = jsonschema.Draft202012Validator(
+        {**SCHEMA, "$ref": "#/$defs/" + name}, format_checker=jsonschema.FormatChecker()
+    )
+    for text in ["ế" * 4000, "🦊" * 4000, "x\t\n\r"]:
+        assert len(text) <= 4000 and len(text.encode("utf-8")) <= 16000
+        validator.validate({"institution_id": "11111111-1111-4111-8111-111111111111", field: text, "language": "vi"})
+    for text in ["🦊" * 4001, "x\x00", "x\x7f", "x\x0b"]:
+        assert not validator.is_valid({"institution_id": "11111111-1111-4111-8111-111111111111", field: text, "language": "vi"})
+    print(f"PASS frozen scalar/control request boundary: {name}")
 with tempfile.TemporaryDirectory(prefix="html-fixture-", dir=ROOT / "tests/api") as folder:
     source = pathlib.Path(folder) / "synthetic.html"
     output = pathlib.Path(folder) / "extracted.json"
@@ -36,8 +47,10 @@ if wire.exists():
             {**SCHEMA, "$ref": "#/$defs/" + name},
             format_checker=jsonschema.FormatChecker(),
         ).validate(value)
-        print(f"PASS runtime SQL/mock-provider output: {name}")
+        print(f"PASS synthetic runtime SQL/mock-provider output: {name}; no live quality claim")
 with socket.socket() as probe:
+    # A recently stopped test listener may have TIME_WAIT connections; active listeners still fail.
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     probe.bind(("127.0.0.1", 3810))
 
 process = subprocess.Popen(
@@ -65,6 +78,8 @@ try:
         ("/api/v1/capabilities", 200, "Capabilities"),
         ("/api/v1/institutions", 200, "InstitutionPage"),
         ("/api/v1/me", 503, "ApiError"),
+        ("/api/v1/institutions/11111111-1111-4111-8111-111111111111/versions/22222222-2222-4222-8222-222222222222/chunks", 503, "ApiError"),
+        ("/api/v1/institutions/11111111-1111-4111-8111-111111111111/feedback/22222222-2222-4222-8222-222222222222/context", 503, "ApiError"),
         ("/api/no-such-route", 404, "ApiError"),
         ("/internal/session", 404, "ApiError"),
         ("/internal/invitations/check", 404, "ApiError"),
