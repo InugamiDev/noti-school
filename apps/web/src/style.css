@@ -168,7 +168,7 @@ nav a {
 }
 .hero {
   position: relative;
-  min-height: 680px;
+  min-height: min(680px, calc(100svh - 160px));
   isolation: isolate;
   display: grid;
   place-items: center;
@@ -633,7 +633,7 @@ h2:focus {
 }
 @media (min-width: 1700px) {
   .hero {
-    min-height: 780px;
+    min-height: min(780px, calc(100svh - 160px));
   }
   .hero h1 {
     font-size: 112px;
@@ -661,7 +661,7 @@ h2:focus {
     font-size: 21px;
   }
   .hero {
-    min-height: 650px;
+    min-height: min(650px, calc(100svh - 140px));
   }
   .hero-content {
     padding: 34px 0 62px;
@@ -831,4 +831,28 @@ h2:focus {
   .hero-content {
     padding: 24px 0 32px;
   }
+}
+@media (max-height: 860px) {
+  .hero-content { padding-top: 16px; padding-bottom: 32px; }
+  .hero h1 { font-size: 64px; margin: 12px 0; }
+  .promise { margin-bottom: 18px; }
+  .suggestions { margin-top: 12px; }
+  .composer textarea { min-height: 60px; }
+  .collection-preview { padding-top: 20px; }
+}
+@media (max-width: 700px) and (max-height: 860px) {
+  .hero h1 { font-size: 58px; }
+}
+@media (max-width: 700px) and (max-height: 760px) {
+  .hero-content { padding-bottom: 20px; }
+  .hero h1 { font-size: 46px; }
+  .promise { font-size: 16px; line-height: 1.35; }
+  .suggestions button { min-height: 32px; }
+  .coverage { margin-top: 12px; }
+}
+@media (max-width: 700px) and (max-height: 640px) {
+  .hero h1 { font-size: 40px; margin: 8px 0; }
+  .promise { font-size: 15px; margin-bottom: 12px; }
+  .suggestions button:not(:first-of-type) { display: none; }
+  .composer textarea { min-height: 48px; }
 }
