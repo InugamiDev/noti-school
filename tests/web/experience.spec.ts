@@ -18,9 +18,13 @@ for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:192
  await page.keyboard.press('Tab');await expect(page.getByLabel('Answer language')).toBeFocused();
  await page.getByRole('button',{name:'Ask',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Answers are temporarily unavailable');
  await expect(prompt).toHaveValue(/Tôi có thể/);await page.getByRole('link',{name:'Sign in',exact:true}).first().click();await expect(page.getByRole('heading',{name:'Welcome to noti.school'})).toBeVisible();
- await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Password',{exact:true}).fill('synthetic-password');await page.locator('form').getByRole('button',{name:'Sign in',exact:true}).click();await expect(page.getByRole('status')).toContainText('unavailable');
+ await expect(page.locator('form').getByRole('button',{name:'Sign in',exact:true})).toBeDisabled();await expect(page.getByText('Sign-in availability is not confirmed.',{exact:false})).toBeVisible();
  await page.getByRole('link',{name:'Sources',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unavailable');
  await page.goto('/#/');await expect(page.getByLabel('Your question')).toHaveValue(/Tôi có thể/);
+});
+test('available identity still reports a failed sign-in request without claiming success',async({page})=>{
+ await fixture(page);await page.route('**/api/v1/capabilities',route=>route.fulfill({json:{mode:'disabled',answers:capability,indexing:capability,discovery:capability,google:capability,email:capability,identity:{state:'available',reason:'ready'}}}));
+ await page.goto('/#/auth');await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Password',{exact:true}).fill('synthetic-password');const submit=page.locator('form').getByRole('button',{name:'Sign in',exact:true});await expect(submit).toBeEnabled();await submit.click();await expect(page.getByRole('status')).toContainText('unavailable');
 });
 for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:1920,height:1080},{name:'mobile',width:390,height:844}])test(`actual canvas pixels move, pause, and reduced-motion remain stable: ${size.name}`,async({page})=>{
  await page.setViewportSize(size);await fixture(page);await page.goto('/');await page.waitForTimeout(2500);
