@@ -1,0 +1,7 @@
+# This dependency-free foundation workspace has no resolved external crates yet.
+# The coordinator regenerates with Cargo when adding apps/api to workspace members.
+version = 4
+
+[[package]]
+name = "noti-foundation"
+version = "0.1.0"

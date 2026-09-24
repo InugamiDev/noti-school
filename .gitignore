@@ -17,6 +17,7 @@ test-results/
 .cache/
 .handoff/
 .fleet-*
+!.fleet-handoff.json
 data/
 uploads/
 backups/

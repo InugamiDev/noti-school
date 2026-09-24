@@ -1,0 +1,145 @@
+{
+  "checked_at": "2026-09-25",
+  "input_head": "d1c385e96f1c403dc630aacc6074b73b25dac646",
+  "manifest_validation": "sha256sum -c MANIFEST.sha256: all five entries OK",
+  "mac_files_accessed": false,
+  "required_knowledge_blockers": [],
+  "notes": [
+    "No product CLAUDE.md; target AGENTS.md and complete supplied requirements suffice.",
+    "No approved relevant memory file supplied or found at the two checked canonical paths; no unrelated personal memory searched.",
+    "Runtime model requested by ORDER is gpt-6-astra/high; no fallback or agents spawned. No independent launcher telemetry was available to this worker.",
+    "The supplied snapshot is authoritative over stale installed defaults. Harness files are read-only and were not copied."
+  ],
+  "sources": [
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/AGENTS.md",
+      "sha256": "15e7a2dede1fcc31e0d1b9fc5b5b09551ed3254cf67cc85faafe3b6cd2e4f3c4",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/README.md",
+      "sha256": "09968cd0c61378b5762ad7c2aa06c874e122f80942b7e38b0d294fc0f9e18039",
+      "state": "loaded",
+      "revision": "input HEAD before edit"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/docs/acceptance.md",
+      "sha256": "20c8ddd820806a586174a687eaff133294b7979f9c71392ee35bad1e759e9838",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/docs/architecture.md",
+      "sha256": "1353b954fa52fdcab32724bc0c374302295225bf3bca5deda7635e38ec780ae9",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/docs/deployment.md",
+      "sha256": "ab5ffe4b659cc72a233d40a9435cec715b902de8c3371e0a9b9f8bf700424d89",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/docs/product-spec.md",
+      "sha256": "afa713ff7878407074f7ec6ccf842319026d1eb61ceda9c7a476af828d2b41e4",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/docs/references.md",
+      "sha256": "5fc0eac7656047abe8cd7e8b0bf03bdc9abded084cb12d28f1ea32d6debcea22",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/docs/roadmap.md",
+      "sha256": "bbc7b2c6b01589587b59174dffafdb3d612eee872961186ad1dc9acc3ac01fc7",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/docs/services.md",
+      "sha256": "d4748afc6df93d84afac406b8671ac00ba17ea8aa97dff0724e6077257031346",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.claude/CLAUDE.md",
+      "sha256": "9bef90c11c1fbf1b182c0bcd272166b1e3fc4ffcb5c6b05ee3f3c220514c1b7c",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.codex/AGENTS.md",
+      "sha256": "4baf5bb039eb44f7b46f6fa78e870ca7832f74977533493d85bb91ed911ecf98",
+      "state": "stale",
+      "resolution": "Read; current supplied snapshot and ORDER override model/delegation/stack defaults; file unchanged."
+    },
+    {
+      "path": "/home/inu/ultrathink/CLAUDE.md",
+      "sha256": "598696263122349f2eab7973170e590aa3a94062f58afbf9ba8a0f71b2badfb5",
+      "state": "stale",
+      "resolution": "Read; current supplied snapshot and ORDER override model/delegation/stack defaults; file unchanged."
+    },
+    {
+      "path": "/home/inu/ultrathink/AGENTS.md",
+      "sha256": "4baf5bb039eb44f7b46f6fa78e870ca7832f74977533493d85bb91ed911ecf98",
+      "state": "stale",
+      "resolution": "Read; current supplied snapshot and ORDER override model/delegation/stack defaults; file unchanged."
+    },
+    {
+      "path": "/home/inu/ultrathink/.ckignore",
+      "sha256": "14b31611578ed0258edcafc835b08bd0a553957e96bb1997688329e6a76c132a",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.codex/skills/cloudflare-one/SKILL.md",
+      "sha256": "605336f84979367b6235a57da8ea43e4f3b856a97efd2c95d9e7f90e41bf17ec",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-runner-20260925/context/AGENTS.md",
+      "sha256": "942eaaa642cb709dbf7a499cf59c558f3998c83f438cf8b33d4e74da2f7bd63d",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-runner-20260925/context/CLAUDE.md",
+      "sha256": "7fcdaaf6c8625d86bcda79f41cf9d8e072710101e4b826afad08c5e2f92d72a3",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-runner-20260925/context/MANIFEST.sha256",
+      "sha256": "f9e6849b6f7b53ba03c5899a725c23d58430b3865a3b7fb78749eff8a7ff3df9",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-runner-20260925/context/execution-contract.md",
+      "sha256": "64569d264661ed7c30f535271779e8954148fdabea6f7323a3749e564a20987d",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-runner-20260925/context/global-CLAUDE.md",
+      "sha256": "bc3d73e41b80d56ed30c6482cdfc2be328a67b2254494bb0cadd317417d11cac",
+      "state": "conflicting",
+      "resolution": "Read; current Astra-only fleet section and ORDER override older GPT-5.5/Sol/Terra section."
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-runner-20260925/context/knowledge-contract.md",
+      "sha256": "11219d0d089a4dd0bb153e7f9fd265694dc2ffce8adc96f526fca4de2e6052aa",
+      "state": "loaded"
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/CLAUDE.md",
+      "state": "missing",
+      "blocking": false
+    },
+    {
+      "path": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/foundation/.ckignore",
+      "state": "missing",
+      "blocking": false
+    },
+    {
+      "path": "/home/inu/ultrathink/MEMORY.md",
+      "state": "missing",
+      "blocking": false
+    },
+    {
+      "path": "/home/inu/ultrathink/.claude/MEMORY.md",
+      "state": "missing",
+      "blocking": false
+    }
+  ]
+}

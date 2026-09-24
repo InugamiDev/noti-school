@@ -1,0 +1,214 @@
+{
+  "version": "1",
+  "error_schema": "ApiError",
+  "endpoints": [
+    { "method": "POST", "path": "/internal/invitations/check", "request": "InvitationCheck", "response": "InvitationValid", "scope": "internal_api", "status": 200 },
+    { "method": "POST", "path": "/internal/invitations/redeem", "request": "InvitationRedeem", "response": "Membership", "scope": "internal_api", "status": 200 },
+    { "method": "POST", "path": "/api/auth/invitations/redeem", "request": "PublicInvitationRedeem", "response": "Membership", "scope": "session", "status": 200 },
+    { "method": "GET", "path": "/api/v1/institutions/{institution_id}/citations/{citation_id}", "request": null, "response": "Evidence", "scope": "owner", "status": 200 },
+    { "method": "PATCH", "path": "/api/v1/institutions/{institution_id}/feedback/{feedback_id}", "request": "FeedbackAction", "response": "Feedback", "scope": "admin", "status": 200 },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "request": null,
+      "response": "Health",
+      "scope": "public",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "request": null,
+      "response": "Health",
+      "scope": "public",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "request": null,
+      "response": "Capabilities",
+      "scope": "public",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions",
+      "request": "PageQuery",
+      "response": "InstitutionPage",
+      "scope": "public",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/me",
+      "request": null,
+      "response": "Me",
+      "scope": "session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/sources",
+      "request": "PageQuery",
+      "response": "SourcePage",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/institutions/{institution_id}/sources",
+      "request": "SourceCreate",
+      "response": "Source",
+      "scope": "admin",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/sources/{source_id}",
+      "request": null,
+      "response": "Source",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/sources/{source_id}/versions",
+      "request": "PageQuery",
+      "response": "VersionPage",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/institutions/{institution_id}/sources/{source_id}/versions",
+      "request": "VersionCreate",
+      "response": "Job",
+      "scope": "admin",
+      "status": 202,
+      "content_type": "multipart/form-data",
+      "metadata_schema": "VersionCreate",
+      "file_field": "file"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/institutions/{institution_id}/versions/{version_id}/actions",
+      "request": "VersionAction",
+      "response": "Job",
+      "scope": "admin",
+      "status": 202
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/versions/{version_id}",
+      "request": null,
+      "response": "Version",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/versions/{version_id}/file",
+      "request": null,
+      "response": "binary",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/chunks/{chunk_id}",
+      "request": null,
+      "response": "Chunk",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/graph",
+      "request": "PageQuery",
+      "response": "GraphEdgePage",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/jobs/{job_id}",
+      "request": null,
+      "response": "Job",
+      "scope": "admin",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/search",
+      "request": "SearchRequest",
+      "response": "EvidencePage",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/answers",
+      "request": "AskRequest",
+      "response": "Answer",
+      "scope": "member",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/answers/{answer_id}",
+      "request": null,
+      "response": "Answer",
+      "scope": "owner",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/conversations/{conversation_id}/answers",
+      "request": "PageQuery",
+      "response": "AnswerPage",
+      "scope": "owner",
+      "status": 200
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/institutions/{institution_id}/conversations/{conversation_id}",
+      "request": null,
+      "response": null,
+      "scope": "owner",
+      "status": 204
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/institutions/{institution_id}/feedback",
+      "request": "FeedbackRequest",
+      "response": "Feedback",
+      "scope": "owner",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/feedback",
+      "request": "PageQuery",
+      "response": "FeedbackPage",
+      "scope": "admin",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/institutions/{institution_id}/budget",
+      "request": null,
+      "response": "Budget",
+      "scope": "admin",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/internal/session",
+      "request": null,
+      "response": "Session",
+      "scope": "internal_auth",
+      "status": 200
+    }
+  ]
+}

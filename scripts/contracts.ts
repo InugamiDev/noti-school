@@ -1,0 +1,13 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { z } from 'zod';
+import { Schemas } from '../packages/contracts/src/index.js';
+import { Environment } from '../packages/contracts/src/env.js';
+const schema = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'https://noti.school/contracts/v1', $defs: Object.fromEntries(Object.entries(Schemas).map(([name, value]) => [name, z.toJSONSchema(value, { target: 'draft-2020-12', io: 'input' })])) };
+const file = new URL('../packages/contracts/schema.json', import.meta.url);
+const output = JSON.stringify(schema, null, 2) + '\n';
+if (process.argv.includes('--write')) await writeFile(file, output);
+else if (await readFile(file, 'utf8') !== output) throw new Error('Schema drift: run pnpm contracts:generate');
+const envFile = new URL('../packages/contracts/environment.schema.json', import.meta.url);
+const envOutput = JSON.stringify(z.toJSONSchema(Environment, { target: 'draft-2020-12', io: 'input' }), null, 2) + '\n';
+if (process.argv.includes('--write')) await writeFile(envFile, envOutput);
+else if (await readFile(envFile, 'utf8') !== envOutput) throw new Error('Environment schema drift');

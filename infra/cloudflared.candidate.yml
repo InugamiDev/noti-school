@@ -1,0 +1,11 @@
+# Candidate-only validation document. Merge these two hostname rules into the
+# existing tunnel without replacing unrelated routes, tunnel ID or credentials.
+ingress:
+  - hostname: noti.school
+    path: ^/api/auth(/.*)?$
+    service: http://127.0.0.1:3811
+  - hostname: noti.school
+    service: http://127.0.0.1:3810
+    originRequest:
+      httpHostHeader: noti.school
+  - service: http_status:404

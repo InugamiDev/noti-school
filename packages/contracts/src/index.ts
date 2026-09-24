@@ -1,0 +1,53 @@
+import { z } from 'zod';
+
+// intent: one wire vocabulary for Rust, identity and the client; status: v1 frozen.
+const id = z.uuid();
+const time = z.iso.datetime({ offset: true });
+const text = z.string().min(1);
+const httpsUrl = z.url({ protocol: /^https$/ });
+const object = z.strictObject;
+export const Language = z.enum(['en', 'vi']);
+export const ErrorCode = z.enum(['invalid_request', 'unauthenticated', 'forbidden', 'not_found', 'conflict', 'payload_too_large', 'unsupported_media', 'rate_limited', 'provider_unavailable', 'budget_exhausted', 'pricing_unavailable', 'core_unavailable', 'internal_error']);
+export const ApiError = object({ error: object({ code: ErrorCode, message: text, request_id: id, retryable: z.boolean(), capability: z.enum(['answers', 'indexing', 'discovery', 'google', 'email', 'identity']).optional() }) });
+export const Capability = object({ state: z.enum(['available', 'disabled', 'unavailable']), reason: z.enum(['ready', 'not_configured', 'paid_calls_disabled', 'pricing_missing', 'budget_exhausted', 'provider_failed', 'core_failed', 'no_approved_evidence']) });
+export const Capabilities = object({ mode: z.enum(['disabled', 'mock', 'live']), answers: Capability, indexing: Capability, discovery: Capability, google: Capability, email: Capability, identity: Capability });
+export const Institution = object({ id, slug: text, name: text, coverage: z.enum(['none', 'synthetic_demo', 'approved_sources']) });
+export const Membership = object({ institution_id: id, role: z.enum(['student', 'admin']) });
+export const Session = object({ user_id: text, session_id: text, email_verified: z.literal(true), expires_at: time });
+export const Me = object({ identity: Session, memberships: z.array(Membership) });
+export const PageQuery = object({ cursor: z.string().max(1024).optional(), limit: z.coerce.number().int().min(1).max(100).default(20) });
+export const Locator = object({ page: z.number().int().positive().nullable(), section: z.string().max(500).nullable(), start_char: z.number().int().nonnegative(), end_char: z.number().int().positive() });
+export const Source = object({ id, institution_id: id, title: text, kind: z.enum(['pdf', 'text', 'url']), original_url: httpsUrl.nullable(), visibility: z.enum(['institution', 'admin']), current_version_id: id.nullable(), created_at: time });
+export const Version = object({ id, source_id: id, institution_id: id, label: text, sha256: z.string().regex(/^[a-f0-9]{64}$/), status: z.enum(['draft', 'quarantined', 'pending_review', 'approved', 'archived', 'failed']), indexing: z.enum(['pending', 'running', 'ready', 'failed', 'disabled']), effective_from: time.nullable(), effective_until: time.nullable(), created_at: time });
+export const Chunk = object({ id, institution_id: id, source_id: id, version_id: id, ordinal: z.number().int().nonnegative(), text: text.max(16000), locator: Locator, language: Language });
+export const Evidence = object({ id, source_id: id, version_id: id, chunk_id: id, institution_id: id, title: text, version_label: text, locator: Locator, quote: text.max(4000), original_url: httpsUrl.nullable() });
+export const GraphEntity = object({ id, institution_id: id, kind: z.enum(['course', 'procedure', 'regulation', 'office', 'form', 'program']), label: text });
+export const GraphEdge = object({ id, institution_id: id, from_entity_id: id, to_entity_id: id, relation: text.max(100), status: z.enum(['candidate', 'approved', 'rejected']), evidence: z.array(Evidence).min(1).max(10) });
+export const AskRequest = object({ institution_id: id, question: text.max(4000), language: Language, conversation_id: id.optional(), discover: z.boolean().default(false) });
+export const Claim = object({ text: text.max(8000), evidence_ids: z.array(id).min(1).max(20) });
+export const Answer = object({ id, conversation_id: id, institution_id: id, status: z.enum(['answered', 'qualified', 'abstained']), language: Language, claims: z.array(Claim).max(50), evidence: z.array(Evidence).max(50), explanation: z.string().max(4000).nullable(), created_at: time });
+export function validateAnswer(value: unknown) {
+  const answer = Answer.parse(value);
+  const evidenceIds = new Set(answer.evidence.map(e => e.id));
+  if (evidenceIds.size !== answer.evidence.length || answer.evidence.some(e => e.institution_id !== answer.institution_id || e.locator.end_char <= e.locator.start_char || (e.locator.page === null && !e.locator.section)) || answer.claims.some(c => c.evidence_ids.some(ref => !evidenceIds.has(ref)))) throw new Error('Invalid evidence references');
+  if (answer.status === 'abstained' ? answer.claims.length !== 0 || !answer.explanation : answer.claims.length === 0) throw new Error('Invalid answer status');
+  return answer;
+}
+export const FeedbackRequest = object({ answer_id: id, category: z.enum(['unsupported', 'incorrect', 'outdated', 'other']), evidence_id: id.optional(), comment: z.string().max(2000).optional() });
+export const Feedback = object({ id, institution_id: id, answer_id: id, category: FeedbackRequest.shape.category, evidence_id: id.nullable(), comment: z.string().max(2000).nullable(), status: z.enum(['open', 'reviewed', 'resolved']), created_at: time });
+export const SourceCreate = object({ title: text.max(300), kind: Source.shape.kind, original_url: httpsUrl.optional(), visibility: Source.shape.visibility });
+export const VersionCreate = object({ label: text.max(100), effective_from: time.nullable(), effective_until: time.nullable() });
+export const VersionAction = object({ action: z.enum(['approve', 'archive', 'retry_index']), expected_status: Version.shape.status });
+export const Job = object({ id, institution_id: id, version_id: id, state: z.enum(['queued', 'running', 'succeeded', 'failed', 'disabled']), error_code: ErrorCode.nullable() });
+export const SearchRequest = object({ institution_id: id, query: text.max(4000), language: Language, limit: z.number().int().min(1).max(20).default(10) });
+export const Budget = object({ month: z.string().regex(/^\d{4}-\d{2}$/), cap_micro_usd: z.literal(50000000), spent_micro_usd: z.number().int().nonnegative(), reserved_micro_usd: z.number().int().nonnegative(), currency: z.literal('USD') });
+export const Health = object({ status: z.enum(['ok', 'degraded', 'unavailable']), contract_version: z.literal('1') });
+export const InvitationCheck = object({ token: text.max(256), email: z.email() });
+export const InvitationValid = object({ valid: z.literal(true) });
+export const InvitationRedeem = object({ token: text.max(256), user_id: text, email: z.email(), email_verified: z.literal(true) });
+export const PublicInvitationRedeem = object({ token: text.max(256) });
+export const FeedbackAction = object({ status: Feedback.shape.status });
+export const page = <T extends z.ZodType>(item: T) => object({ items: z.array(item), next_cursor: z.string().nullable() });
+export const Schemas = { ApiError, Capabilities, Institution, Membership, Session, Me, PageQuery, Locator, Source, Version, Chunk, Evidence, GraphEntity, GraphEdge, AskRequest, Answer, FeedbackRequest, Feedback, SourceCreate, VersionCreate, VersionAction, Job, SearchRequest, Budget, Health, InvitationCheck, InvitationValid, InvitationRedeem, PublicInvitationRedeem, FeedbackAction, InstitutionPage: page(Institution), SourcePage: page(Source), VersionPage: page(Version), FeedbackPage: page(Feedback), EvidencePage: page(Evidence), AnswerPage: page(Answer), GraphEdgePage: page(GraphEdge) };
+export type AskInput = z.infer<typeof AskRequest>;
+export type AnswerOutput = z.infer<typeof Answer>;

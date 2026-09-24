@@ -1,0 +1,26 @@
+{
+  "label": "SYNTHETIC NON-POLICY TEST DATA; no HCMIU rules or affiliation",
+  "institution_id": "10000000-0000-4000-8000-000000000001",
+  "questions": [
+    { "language": "en", "question": "What color is the fictional sample folder?", "expected": "blue" },
+    { "language": "vi", "question": "Thư mục mẫu hư cấu có màu gì?", "expected": "xanh dương" }
+  ],
+  "answer": {
+    "id": "10000000-0000-4000-8000-000000000002",
+    "conversation_id": "10000000-0000-4000-8000-000000000003",
+    "institution_id": "10000000-0000-4000-8000-000000000001",
+    "status": "answered", "language": "en",
+    "claims": [{ "text": "The fictional sample folder is blue.", "evidence_ids": ["10000000-0000-4000-8000-000000000004"] }],
+    "evidence": [{
+      "id": "10000000-0000-4000-8000-000000000004",
+      "source_id": "10000000-0000-4000-8000-000000000005",
+      "version_id": "10000000-0000-4000-8000-000000000006",
+      "chunk_id": "10000000-0000-4000-8000-000000000007",
+      "institution_id": "10000000-0000-4000-8000-000000000001",
+      "title": "Synthetic non-policy sample", "version_label": "fixture-v1",
+      "locator": { "page": 1, "section": "Fictional example", "start_char": 0, "end_char": 34 },
+      "quote": "The fictional sample folder is blue.", "original_url": null
+    }],
+    "explanation": null, "created_at": "2026-09-25T00:00:00Z"
+  }
+}

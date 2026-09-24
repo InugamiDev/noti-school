@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "NODE_ENV": {
+      "default": "development",
+      "type": "string",
+      "enum": [
+        "development",
+        "test",
+        "production"
+      ]
+    },
+    "APP_ORIGIN": {
+      "default": "http://localhost:3000",
+      "type": "string",
+      "format": "uri"
+    },
+    "DATABASE_URL": {
+      "type": "string",
+      "minLength": 1
+    },
+    "AUTH_DATABASE_URL": {
+      "type": "string",
+      "minLength": 1
+    },
+    "BETTER_AUTH_SECRET": {
+      "type": "string",
+      "minLength": 1
+    },
+    "INTERNAL_AUTH_SECRET": {
+      "type": "string",
+      "minLength": 1
+    },
+    "API_BIND_ADDRESS": {
+      "default": "127.0.0.1:3810",
+      "type": "string",
+      "const": "127.0.0.1:3810"
+    },
+    "AUTH_BIND_HOST": {
+      "default": "127.0.0.1",
+      "type": "string",
+      "const": "127.0.0.1"
+    },
+    "AUTH_PORT": {
+      "default": "3811",
+      "type": "string",
+      "const": "3811"
+    },
+    "AUTH_INTERNAL_URL": {
+      "default": "http://127.0.0.1:3811",
+      "type": "string",
+      "const": "http://127.0.0.1:3811"
+    },
+    "AI_LIVE_CALLS_ENABLED": {
+      "default": "false",
+      "type": "string",
+      "enum": [
+        "true",
+        "false"
+      ]
+    },
+    "AI_MODE": {
+      "default": "disabled",
+      "type": "string",
+      "enum": [
+        "disabled",
+        "mock",
+        "live"
+      ]
+    },
+    "AI_MONTHLY_BUDGET_USD": {
+      "default": "50",
+      "type": "string",
+      "const": "50"
+    },
+    "OPENAI_API_KEY": {
+      "type": "string",
+      "minLength": 1
+    },
+    "TYPESAFE_API_KEY": {
+      "type": "string",
+      "minLength": 1
+    },
+    "OPENAI_CHAT_MODEL": {
+      "type": "string",
+      "minLength": 1
+    },
+    "OPENAI_EMBEDDING_MODEL": {
+      "default": "text-embedding-3-small",
+      "type": "string",
+      "const": "text-embedding-3-small"
+    },
+    "EMBEDDING_DIMENSIONS": {
+      "default": "1536",
+      "type": "string",
+      "const": "1536"
+    },
+    "JEV_MODEL": {
+      "default": "jev-1.13.0",
+      "type": "string",
+      "const": "jev-1.13.0"
+    },
+    "GOOGLE_CLIENT_ID": {
+      "type": "string",
+      "minLength": 1
+    },
+    "GOOGLE_CLIENT_SECRET": {
+      "type": "string",
+      "minLength": 1
+    },
+    "SMTP_HOST": {
+      "type": "string",
+      "minLength": 1
+    },
+    "SMTP_PORT": {
+      "default": 587,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "SMTP_USER": {
+      "type": "string",
+      "minLength": 1
+    },
+    "SMTP_PASSWORD": {
+      "type": "string",
+      "minLength": 1
+    },
+    "SMTP_FROM": {
+      "type": "string",
+      "format": "email",
+      "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+    },
+    "SMTP_TLS_MODE": {
+      "default": "starttls",
+      "type": "string",
+      "enum": [
+        "starttls",
+        "implicit"
+      ]
+    },
+    "REGISTRATION_MODE": {
+      "default": "invite_only",
+      "type": "string",
+      "const": "invite_only"
+    },
+    "WEB_DIST_DIR": {
+      "default": "./apps/web/dist",
+      "type": "string"
+    },
+    "UPLOAD_DIR": {
+      "default": "./data/uploads",
+      "type": "string"
+    }
+  }
+}

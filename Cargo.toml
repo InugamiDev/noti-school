@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = ["packages/foundation-rs"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+
+[workspace.dependencies]
+axum = { version = "=0.8.9", features = ["json", "multipart"] }
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "signal", "time"] }
+sqlx = { version = "=0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "chrono", "json", "migrate"] }

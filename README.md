@@ -10,7 +10,7 @@ For students: **Your university questions, answered with sources.**
 
 ## Current State
 
-Repository bootstrap and implementation specification. The application is not implemented or deployed yet. Do not treat this README, the proposal, or UI concepts as evidence of a working product.
+Shared foundation implemented for coordinator review: pinned workspaces, executable wire/environment contracts, guarded migrations, synthetic tests and candidate deployment templates. The API, identity service and browser application are not implemented or deployed yet.
 
 The first pilot targets HCMIU and English/Vietnamese questions. Application services, files and PostgreSQL will run in HomeLab. OpenAI and TypeSafe's Jev remain external inference services. Worldwide SaaS access is a later release, gated on testing, privacy and operational readiness.
 
@@ -42,7 +42,15 @@ No Next.js, SSR, separate vector database, separate graph database, managed auth
 - [Implementation roadmap](docs/roadmap.md)
 - [Primary technical sources](docs/references.md)
 
-Only placeholders belong in [.env.example](.env.example). Real credentials, private uploads, user data and the academic proposal are not repository content. Setup/build commands will be added with the executable implementation and verified before being advertised.
+Only placeholders belong in [.env.example](.env.example). Real credentials, private uploads, user data and the academic proposal are not repository content.
+
+## Foundation checks
+
+Prerequisites: Node 24.18.0 and pnpm 10.29.2. Install with `pnpm install --frozen-lockfile --ignore-scripts`, then run `pnpm check`. This runs strict TypeScript, generated-schema drift checks and deterministic tests without providers or databases. `pnpm env:check` reports safe disabled configuration; `pnpm infra:check` additionally requires cloudflared and validates only the candidate configuration.
+
+Read the [frozen service contracts](docs/contracts/README.md) before implementing an app. `pnpm setup:check` and `pnpm build` deliberately return a missing-prerequisite error until all app manifests arrive. Rust compilation requires the pinned toolchain; foundation's Rust package only embeds the shared schema, and unused workspace dependencies are not resolved in Cargo.lock yet.
+
+Database provisioning/migration, PM2 starts and tunnel changes are separate coordinator actions. The [database contract](docs/contracts/database.md) supplies guarded migration and disposable-test paths; no existing database is used by default. See [.fleet-handoff.json](.fleet-handoff.json) for actual verification and limitations.
 
 ## Licensing
 
