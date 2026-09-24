@@ -2,14 +2,14 @@
 
 ## Services
 
-The proposed deployment uses one public origin and four private application components behind Caddy:
+The proposed deployment uses one public origin through the existing HomeLab Cloudflare Tunnel. PM2 supervises the Rust and identity processes under /home/inu/projects/noti-school:
 
-- Static SolidJS/Vite assets for the browser.
+- Static SolidJS/Vite production assets served by Rust; Vite is a build/development tool, not the production server.
 - Rust/Axum API and background ingestion worker for product data, retrieval and generation.
 - Better Auth on Node.js/TypeScript for identity, sessions, Google OAuth and SMTP mail.
 - PostgreSQL with pgvector, dedicated application/auth roles and migrations; private file volume for originals and extracted content.
 
-Route /api/auth/* to the identity service and other /api/* paths to Rust. Do not expose databases or internal listeners publicly. The browser never receives AI keys or database credentials.
+The tunnel routes /api/auth and its descendants to the loopback identity listener, then all remaining requests for the application hostname to Rust. Rust serves /api/* product endpoints and static browser assets; unknown API paths must return API errors rather than the SPA HTML fallback. Internal session-introspection endpoints live outside the tunnel's allowed auth path. Do not expose databases, uploads or internal listeners directly. The browser never receives AI keys or database credentials. See docs/deployment.md for the routing, secrets and rollout contract.
 
 ## Authentication and Authorization
 

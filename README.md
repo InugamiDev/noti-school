@@ -27,7 +27,7 @@ The first pilot targets HCMIU and English/Vietnamese questions. Application serv
 | Evidence classification | TypeSafe AI / Jev, required from the first live build |
 | Email | Existing SMTP server |
 | Files | Private local volume initially |
-| Deployment | HomeLab containers behind Caddy, same-origin routing |
+| Deployment | Existing HomeLab PM2 daemon and Cloudflare Tunnel; same-origin routing |
 | Initial AI budget | USD 50/month combined application usage |
 
 No Next.js, SSR, separate vector database, separate graph database, managed auth provider, or paid search provider is required for this pilot. Those are scope decisions, not performance claims.
@@ -37,6 +37,7 @@ No Next.js, SSR, separate vector database, separate graph database, managed auth
 - [Product specification](docs/product-spec.md)
 - [Architecture and trust boundaries](docs/architecture.md)
 - [Services and secrets checklist](docs/services.md)
+- [HomeLab deployment contract](docs/deployment.md)
 - [Acceptance criteria and evaluation](docs/acceptance.md)
 - [Implementation roadmap](docs/roadmap.md)
 - [Primary technical sources](docs/references.md)

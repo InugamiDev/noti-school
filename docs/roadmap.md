@@ -2,7 +2,7 @@
 
 ## 1. Foundation
 
-Freeze API/data contracts, versioning, auth/session boundary, environment validation and cost accounting. Establish workspace, pinned dependencies, test fixtures, migrations and private local deployment. This stage unblocks independent service work.
+Freeze API/data contracts, versioning, auth/session boundary, environment validation and cost accounting. Establish workspace, pinned dependencies, test fixtures, migrations and tested PM2/Cloudflare Tunnel deployment configuration. This stage unblocks independent service work. Do not start application services or modify the shared tunnel during implementation.
 
 ## 2. Vertical Slices
 
@@ -18,7 +18,7 @@ Integrate actual service contracts, exercise browser-to-API-to-database flows, r
 
 ## 4. HomeLab Pilot
 
-Provision dedicated services, verify restore procedures, set operational alerts, configure SMTP/Google and invite a small pilot group. Public exposure remains a separate approval. The four-week plan is a target, not evidence of completion.
+Install reviewed releases under /home/inu/projects/noti-school through the existing PM2 daemon. Verify restore procedures, set operational alerts, configure SMTP/Google and invite a small pilot group. The owner authorized the HomeLab PM2/Cloudflare Tunnel rollout, subject to the release gates and verified hostname routing. Global SaaS readiness is a separate milestone. The four-week plan is a target, not evidence of completion.
 
 ## 5. SaaS Readiness
 

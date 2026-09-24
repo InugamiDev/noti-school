@@ -9,11 +9,11 @@ These are the confirmed initial choices. No live application credentials have be
 | OpenAI | OPENAI_API_KEY; available chat model | Answers, embeddings and optional official-domain discovery |
 | TypeSafe AI | TYPESAFE_API_KEY | Jev passage/evidence decisions |
 | Google OAuth web application | GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET | Google sign-in |
-| Existing SMTP | Host, port, TLS mode, username/password if required, authorized sender | Verification, invitations and password reset |
-| Deployment | HomeLab project location, eventual public origin and DNS owner | Private installation now, separate approved public rollout later |
+| Existing SMTP | Path to the existing HomeLab mail configuration, or host/port/TLS/sender and locally stored credentials | Verification, invitations and password reset; may remain disabled until configured |
+| Deployment | /home/inu/projects/noti-school; existing PM2 and Cloudflare Tunnel; DNS ownership/access for the selected hostname | Approved HomeLab rollout after verification; no main merge implied |
 | Pilot corpus | Approved HCMIU documents/URLs and a human approval owner | Evidence collection and benchmark |
 
-Use local secret storage or a gitignored environment file. Do not paste keys/passwords into chat or attach them to issues. Only confirm that they are configured and identify their local location when needed. The Google client ID and service host/port are configuration, not secret keys; still avoid publishing unnecessary operational details.
+Use permission-restricted local secret files outside release checkouts. Do not paste keys/passwords into chat or attach them to issues. Only confirm that they are configured and identify their local location when needed. The Google client ID and service host/port are configuration, not secret keys; still avoid publishing unnecessary operational details. API keys may be added after installation: missing keys must not block a safe application boot or return fabricated answers. Keep paid calls disabled, expose unavailable capability states, and fail closed on dependent operations.
 
 ## Generated During Setup
 
@@ -25,7 +25,7 @@ Better Auth is a self-hosted library here, not a separate paid identity provider
 
 ## Google Callback Contract
 
-Planned public development origin: http://localhost:3000.
+Planned local development origin: http://localhost:3000.
 
 - Development callback: http://localhost:3000/api/auth/callback/google
 - Production callback, only when that origin is deployed: https://noti.school/api/auth/callback/google
@@ -35,6 +35,8 @@ Register the exact callback for the actual running origin. Add approved pilot us
 ## Email Details
 
 Confirm whether the SMTP service expects STARTTLS (commonly port 587), implicit TLS (commonly port 465), or an explicitly approved trusted local relay. Never disable certificate verification to make delivery work. Use a sender address the owner is authorized to send from; domain authentication and delivery tests are release checks, not assumptions.
+
+The owner identified the Financial tab in the HomeLab dashboard. Its invoice UI stores SMTP fields in browser local storage and passes them to a server-side Nodemailer sender. This is the intended existing provider, not the separate financial portal. Reuse the authorized host/port/TLS/sender settings, but store noti.school's credentials server-side; do not reproduce browser-side password storage or read unrelated financial records. SMTP remains disabled until credentials have been installed securely. No new paid mail provider is needed.
 
 Until mail delivery is verified, public password signup/recovery is not ready. Development mail uses a local test sink and is clearly distinguished from real delivery.
 

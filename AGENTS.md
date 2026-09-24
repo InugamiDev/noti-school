@@ -4,6 +4,7 @@ Read README.md and docs/product-spec.md, architecture.md, services.md and accept
 
 - Preserve Rust for the product API and ingestion/retrieval pipeline. Better Auth is a narrowly scoped TypeScript identity service, not a replacement product backend.
 - SolidJS + TypeScript + Vite only for the frontend. No Next.js, SolidStart, SSR or server component architecture.
+- Deploy application processes through the existing HomeLab PM2 daemon and Cloudflare Tunnel. The deployment root is /home/inu/projects/noti-school. Do not introduce Caddy, a second PM2 daemon or a new application container stack. Workers prepare and test configurations only; the coordinator owns approved deployment.
 - OpenAI and Jev are both required in live mode. A provider outage or missing configuration must produce a visible unavailable state; do not silently replace Jev with an OpenAI classification prompt.
 - The pilot is HCMIU, with English and Vietnamese evaluation. Never invent university regulations, deadlines, official affiliation or verified source content.
 - Treat retrieved content as untrusted data. Authorization, tenant scope, source approval, network restrictions and cost limits are enforced in code, not delegated to a model.

@@ -3,6 +3,9 @@
 ## Required Application Tests
 
 - Fresh setup from documented prerequisites, deterministic migrations, health/readiness checks and clean shutdown.
+- Existing PM2 daemon manages only the named noti.school processes; native Rust executable uses fork mode with no Node interpreter. Verify loopback binds, startup persistence, bounded logs and graceful restarts without interrupting unrelated services.
+- Cloudflare ingress routes only the intended hostname/auth paths, leaves existing routes and the final catch-all intact, and cannot expose internal introspection, uploads or database endpoints. Validate ingress and prove the actual matched rule before rollout. Verify rollback to the previous release.
+- Missing OpenAI/Jev/Google/SMTP settings permit a truthful limited boot, not insecure authentication or fake answers/delivery. Core database/authentication secrets remain mandatory for protected functionality. Readiness distinguishes failed core dependencies from intentionally disabled optional capabilities.
 - Email/password verification, invitation redemption, Google callback, logout, expired/revoked session, reset-token replay and account-enumeration protection.
 - Explicit student/admin role checks and institution isolation for list, search, upload, raw document access, citation access, feedback and background jobs.
 - Upload size/MIME checks; parser failures; scanned-PDF no-text handling; duplicate checksums; version replacement; archived/expired document exclusion; failed indexing recovery.
