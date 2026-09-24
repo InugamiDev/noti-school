@@ -32,7 +32,9 @@ Public worldwide release, billing, unrestricted crawling, university SSO beyond 
 
 Use noti.school as a visible first-viewport identity. The public first screen is a functional prompt-led landing page with a school selector, example queries and clear evidence coverage. After asking, transition smoothly into the answer and citation workspace without forcing a second onboarding flow.
 
-The public landing may be expressive and futuristic; the repeated student/admin work surfaces remain quiet, dense enough for scanning, accessible and fast. No copied PostHog/Lovable branding, invented institution partnership, distracting background animation or decorative nested cards. Use a real/generative bitmap asset only where it supports the subject, and retain a reduced-motion mode. Test mobile, keyboard interaction, loading, empty, failure, expired-source and unsupported-answer states.
+The public landing is an animated futuristic archive, not a static background. Use a full-bleed Three.js scene with a gentle camera push-in, bounded pointer parallax and a short zoom transition into the answer workspace. Keep the actual prompt and navigation in accessible HTML with stable geometry. Respect reduced-motion and an explicit pause control; pause offscreen/hidden rendering and provide the generated archive bitmap only as a low-power, reduced-motion or WebGL-failure fallback. Do not hijack scrolling or delay the answer request for animation.
+
+Repeated student/admin work surfaces remain quiet, dense enough for scanning, accessible and fast. No copied PostHog/Lovable branding, invented institution partnership or decorative nested cards. Test mobile, keyboard interaction, loading, empty, failure, expired-source and unsupported-answer states. Verify desktop/mobile screenshots plus canvas-pixel checks that prove the scene is nonblank, framed correctly and moving when motion is enabled. See docs/design/interaction-brief.md.
 
 ## Constraints
 
