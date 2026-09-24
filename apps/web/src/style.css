@@ -179,6 +179,7 @@ nav a {
   inset: 0;
   z-index: -1;
   background: #101314;
+  overflow: hidden;
 }
 .archive img,
 .scene,
@@ -192,6 +193,7 @@ nav a {
 .archive img {
   object-fit: cover;
   opacity: 0.5;
+  transform: scale(1.04);
 }
 .scene {
   transition: opacity 0.6s;
