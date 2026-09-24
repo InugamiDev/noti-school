@@ -1,6 +1,7 @@
 # Foundation contract v1
 
-Status: implementation contract, pending independent coordinator review. No app service is implemented here.
+Status: shared implementation contracts. Rust, identity and web services are implemented; independent
+reviews found release-blocking issues, and repair/re-review is in progress. This is not release clearance.
 The product requirements in docs/product-spec.md, architecture.md, services.md, acceptance.md and deployment.md remain authoritative.
 
 The shared owner freezes `packages/contracts/src/index.ts`, generated `schema.json`, endpoint registry,
@@ -12,6 +13,7 @@ do not regenerate locks in parallel. Root scripts explicitly report missing app 
 - [Database and cost protocol](database.md).
 - [Environment and deployment integration](environment.md).
 - [Pinned dependencies and primary sources](dependencies.md).
+- [Review repair interfaces and request recovery](review-repair-addendum.md).
 
 Wire format: UTF-8 JSON, snake_case, UUID product IDs, opaque string identity IDs, RFC3339 UTC timestamps,
 integer micro-USD costs (USD 1 = 1,000,000 micro-USD), ISO language `en` or `vi`. Unknown properties
