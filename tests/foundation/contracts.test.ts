@@ -44,6 +44,17 @@ test('requests reject empty questions, extra authorization fields and unsupporte
   assert.equal(AskRequest.parse(valid).discover, false);
   for (const bad of [{ ...valid, question: '' }, { ...valid, role: 'admin' }, { ...valid, language: 'xx' }]) assert.equal(AskRequest.safeParse(bad).success, false);
 });
+test('question boundary supports Vietnamese and rejects controls using browser length units', () => {
+  const valid = { institution_id: fixture.institution_id, language: 'vi' };
+  for (const question of ['\u1ec7'.repeat(4000), '\u{1f600}'.repeat(2000), 'A\tB\r\nC']) {
+    assert.equal(AskRequest.safeParse({ ...valid, question }).success, true);
+    assert.equal(Schemas.SearchRequest.safeParse({ ...valid, query: question }).success, true);
+  }
+  for (const question of ['\u1ec7'.repeat(4001), '\u{1f600}'.repeat(2001), '\u0001'.repeat(4000), 'A\u007fB']) {
+    assert.equal(AskRequest.safeParse({ ...valid, question }).success, false);
+    assert.equal(Schemas.SearchRequest.safeParse({ ...valid, query: question }).success, false);
+  }
+});
 test('integration extensions preserve v1 defaults and reject authority/shape injection', () => {
   const version={label:'Synthetic',effective_from:null,effective_until:null};
   assert.equal(Schemas.VersionCreate.parse(version).language,'en');

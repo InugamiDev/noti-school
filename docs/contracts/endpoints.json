@@ -2,6 +2,8 @@
   "version": "1",
   "error_schema": "ApiError",
   "endpoints": [
+    { "method": "GET", "path": "/api/v1/institutions/{institution_id}/versions/{version_id}/chunks", "request": "PageQuery", "response": "ChunkPage", "scope": "admin", "status": 200 },
+    { "method": "GET", "path": "/api/v1/institutions/{institution_id}/feedback/{feedback_id}/context", "request": null, "response": "FeedbackContext", "scope": "admin", "status": 200 },
     { "method": "POST", "path": "/internal/capabilities", "request": null, "response": "IdentityCapabilities", "scope": "internal_auth", "status": 200 },
     { "method": "POST", "path": "/internal/accounts/delete", "request": "AccountDelete", "response": "AccountDeleted", "scope": "internal_api", "status": 200 },
     { "method": "GET", "path": "/api/v1/institutions/{institution_id}/conversations", "request": "PageQuery", "response": "ConversationPage", "scope": "owner", "status": 200 },
