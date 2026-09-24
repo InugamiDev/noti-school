@@ -8,7 +8,7 @@ import { AskRequest, Schemas, validateAnswer } from '../../packages/contracts/sr
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/synthetic-evidence.json', import.meta.url), 'utf8'));
 const schema = JSON.parse(readFileSync(new URL('../../packages/contracts/schema.json', import.meta.url), 'utf8'));
 test('all published schemas compile and endpoint references resolve', () => {
-  const ajv = new Ajv2020({ strict: false });
+  const ajv = new Ajv2020({ strict: true });
   (addFormats as unknown as (a: Ajv2020) => void)(ajv);
   ajv.addSchema(schema);
   for (const name of Object.keys(Schemas)) assert.ok(ajv.getSchema(`https://noti.school/contracts/v1#/$defs/${name}`));
@@ -43,4 +43,15 @@ test('requests reject empty questions, extra authorization fields and unsupporte
   const valid = { institution_id: fixture.institution_id, question: 'Synthetic question?', language: 'vi' };
   assert.equal(AskRequest.parse(valid).discover, false);
   for (const bad of [{ ...valid, question: '' }, { ...valid, role: 'admin' }, { ...valid, language: 'xx' }]) assert.equal(AskRequest.safeParse(bad).success, false);
+});
+test('integration extensions preserve v1 defaults and reject authority/shape injection', () => {
+  const version={label:'Synthetic',effective_from:null,effective_until:null};
+  assert.equal(Schemas.VersionCreate.parse(version).language,'en');
+  assert.equal(Schemas.VersionCreate.parse({...version,language:'vi'}).language,'vi');
+  assert.equal(Schemas.AccountDelete.safeParse({user_id:'x',role:'admin'}).success,false);
+  assert.equal(Schemas.AccountDelete.safeParse({user_id:'x'.repeat(257)}).success,false);
+  assert.equal(Schemas.GraphEntityCreate.safeParse({kind:'office',label:'Synthetic',id:fixture.institution_id}).success,false);
+  assert.equal(Schemas.GraphEdgeAction.safeParse({status:'candidate'}).success,false);
+  assert.equal(Schemas.DiscoveryPage.safeParse({items:[{title:'Synthetic',url:'http://example.invalid',discovered_at:'2026-09-25T00:00:00Z'}],next_cursor:null}).success,false);
+  assert.equal(Schemas.ConversationPage.safeParse({items:[{id:fixture.institution_id,institution_id:fixture.institution_id,created_at:'2026-09-25T00:00:00Z',question:'private'}],next_cursor:null}).success,false);
 });

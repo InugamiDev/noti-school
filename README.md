@@ -10,9 +10,9 @@ For students: **Your university questions, answered with sources.**
 
 ## Current State
 
-The first application slices are implemented: an animated SolidJS/Three.js landing and student/admin interface, Better Auth identity service, and a partial Rust API for sessions, invitations, documents and lexical search. Shared contracts, guarded migrations and a persistent budget ledger are present. The live answer/indexing/discovery pipeline and several cross-service workflows still require integration. Missing functionality returns unavailable; no mock answer is presented as a real university policy.
+The application includes an animated SolidJS/Three.js landing and student/admin interface, Better Auth identity service, and a Rust evidence pipeline: document extraction/indexing, hybrid retrieval, approved graph expansion, Jev evidence and claim checks, and OpenAI cited answers. Account setup, history, feedback, guarded migrations and a persistent budget ledger are implemented. Optional OpenAI web discovery is not implemented and remains visibly disabled; administrators can propose and fetch allowed official URLs for review.
 
-Coordinator reruns pass 18 identity tests, 14 Rust tests and 13 browser tests, including actual moving/paused/reduced-motion canvas checks. Identity/provider fixtures are synthetic. Real PostgreSQL application journeys, external providers, independent reviews and release gates are not complete. Nothing is publicly deployed.
+Coordinator reruns pass 19 identity tests, two PostgreSQL identity/operator scenarios, one comprehensive PostgreSQL evidence-pipeline scenario, and 13 motion/browser tests. Provider and email fixtures are synthetic. Combined-schema checks and three independent reviews are pending on this snapshot. Live providers, approved HCMIU coverage, human-labeled bilingual quality, and production release gates remain unverified. Nothing is publicly deployed.
 
 The first pilot targets HCMIU and English/Vietnamese questions. Application services, files and PostgreSQL will run in HomeLab. OpenAI and TypeSafe's Jev remain external inference services. Worldwide SaaS access is a later release, gated on testing, privacy and operational readiness.
 

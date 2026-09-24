@@ -127,3 +127,16 @@ export function loadDraft() {
     return '';
   }
 }
+
+// Consume callbacks synchronously before rendering; never persist credential-bearing query strings.
+export function takeAuthCallback(href: string) {
+  const url = new URL(href);
+  const [route = '/auth', query = ''] = url.hash.slice(1).split('?');
+  const hash = new URLSearchParams(query);
+  const token = hash.get('token') ?? url.searchParams.get('token') ?? '';
+  const deletion = hash.get('delete_token') ?? url.searchParams.get('delete_token') ?? '';
+  const error = hash.has('error') || url.searchParams.has('error') || route === '/auth/error';
+  for (const key of ['token', 'delete_token', 'error', 'error_description']) { hash.delete(key); url.searchParams.delete(key); }
+  url.hash = route + (hash.size ? '?' + hash.toString() : '');
+  return { token: token.length <= 256 ? token : '', deletion: deletion.length <= 256 ? deletion : '', error, clean: url.pathname + url.search + url.hash };
+}

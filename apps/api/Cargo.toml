@@ -23,6 +23,7 @@ url = "=2.5.8"
 dotenvy = "=0.15.7"
 pdf-extract = "=0.12.1"
 lopdf = { version = "=0.42.0", default-features = false }
+html2text = { version = "=0.17.1", default-features = false }
 
 [[test]]
 name = "security"

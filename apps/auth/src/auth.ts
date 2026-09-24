@@ -5,6 +5,7 @@ import type { Config } from './config.js';
 import type { Mailer } from './mail.js';
 import { InvitationError, Invitations, invitationHeader, PendingInvitation } from './invitations.js';
 import { csrf, digest, equalSecret } from './security.js';
+import { Accounts } from './accounts.js';
 
 type VerificationStore = {
   createVerificationValue(value: { identifier: string; value: string; expiresAt: Date }): Promise<unknown>;
@@ -28,14 +29,14 @@ async function checkInvitation(invitations: Invitations, token: string | undefin
 // status: implemented; next: isolated PostgreSQL and real provider rehearsal by coordinator.
 export function authOptions(config: Config, database: BetterAuthOptions['database'], mail: Mailer,
   invitations: Invitations, verificationStore: () => Promise<VerificationStore>,
-  delivery: AsyncLocalStorage<{ failed: boolean }>): BetterAuthOptions {
+  delivery: AsyncLocalStorage<{ failed: boolean }>, accounts: Accounts): BetterAuthOptions {
   const origin = config.env.APP_ORIGIN;
   return {
     appName: 'noti.school', baseURL: origin, basePath: '/api/auth', secret: config.env.BETTER_AUTH_SECRET!,
     database, trustedOrigins: [origin],
     logger: { disabled: true },
     telemetry: { enabled: false },
-    onAPIError: { errorURL: `${origin}/auth/error` },
+    onAPIError: { errorURL: `${origin}/#/auth/error` },
     advanced: {
       disableOriginCheck: false, disableCSRFCheck: false,
       useSecureCookies: config.env.NODE_ENV === 'production',
@@ -49,12 +50,26 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
     session: { cookieCache: { enabled: false }, expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 },
     account: { accountLinking: { enabled: false }, storeStateStrategy: 'database', skipStateCookieCheck: false,
       storeAccountCookie: false, encryptOAuthTokens: true },
-    user: { changeEmail: { enabled: false }, deleteUser: { enabled: false } },
+    user: { changeEmail: { enabled: false }, deleteUser: {
+      enabled: true, deleteTokenExpiresIn: 1800,
+      sendDeleteAccountVerification: async ({ user, token }) => {
+        // A mail scanner must not delete an account by following a link; the UI confirms via POST.
+        try { await mail.send({ to: user.email, url: `${origin}/#/auth?delete_token=${encodeURIComponent(token)}`, kind: 'deletion' }); }
+        catch { const state = delivery.getStore(); if (state) state.failed = true; throw unavailable(); }
+      },
+      beforeDelete: async user => {
+        if (!user.emailVerified) throw forbidden();
+        try { await accounts.delete(user.id); }
+        catch { throw new APIError('SERVICE_UNAVAILABLE', { message: 'Account cleanup unavailable; request a new confirmation to retry' }); }
+      },
+    } },
     emailAndPassword: {
       enabled: true, requireEmailVerification: true, autoSignIn: false,
       minPasswordLength: 12, maxPasswordLength: 128, revokeSessionsOnPasswordReset: true,
       resetPasswordTokenExpiresIn: 1800,
-      sendResetPassword: async ({ user, url }) => { await mail.send({ to: user.email, url, kind: 'reset' }); },
+      sendResetPassword: async ({ user, token }) => {
+        await mail.send({ to: user.email, url: `${origin}/#/auth?token=${encodeURIComponent(token)}`, kind: 'reset' });
+      },
     },
     emailVerification: {
       sendOnSignUp: true, sendOnSignIn: false, autoSignInAfterVerification: false, expiresIn: 1800,
@@ -86,7 +101,7 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
         if (['/sign-up/email', '/sign-in/social'].includes(path)) {
           if (ctx.body && ['role', 'institution_id', 'emailVerified', 'user_id', 'additionalData'].some(k => k in ctx.body)) throw forbidden();
         }
-        if (path === '/sign-up/email' || enumerationPaths.has(path)) {
+        if (path === '/sign-up/email' || path === '/delete-user' || enumerationPaths.has(path)) {
           if (!mail.enabled || mail.failed) throw unavailable();
         }
         if (path === '/sign-up/email') {
@@ -117,7 +132,7 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
       }),
       after: createAuthMiddleware(async ctx => {
         // Better Auth deliberately catches mail callback exceptions; restore truthful signup failure.
-        if (ctx.path === '/sign-up/email' && (delivery.getStore()?.failed || mail.failed)) throw unavailable();
+        if (['/sign-up/email', '/delete-user'].includes(ctx.path ?? '') && (delivery.getStore()?.failed || mail.failed)) throw unavailable();
         if (ctx.path === '/sign-in/social') {
           const result = ctx.context.returned as { url?: unknown } | undefined;
           if (typeof result?.url === 'string') {
@@ -145,9 +160,10 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
   };
 }
 
-export function createIdentity(config: Config, database: BetterAuthOptions['database'], mail: Mailer, invitations: Invitations) {
+export function createIdentity(config: Config, database: BetterAuthOptions['database'], mail: Mailer, invitations: Invitations,
+  accounts = new Accounts(config.env.INTERNAL_AUTH_SECRET!)) {
   const delivery = new AsyncLocalStorage<{ failed: boolean }>();
-  const auth = betterAuth(authOptions(config, database, mail, invitations, async (): Promise<VerificationStore> => (await auth.$context).internalAdapter, delivery));
+  const auth = betterAuth(authOptions(config, database, mail, invitations, async (): Promise<VerificationStore> => (await auth.$context).internalAdapter, delivery, accounts));
   const handler = auth.handler;
   auth.handler = request => delivery.run({ failed: false }, () => handler(request));
   return auth;

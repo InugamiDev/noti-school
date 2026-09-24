@@ -36,7 +36,7 @@ pub async fn create(
         return Err(Error("invalid_request"));
     }
     if let Some(raw) = &b.original_url {
-        crate::ssrf::validate_url(raw, &[])?;
+        crate::ssrf::validate_url(raw, &crate::ssrf::allowed_hosts(&s, institution).await?)?;
     }
     let value:Value=sqlx::query_scalar("INSERT INTO product.sources(id,institution_id,title,kind,original_url,visibility) SELECT $1,$2,$3,$4,$5,$6 WHERE EXISTS(SELECT 1 FROM product.memberships WHERE institution_id=$2 AND user_id=$7 AND role='admin' AND revoked_at IS NULL) RETURNING to_jsonb(sources)")
         .bind(Uuid::new_v4()).bind(institution).bind(b.title).bind(b.kind).bind(b.original_url).bind(b.visibility).bind(user.user_id).fetch_optional(s.pool()?).await?.ok_or(Error("not_found"))?;
@@ -108,7 +108,7 @@ pub async fn versions(
         .ok_or(Error("core_unavailable"))?;
     let (at, last) = page.decode(&scope, key)?;
     let limit = page.limit()?;
-    let rows=sqlx::query_scalar("SELECT to_jsonb(v)-'storage_key'-'approved_by'-'approved_at' FROM product.source_versions v JOIN product.sources s ON s.institution_id=v.institution_id AND s.id=v.source_id JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.source_id=$2 AND (m.role='admin' OR (s.visibility='institution' AND v.status IN ('approved','archived'))) AND (v.created_at,v.id)>($4,$5) ORDER BY v.created_at,v.id LIMIT $6")
+    let rows=sqlx::query_scalar("SELECT to_jsonb(v)-'storage_key'-'approved_by'-'approved_at'-'language' FROM product.source_versions v JOIN product.sources s ON s.institution_id=v.institution_id AND s.id=v.source_id JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.source_id=$2 AND (m.role='admin' OR (s.visibility='institution' AND v.status IN ('approved','archived'))) AND (v.created_at,v.id)>($4,$5) ORDER BY v.created_at,v.id LIMIT $6")
         .bind(i).bind(id).bind(u.user_id).bind(at).bind(last).bind(limit+1).fetch_all(s.pool()?).await?;
     finish_page(rows, limit, &scope, key)
 }
@@ -118,7 +118,7 @@ pub async fn version(
     h: HeaderMap,
 ) -> Result<Json<Value>> {
     let u = auth::member(&s, &h, i, false).await?;
-    let row=sqlx::query_scalar("SELECT to_jsonb(v)-'storage_key'-'approved_by'-'approved_at' FROM product.source_versions v JOIN product.sources s ON s.institution_id=v.institution_id AND s.id=v.source_id JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.id=$2 AND (m.role='admin' OR (s.visibility='institution' AND v.status IN ('approved','archived')))")
+    let row=sqlx::query_scalar("SELECT to_jsonb(v)-'storage_key'-'approved_by'-'approved_at'-'language' FROM product.source_versions v JOIN product.sources s ON s.institution_id=v.institution_id AND s.id=v.source_id JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.id=$2 AND (m.role='admin' OR (s.visibility='institution' AND v.status IN ('approved','archived')))")
         .bind(i).bind(id).bind(u.user_id).fetch_optional(s.pool()?).await?.ok_or(Error("not_found"))?;
     Ok(Json(row))
 }

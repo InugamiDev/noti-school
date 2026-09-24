@@ -1,19 +1,26 @@
+pub mod accounts;
 pub mod answers;
 pub mod auth;
 pub mod budget;
 pub mod config;
 pub mod error;
+pub mod graph;
 pub mod http;
 pub mod ingestion;
 pub mod invitations;
 pub mod pagination;
 pub mod pdf;
 pub mod personal;
+pub mod pipeline;
+#[cfg(test)]
+#[path = "../../../tests/api/pipeline.rs"]
+mod pipeline_tests;
 pub mod provider_http;
 pub mod providers;
 pub mod retrieval;
 pub mod sources;
 pub mod ssrf;
+pub mod worker;
 
 use axum::{
     Json, Router,
@@ -35,6 +42,8 @@ pub struct AppState {
     pub db: Option<PgPool>,
     pub identity: reqwest::Client,
     pub slots: Arc<tokio::sync::Semaphore>,
+    pub pipeline_slots: Arc<tokio::sync::Semaphore>,
+    pub providers: provider_http::ProviderHttp,
 }
 impl AppState {
     pub fn new(config: config::Config) -> Result<Self> {
@@ -61,6 +70,8 @@ impl AppState {
             db,
             identity,
             slots: Arc::new(tokio::sync::Semaphore::new(8)),
+            pipeline_slots: Arc::new(tokio::sync::Semaphore::new(2)),
+            providers: provider_http::ProviderHttp::new()?,
         })
     }
     pub fn pool(&self) -> Result<&PgPool> {
@@ -79,6 +90,27 @@ pub fn router(s: AppState) -> Router {
         .route("/api/v1/me", get(me))
         .route("/internal/invitations/check", post(invitations::check))
         .route("/internal/invitations/redeem", post(invitations::redeem))
+        .route("/internal/accounts/delete", post(accounts::delete))
+        .route(
+            "/api/v1/institutions/{institution_id}/conversations",
+            get(accounts::conversations),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/graph",
+            get(graph::list),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/graph/entities",
+            post(graph::entity),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/graph/edges",
+            post(graph::edge),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/graph/edges/{edge_id}",
+            axum::routing::patch(graph::approve),
+        )
         .route(
             "/api/v1/institutions/{institution_id}/sources",
             get(sources::list).post(sources::create),
@@ -86,6 +118,10 @@ pub fn router(s: AppState) -> Router {
         .route(
             "/api/v1/institutions/{institution_id}/sources/{source_id}",
             get(sources::detail),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/sources/{source_id}/fetch",
+            post(ingestion::fetch),
         )
         .route(
             "/api/v1/institutions/{institution_id}/sources/{source_id}/versions",
@@ -162,11 +198,12 @@ async fn boundary(State(s): State<AppState>, request: Request, next: Next) -> Re
     let Ok(_permit) = s.slots.clone().try_acquire_owned() else {
         return Error("rate_limited").into_response();
     };
-    let mut response = match tokio::time::timeout(Duration::from_secs(20), next.run(request)).await
-    {
-        Ok(r) => r,
-        Err(_) => return Error("core_unavailable").into_response(),
-    };
+    let timeout = if path == "/api/v1/answers" { 150 } else { 30 };
+    let mut response =
+        match tokio::time::timeout(Duration::from_secs(timeout), next.run(request)).await {
+            Ok(r) => r,
+            Err(_) => return Error("core_unavailable").into_response(),
+        };
     if response.status().is_client_error()
         && response
             .headers()
@@ -193,14 +230,9 @@ async fn core_ready(s: &AppState) -> bool {
     if s.config.secret.is_none() || sqlx::query("SELECT 1").execute(db).await.is_err() {
         return false;
     }
-    // A protected endpoint must reject an empty cookie with 401; a redirect is never readiness.
-    s.identity
-        .post("http://127.0.0.1:3811/internal/session")
-        .bearer_auth(s.config.secret.as_deref().unwrap_or_default())
-        .body("")
-        .send()
+    auth::capabilities(s)
         .await
-        .is_ok_and(|r| r.status() == StatusCode::UNAUTHORIZED)
+        .is_ok_and(|c| c["identity"]["state"] == "available")
 }
 async fn ready(State(s): State<AppState>) -> Response {
     let ok = core_ready(&s).await;
@@ -215,12 +247,32 @@ async fn ready(State(s): State<AppState>) -> Response {
         .into_response()
 }
 async fn capabilities(State(s): State<AppState>) -> Json<Value> {
-    let ready = core_ready(&s).await;
-    let ai = json!({"state":"disabled","reason":if s.config.mode=="live"{"pricing_missing"}else{"paid_calls_disabled"}});
+    let fail = json!({"state":"unavailable","reason":"core_failed"});
+    let identity = auth::capabilities(&s)
+        .await
+        .unwrap_or(json!({"identity":fail,"google":fail,"email":fail}));
+    let mut ai = json!({"state":"disabled","reason":"paid_calls_disabled"});
+    if s.config.mode == "live" {
+        ai = json!({"state":"unavailable","reason":"not_configured"});
+        if let Ok((_, _, model)) = s.config.ai_keys()
+            && let Some(db) = &s.db
+        {
+            let priced: bool = sqlx::query_scalar("SELECT count(DISTINCT (provider,model,component))=5 FROM product.ai_prices WHERE effective_at<=now() AND valid_until>now() AND ((provider='openai' AND model=$1 AND component IN ('input_tokens','output_tokens')) OR (provider='openai' AND model='text-embedding-3-small' AND component='embedding_tokens') OR (provider='jev' AND model='jev-1.13.0' AND component IN ('jev_input_tokens','jev_output_tokens')))").bind(model).fetch_one(db).await.unwrap_or(false);
+            let available: bool = sqlx::query_scalar("SELECT coalesce((SELECT spent_micro_usd FROM product.ai_months WHERE month=date_trunc('month',now() AT TIME ZONE 'UTC')::date),0)+coalesce((SELECT sum(reserved_micro_usd) FROM product.ai_months),0)<50000000").fetch_one(db).await.unwrap_or(false);
+            ai = if identity["identity"]["state"] != "available" {
+                fail.clone()
+            } else if !priced {
+                json!({"state":"unavailable","reason":"pricing_missing"})
+            } else if !available {
+                json!({"state":"unavailable","reason":"budget_exhausted"})
+            } else {
+                json!({"state":"available","reason":"ready"})
+            };
+        }
+    }
     Json(
-        json!({"mode":s.config.mode,"answers":ai,"indexing":ai,"discovery":ai,
-        "google":{"state":"unavailable","reason":"core_failed"},"email":{"state":"unavailable","reason":"core_failed"},
-        "identity":{"state":if ready{"available"}else{"unavailable"},"reason":if ready{"ready"}else{"core_failed"}}}),
+        json!({"mode":s.config.mode,"answers":ai,"indexing":ai,"discovery":{"state":"disabled","reason":"not_configured"},
+        "google":identity["google"],"email":identity["email"],"identity":identity["identity"]}),
     )
 }
 async fn me(State(s): State<AppState>, h: axum::http::HeaderMap) -> Result<Json<Value>> {

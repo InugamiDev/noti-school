@@ -16,6 +16,59 @@ pub struct Session {
     pub email_verified: bool,
     pub expires_at: DateTime<Utc>,
 }
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Capability {
+    state: String,
+    reason: String,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IdentityCapabilities {
+    identity: Capability,
+    google: Capability,
+    email: Capability,
+}
+pub async fn capabilities(s: &AppState) -> Result<serde_json::Value> {
+    let response = s
+        .identity
+        .post("http://127.0.0.1:3811/internal/capabilities")
+        .bearer_auth(
+            s.config
+                .secret
+                .as_deref()
+                .ok_or(Error("core_unavailable"))?,
+        )
+        .body("")
+        .send()
+        .await
+        .map_err(|_| Error("core_unavailable"))?;
+    if response.status() != StatusCode::OK {
+        return Err(Error("core_unavailable"));
+    }
+    let bytes = crate::http::limited_body(response, 4096).await?;
+    let caps: IdentityCapabilities =
+        serde_json::from_slice(&bytes).map_err(|_| Error("core_unavailable"))?;
+    for c in [&caps.identity, &caps.google, &caps.email] {
+        if !["available", "disabled", "unavailable"].contains(&c.state.as_str())
+            || ![
+                "ready",
+                "not_configured",
+                "paid_calls_disabled",
+                "pricing_missing",
+                "budget_exhausted",
+                "provider_failed",
+                "core_failed",
+                "no_approved_evidence",
+            ]
+            .contains(&c.reason.as_str())
+            || (c.state == "available") != (c.reason == "ready")
+        {
+            return Err(Error("core_unavailable"));
+        }
+    }
+    serde_json::to_value(caps).map_err(crate::error::invalid)
+}
 pub fn csrf(headers: &HeaderMap, origin: &str) -> Result<()> {
     let exact = |key: &str, value: &str| {
         headers.get_all(key).iter().count() == 1 && headers.get(key).is_some_and(|v| v == value)

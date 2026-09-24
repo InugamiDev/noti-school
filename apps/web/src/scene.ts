@@ -45,6 +45,8 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
   const red = new THREE.MeshBasicMaterial({ color: '#ee684c' });
   const white = new THREE.LineBasicMaterial({ color: '#b9d6de', transparent: true, opacity: 0.48 });
   materials.push(shelfMat, paperMat, darkMat, cyan, red, white);
+  // intent: batch repeated boxes without changing folio transforms; status: implemented.
+  const blocks = new Map<THREE.Material, THREE.Object3D[]>();
   function block(
     parent: THREE.Object3D,
     material: THREE.Material,
@@ -55,10 +57,13 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
     h: number,
     d: number,
   ) {
-    const mesh = new THREE.Mesh(box, material);
+    const mesh = new THREE.Object3D();
     mesh.position.set(x, y, z);
     mesh.scale.set(w, h, d);
     parent.add(mesh);
+    const batch = blocks.get(material) ?? [];
+    batch.push(mesh);
+    blocks.set(material, batch);
     return mesh;
   }
   const folios: THREE.Group[] = [];
@@ -125,6 +130,18 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
   materials.push(floor);
   block(scene, floor, 0, -2.6, -9, 35, 0.1, 50);
   for (const x of [-4, -2, 2, 4]) block(scene, shelfMat, x, -2.53, -9, 0.018, 0.01, 45);
+  scene.updateMatrixWorld(true);
+  const batches = [...blocks].map(([material, objects]) => {
+    const mesh = new THREE.InstancedMesh(box, material, objects.length);
+    const moving = objects.some((object) => object.parent !== scene);
+    if (moving) mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    objects.forEach((object, index) => mesh.setMatrixAt(index, object.matrixWorld));
+    mesh.computeBoundingSphere();
+    // The only animated instance displacement is a bounded 0.045-unit vertical bob.
+    mesh.boundingSphere!.radius += 0.045;
+    scene.add(mesh);
+    return { mesh, objects, moving };
+  });
   scene.add(new THREE.HemisphereLight('#d7eef8', '#172025', 3));
   const light = new THREE.PointLight('#d1f6ff', 70, 25);
   light.position.set(0, 3, 5);
@@ -146,6 +163,7 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
     pointerY = 0;
   const baseY = folios.map((f) => f.position.y);
   function draw() {
+    if (dead || lost || !visible || document.hidden) return;
     const entry = reduced ? 0 : 1.2 * Math.max(0, 1 - elapsed / 1.8) ** 3;
     const zoom =
       zoomStart === null ? 0 : 2.6 * (1 - (1 - Math.min((elapsed - zoomStart) / 0.55, 1)) ** 3);
@@ -157,7 +175,13 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
     camera.lookAt(0, 0.6, -12);
     folios.forEach((f, i) => {
       f.position.y = baseY[i]! + (reduced ? 0 : Math.sin(elapsed * 0.5 + i) * 0.045);
+      f.updateMatrixWorld(true);
     });
+    for (const { mesh, objects, moving } of batches) {
+      if (!moving) continue;
+      objects.forEach((object, index) => mesh.setMatrixAt(index, object.matrixWorld));
+      mesh.instanceMatrix.needsUpdate = true;
+    }
     renderer.render(scene, camera);
   }
   function tick(now: number) {
@@ -185,6 +209,7 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
     draw();
   }
   function preference() {
+    if (dead || lost) return;
     reduced = media.matches;
     pointerX = pointerY = 0;
     if (reduced) {
@@ -209,7 +234,9 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
     fail();
   }
   const observer = new IntersectionObserver((entries) => {
+    if (dead) return;
     visible = entries[0]?.isIntersecting ?? false;
+    if (visible && (paused || reduced)) draw();
     sync();
   });
   observer.observe(host);
@@ -230,6 +257,7 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
       if (!reduced && !paused) zoomStart = elapsed;
     },
     dispose() {
+      if (dead) return;
       dead = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
@@ -238,6 +266,7 @@ export function mountArchive(host: HTMLElement, fail: () => void) {
       window.removeEventListener('pointermove', pointer);
       media.removeEventListener('change', preference);
       renderer.domElement.removeEventListener('webglcontextlost', contextLost);
+      batches.forEach(({ mesh }) => mesh.dispose());
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
       renderer.dispose();

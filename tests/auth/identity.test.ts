@@ -46,7 +46,7 @@ test('reset is single-use and revokes sessions; unknown-account recovery has the
   const known = await f.request('/request-password-reset', { email: signup.email, redirectTo: `${origin}/auth/reset` });
   const unknown = await f.request('/request-password-reset', { email: 'unknown@example.invalid', redirectTo: `${origin}/auth/reset` });
   assert.deepEqual(await known.json(), await unknown.json());
-  const token = new URL(f.sent.at(-1)!.url).pathname.split('/').at(-1)!;
+  const token = new URLSearchParams(new URL(f.sent.at(-1)!.url).hash.split('?')[1]).get('token')!;
   const body = { token, newPassword: 'A-different-synthetic-password-456' };
   assert.equal((await f.request('/reset-password', body)).status, 200);
   assert.equal(f.db.session!.length, 0);

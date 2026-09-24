@@ -1,4 +1,4 @@
-import { PublicInvitationRedeem, Session } from '@noti/contracts';
+import { IdentityCapabilities, PublicInvitationRedeem, Session } from '@noti/contracts';
 import type { Config } from './config.js';
 import type { Identity } from './auth.js';
 import { enumerationPaths, recoveryMessage } from './auth.js';
@@ -11,6 +11,7 @@ const publicPaths = new Set([
   '/sign-up/email', '/sign-in/email', '/sign-in/social', '/sign-out', '/get-session',
   '/request-password-reset', '/reset-password', '/send-verification-email', '/verify-email',
   '/change-password', '/list-sessions', '/revoke-session', '/revoke-sessions', '/revoke-other-sessions',
+  '/delete-user', '/delete-user/callback',
 ]);
 export type SessionIdentity = {
   user: { id: string; email: string; emailVerified: boolean };
@@ -57,7 +58,7 @@ export function createService(deps: {
   return async (original: Request): Promise<Response> => {
     const started = Date.now();
     const url = new URL(original.url); const path = url.pathname;
-    const internal = path === '/internal/session';
+    const internal = path === '/internal/session' || path === '/internal/capabilities';
     if (url.href.length > 8192) return errorResponse(413, 'payload_too_large');
     if ([...original.headers].reduce((n, [k, v]) => n + k.length + v.length, 0) > 16384) return errorResponse(413, 'payload_too_large');
     if (path === '/healthz' && original.method === 'GET') return Response.json({ status: 'ok', contract_version: '1' });
@@ -72,13 +73,23 @@ export function createService(deps: {
       || [...original.headers.keys()].some(k => /^(x-internal-|x-user-|x-auth-user|x-noti-user)/.test(k)))) return errorResponse(404, 'not_found');
     if (!internal && original.method !== 'GET' && !csrf(original.headers, config.env.APP_ORIGIN, path === '/api/auth/invitations/redeem')
       && path !== '/api/auth/callback/google') return errorResponse(403, 'forbidden');
-    if (!auth && !deps.readSession) return errorResponse(503, 'core_unavailable', 'identity');
+    if (!auth && !deps.readSession && path !== '/internal/capabilities') return errorResponse(503, 'core_unavailable', 'identity');
     if (internal && original.method !== 'POST') return errorResponse(400, 'invalid_request');
     const request = await boundedRequest(original);
     if (!request) return errorResponse(413, 'payload_too_large');
     try {
       if (internal) {
         if ((await request.text()).length) return errorResponse(400, 'invalid_request');
+        if (path === '/internal/capabilities') {
+          const ready = !!auth && await deps.ready().catch(() => false);
+          const unavailable = { state: 'unavailable', reason: 'core_failed' };
+          const capability = (configured: boolean) => !ready ? unavailable : configured
+            ? { state: 'available', reason: 'ready' } : { state: 'disabled', reason: 'not_configured' };
+          return Response.json(IdentityCapabilities.parse({
+            identity: capability(config.configured.identity), google: capability(config.configured.google),
+            email: !ready ? unavailable : mail.failed ? { state: 'unavailable', reason: 'provider_failed' } : capability(mail.enabled),
+          }), { headers: { 'cache-control': 'no-store' } });
+        }
         const current = await readSession(request.headers);
         if (!validSession(current)) return errorResponse(401, 'unauthenticated');
         return Response.json(Session.parse({ user_id: current.user.id, session_id: current.session.id,
@@ -99,7 +110,7 @@ export function createService(deps: {
       }
       const authPath = path.slice('/api/auth'.length);
       if (!publicPaths.has(authPath) && authPath !== '/callback/google' && !/^\/reset-password\/[A-Za-z0-9_-]{1,256}$/.test(authPath)) return errorResponse(404, 'not_found');
-      if ((authPath === '/sign-up/email' || enumerationPaths.has(authPath)) && (!mail.enabled || mail.failed)) return errorResponse(503, 'provider_unavailable', 'email');
+      if ((authPath === '/sign-up/email' || authPath === '/delete-user' || enumerationPaths.has(authPath)) && (!mail.enabled || mail.failed)) return errorResponse(503, 'provider_unavailable', 'email');
       if ((authPath === '/sign-in/social' || authPath === '/callback/google') && !config.configured.google) return errorResponse(503, 'provider_unavailable', 'google');
       const response = await auth!.handler(request);
       if (enumerationPaths.has(authPath) && (response.ok || response.status >= 500)) {

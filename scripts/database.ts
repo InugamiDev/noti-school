@@ -13,3 +13,23 @@ export async function guardedDatabase(raw: string | undefined, role: 'migrator' 
     return client;
   } catch { await client.end(); throw new Error('Database guard failed; no migrations executed'); }
 }
+
+// Runtime roles intentionally cannot read the provisioning marker. Check it with a separate
+// read-only guard connection, then prove the runtime connection targets the same database.
+export async function guardedRuntimeDatabase(raw: string | undefined, guardRaw: string | undefined, role: 'api' | 'auth', testOnly = false) {
+  if (!raw || !guardRaw) throw new Error('Runtime and dedicated guard URLs required');
+  const target = databaseTarget(raw, role, testOnly);
+  const guardRole = role === 'api' ? 'migrator' : 'auth_migrator';
+  const expected = databaseTarget(guardRaw, guardRole, testOnly);
+  if (target.database !== expected.database || target.host !== expected.host || target.port !== expected.port) throw new Error('Runtime and guard targets differ');
+  const guard = await guardedDatabase(guardRaw, guardRole, testOnly);
+  await guard.end();
+  const client = new pg.Client({ connectionString: raw, connectionTimeoutMillis: 3000, statement_timeout: 10000 });
+  await client.connect();
+  try {
+    const result = await client.query('SELECT current_database() AS database,current_user AS role,(rolsuper OR rolcreatedb OR rolcreaterole) AS privileged FROM pg_roles WHERE rolname=current_user');
+    const actual = result.rows[0];
+    if (!actual || actual.database !== target.database || actual.role !== target.role || actual.privileged) throw new Error('Runtime identity mismatch');
+    return client;
+  } catch (error) { await client.end(); throw error; }
+}

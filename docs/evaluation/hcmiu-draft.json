@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "status": "draft_requires_human_review",
+  "benchmark_ready": false,
+  "created_on": "2026-09-25",
+  "purpose": "Candidate bilingual evidence and abstention cases, not a benchmark score or approved corpus.",
+  "sources": {
+    "leave_notice": {
+      "url": "https://edusoftweb.hcmiu.edu.vn/default.aspx?id=1636&page=chitietthongtin",
+      "description": "HCMIU temporary-leave and withdrawal procedure, applicable from semester I of 2026-2027.",
+      "format": "html",
+      "snapshot_sha256": null,
+      "approved_for_corpus": false
+    },
+    "calendar_notice": {
+      "url": "https://edusoftweb.hcmiu.edu.vn/default.aspx?id=1628&page=chitietthongtin",
+      "description": "HCMIU 2026-2027 calendar announcement with an August 25, 2026 update label.",
+      "format": "html",
+      "snapshot_sha256": null,
+      "approved_for_corpus": false
+    },
+    "calendar_pdf": {
+      "url": "https://edusoftweb.hcmiu.edu.vn/Upload/L%E1%BB%8Bch%20n%C4%83m%20h%E1%BB%8Dc%202026-2027_dieu%20chinh_V3%20-%20Signed%20%283%29.pdf",
+      "description": "Linked one-page academic calendar; only plain-text notes are used in this draft, not inferred grid coordinates.",
+      "format": "pdf",
+      "snapshot_sha256": null,
+      "approved_for_corpus": false
+    }
+  },
+  "cases": [
+    {
+      "id": "leave-minimum-study",
+      "questions": {
+        "en": "What minimum study is required before applying for temporary leave?",
+        "vi": "Phải học tối thiểu bao lâu trước khi xin nghỉ học tạm thời?"
+      },
+      "expected_answerability": "supported",
+      "expected_facts": {"minimum_main_semesters": 1},
+      "source": "leave_notice",
+      "locator": {"section": "1. Temporary-leave procedure"}
+    },
+    {
+      "id": "leave-consecutive-limit",
+      "questions": {
+        "en": "How many consecutive main semesters can temporary leave last?",
+        "vi": "Được nghỉ học tạm thời tối đa mấy học kỳ chính liên tiếp?"
+      },
+      "expected_answerability": "supported",
+      "expected_facts": {"maximum_consecutive_main_semesters": 2},
+      "source": "leave_notice",
+      "locator": {"section": "1. Duration limit"}
+    },
+    {
+      "id": "leave-regular-semester-window",
+      "questions": {
+        "en": "For registered non-intensive-English courses in a main semester, when is temporary leave accepted?",
+        "vi": "Với môn đã đăng ký không phải tiếng Anh tăng cường trong học kỳ chính, khi nào được nộp đơn nghỉ tạm thời?"
+      },
+      "expected_answerability": "supported",
+      "expected_facts": {"first_week": 1, "last_week_inclusive": 4, "scope": "main semester; not intensive English"},
+      "source": "leave_notice",
+      "locator": {"section": "2.2. Other courses"}
+    },
+    {
+      "id": "calendar-update-version",
+      "questions": {
+        "en": "Which update date is shown on the 2026-2027 calendar announcement?",
+        "vi": "Thông báo lịch năm học 2026-2027 ghi ngày cập nhật nào?"
+      },
+      "expected_answerability": "supported",
+      "expected_facts": {"notice_update_date": "2026-08-25", "not_equivalent_to": "document signing date"},
+      "source": "calendar_notice",
+      "locator": {"section": "Announcement heading"}
+    },
+    {
+      "id": "calendar-makeup-notice",
+      "questions": {
+        "en": "Where should lecturers report make-up schedules, and how far in advance?",
+        "vi": "Giảng viên phải báo lịch học bù cho đơn vị nào, trước ít nhất bao lâu?"
+      },
+      "expected_answerability": "supported",
+      "expected_facts": {"office": "Office of Academic Affairs", "minimum_notice_weeks": 1, "purpose": "room booking"},
+      "source": "calendar_pdf",
+      "locator": {"page": 1, "section": "Bottom note about make-up classes"}
+    },
+    {
+      "id": "personal-application-status",
+      "questions": {
+        "en": "Has the university approved my personal leave application?",
+        "vi": "Trường đã duyệt đơn nghỉ học của riêng tôi chưa?"
+      },
+      "expected_answerability": "unanswerable",
+      "expected_behavior": "Do not infer an individual decision from a general procedure. No personal record is present.",
+      "source": null,
+      "locator": null
+    },
+    {
+      "id": "unsupported-other-university",
+      "questions": {
+        "en": "Do the same leave rules apply at a different university?",
+        "vi": "Các quy định nghỉ học này có áp dụng cho một trường đại học khác không?"
+      },
+      "expected_answerability": "unanswerable",
+      "expected_behavior": "Do not transfer HCMIU rules across institutions without that institution's evidence.",
+      "source": null,
+      "locator": null
+    },
+    {
+      "id": "citation-does-not-prove-support",
+      "questions": {
+        "en": "A retrieved note cites an official page but adds an unrelated claim. Can the answer repeat that claim?",
+        "vi": "Một đoạn tìm được dẫn trang chính thức nhưng thêm một khẳng định không liên quan. Có được lặp lại khẳng định đó không?"
+      },
+      "expected_answerability": "synthetic_adversarial",
+      "expected_behavior": "Reject the unsupported addition even when its citation ID and official URL are valid.",
+      "source": null,
+      "locator": null
+    }
+  ],
+  "review_requirements": [
+    "A human must approve source suitability, applicable population, current version and each expected label.",
+    "Freeze permitted source snapshots and hashes, then bind labels to real chunk IDs and exact page/section spans.",
+    "Keep these paired languages in one split; do not leak a translated test question into training/development.",
+    "Add independently held-out questions, conflicting/expired evidence and document-injection cases before reporting metrics.",
+    "Report counts and language-specific retrieval, support, completeness, abstention, latency and cost separately.",
+    "No provider calls, source import, source approval or human labeling has been performed by creating this file."
+  ]
+}

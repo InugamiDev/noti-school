@@ -29,7 +29,35 @@ pub fn extract_child(input: &Path, output: &Path) -> Result<()> {
         .map_err(|_| Error("core_unavailable"))?;
     Ok(())
 }
+pub fn extract_html_child(input: &Path, output: &Path) -> Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let bytes = std::fs::read(input).map_err(|_| Error("unsupported_media"))?;
+    if bytes.len() > 2 * 1024 * 1024 {
+        return Err(Error("payload_too_large"));
+    }
+    let text =
+        html2text::from_read(bytes.as_slice(), 120).map_err(|_| Error("unsupported_media"))?;
+    if text.len() > 2 * 1024 * 1024 {
+        return Err(Error("payload_too_large"));
+    }
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(output)
+        .map_err(|_| Error("core_unavailable"))?;
+    out.write_all(&serde_json::to_vec(&vec![text]).map_err(crate::error::invalid)?)
+        .map_err(|_| Error("core_unavailable"))?;
+    Ok(())
+}
 pub async fn extract(input: &Path) -> Result<Vec<String>> {
+    extract_process(input, "--extract-pdf").await
+}
+pub async fn extract_html(input: &Path) -> Result<Vec<String>> {
+    extract_process(input, "--extract-html").await
+}
+async fn extract_process(input: &Path, flag: &str) -> Result<Vec<String>> {
     static PARSERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
     let _permit = PARSERS.try_acquire().map_err(|_| Error("rate_limited"))?;
     let output = input.with_extension("extracted");
@@ -44,7 +72,7 @@ pub async fn extract(input: &Path) -> Result<Vec<String>> {
             "--",
         ])
         .arg(exe)
-        .arg("--extract-pdf")
+        .arg(flag)
         .arg(input)
         .arg(&output)
         .env_clear()

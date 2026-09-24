@@ -1,7 +1,7 @@
-import { createSignal, Show, For, onMount } from 'solid-js';
+import { createSignal, Show, For } from 'solid-js';
 import { z } from 'zod';
 import type { Schemas } from '@noti/contracts';
-import { request, post, errorText } from './api';
+import { request, post, errorText, takeAuthCallback } from './api';
 const nativeSuccess = z.union([
   z.object({ status: z.literal(true) }),
   z.object({ success: z.literal(true) }),
@@ -16,34 +16,30 @@ const modes = [
   'Reset password',
 ] as const;
 export default function Auth(props: {
+  callback?: ReturnType<typeof takeAuthCallback> | undefined;
   capabilities: z.infer<typeof Schemas.Capabilities> | undefined;
   authenticated: boolean;
   refresh: () => void;
 }) {
-  const query = new URLSearchParams(location.search);
-  const [resetToken, setResetToken] = createSignal(query.get('token') || '');
+  const callback = props.callback ?? takeAuthCallback(location.href);
+  window.history.replaceState(null, '', callback.clean);
+  const [resetToken, setResetToken] = createSignal(callback.token);
+  const [deleteToken, setDeleteToken] = createSignal(callback.deletion);
   const [googleInvitation, setGoogleInvitation] = createSignal('');
   const [mode, setMode] = createSignal<(typeof modes)[number]>(
     resetToken() ? 'Reset password' : 'Sign in',
   );
-  onMount(() => {
-    if (query.has('token')) {
-      query.delete('token');
-      window.history.replaceState(
-        null,
-        '',
-        `${location.pathname}${query.size ? '?' + query.toString() : ''}${location.hash}`,
-      );
-    }
-  });
   const [busy, setBusy] = createSignal(false),
-    [message, setMessage] = createSignal('');
+    [message, setMessage] = createSignal(callback.error ? 'Sign-in or recovery could not be completed. Please try again.' : '');
   async function send(path: string, body: unknown, invitation?: string) {
     if (busy()) return;
     setBusy(true);
     setMessage('');
     try {
-      await request(`/api/auth/${path}`, nativeSuccess, {
+      const success = path === 'delete-user'
+        ? z.object({ success: z.literal(true), message: z.literal(deleteToken() ? 'User deleted' : 'Verification email sent') })
+        : nativeSuccess;
+      await request(`/api/auth/${path}`, success, {
         method: 'POST',
         body: JSON.stringify(body),
         ...(invitation ? { headers: { 'X-Noti-Invitation': invitation } } : {}),
@@ -54,14 +50,20 @@ export default function Auth(props: {
           : path.includes('sign-in')
             ? 'Signed in. Return to your question.'
             : path === 'request-password-reset'
-              ? 'If this email belongs to an account, follow the reset instructions sent to it.'
+              ? 'If this account is eligible, the request is processed. Email delivery is not confirmed.'
               : path === 'reset-password'
                 ? 'Password updated. You can sign in.'
+                : path === 'delete-user'
+                  ? deleteToken() ? 'Account deleted.' : 'Confirmation requested. Check your email; the account has not been deleted.'
                 : 'Request accepted. Follow the instructions for your account.',
       );
+      if (path === 'reset-password') setResetToken('');
+      if (path === 'delete-user') setDeleteToken('');
       props.refresh();
     } catch (e) {
-      setMessage(errorText(e));
+      const confirmingDeletion = path === 'delete-user' && !!deleteToken();
+      if (confirmingDeletion) setDeleteToken('');
+      setMessage(errorText(e) + (confirmingDeletion ? ' Request a new email confirmation before retrying deletion.' : ''));
     } finally {
       setBusy(false);
     }
@@ -77,7 +79,13 @@ export default function Auth(props: {
         <a class="text-link" href="#/">
           Return to your question
         </a>
+        <button disabled={busy() || props.capabilities?.email.state !== 'available'} onClick={() => {
+          if (confirm('Delete your account and personal conversations? This cannot be undone after email confirmation.'))
+            void send('delete-user', deleteToken() ? { token: deleteToken() } : { callbackURL: location.origin + '/#/auth' });
+        }}>{deleteToken() ? 'Confirm account deletion' : 'Request account deletion'}</button>
+        <Show when={props.capabilities?.email.state !== 'available'}><p class="notice">Account deletion confirmation is unavailable while email is unavailable.</p></Show>
       </Show>
+      <Show when={deleteToken() && !props.authenticated}><p class="notice">Sign in to the account before confirming deletion. Keep this tab open.</p></Show>
       <div class="tabs" role="group" aria-label="Account actions">
         <For each={modes}>
           {(m) => (
@@ -168,7 +176,7 @@ export default function Auth(props: {
               name="password"
               type="password"
               autocomplete={mode() === 'Sign in' ? 'current-password' : 'new-password'}
-              minlength={8}
+              minlength={12}
               maxlength={128}
               required={mode() !== 'Reset password' || !!resetToken()}
             />
@@ -210,7 +218,9 @@ export default function Auth(props: {
             Email delivery is unavailable or unconfirmed. This action may not be completed yet.
           </p>
         </Show>
-        <button class="primary" disabled={busy()} type="submit">
+        <button class="primary" disabled={busy() || props.capabilities?.identity.state !== 'available'
+          || (mode() === 'Redeem invitation' && !props.authenticated)
+          || ((mode() === 'Create account' || mode() === 'Verify email' || (mode() === 'Reset password' && !resetToken())) && props.capabilities?.email.state !== 'available')} type="submit">
           {busy()
             ? 'Please wait…'
             : mode() === 'Verify email'

@@ -3,7 +3,7 @@ import type { SendMailOptions } from 'nodemailer';
 import { connect, type Socket } from 'node:net';
 import type { Config } from './config.js';
 
-export type IdentityMail = { to: string; url: string; kind: 'verification' | 'reset' | 'invitation' };
+export type IdentityMail = { to: string; url: string; kind: 'verification' | 'reset' | 'invitation' | 'deletion' };
 export interface Mailer {
   readonly enabled: boolean;
   readonly failed: boolean;

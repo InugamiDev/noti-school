@@ -6,12 +6,17 @@ use crate::{
 use serde_json::Value;
 use std::{collections::BTreeSet, time::Duration};
 
+#[derive(Clone)]
 pub struct ProviderHttp {
     client: reqwest::Client,
+    #[cfg(test)]
+    pub(crate) endpoint: Option<String>,
 }
 impl ProviderHttp {
     pub fn new() -> Result<Self> {
         Ok(Self {
+            #[cfg(test)]
+            endpoint: None,
             client: reqwest::Client::builder()
                 .no_proxy()
                 .retry(reqwest::retry::never())
@@ -47,10 +52,10 @@ impl ProviderHttp {
             .await?;
         let response = providers::validate_jev(&bytes, ids)?;
         attempt
-            .settle(vec![
-                response.usage.input_tokens,
-                response.usage.output_tokens,
-            ])
+            .settle(
+                vec![response.usage.input_tokens, response.usage.output_tokens],
+                serde_json::to_value(&response).map_err(crate::error::invalid)?,
+            )
             .await?;
         Ok(response)
     }
@@ -71,13 +76,43 @@ impl ProviderHttp {
         let response: Value =
             serde_json::from_slice(&bytes).map_err(|_| Error("provider_unavailable"))?;
         attempt
-            .settle(vec![
-                response["usage"]["total_tokens"]
-                    .as_u64()
-                    .ok_or(Error("provider_unavailable"))?,
-            ])
+            .settle(
+                vec![
+                    response["usage"]["total_tokens"]
+                        .as_u64()
+                        .ok_or(Error("provider_unavailable"))?,
+                ],
+                serde_json::json!(vector),
+            )
             .await?;
         Ok(vector)
+    }
+    pub async fn generate(
+        &self,
+        key: &str,
+        body: &Value,
+        model: &str,
+        attempt: Attempt,
+    ) -> Result<providers::Generated> {
+        if !attempt.is_for(OperationKind::Generation) {
+            return Err(Error("invalid_request"));
+        }
+        let bytes = self
+            .exchange(
+                "https://api.openai.com/v1/responses",
+                key,
+                body,
+                Duration::from_secs(45),
+            )
+            .await?;
+        let (result, usage) = providers::validate_generation(&bytes, model)?;
+        attempt
+            .settle(
+                usage,
+                serde_json::to_value(&result).map_err(crate::error::invalid)?,
+            )
+            .await?;
+        Ok(result)
     }
     async fn exchange(
         &self,
@@ -86,6 +121,23 @@ impl ProviderHttp {
         body: &Value,
         timeout: Duration,
     ) -> Result<Vec<u8>> {
+        // Tests cannot reach production providers, even if the process inherited real credentials.
+        #[cfg(test)]
+        let mapped = self
+            .endpoint
+            .as_ref()
+            .map(|base| format!("{base}{}", url::Url::parse(url).unwrap().path()));
+        #[cfg(test)]
+        let url = mapped.as_deref().unwrap_or(url);
+        #[cfg(test)]
+        if url::Url::parse(url)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_owned))
+            .as_deref()
+            != Some("127.0.0.1")
+        {
+            return Err(Error("provider_unavailable"));
+        }
         if serde_json::to_vec(body)
             .map_err(crate::error::invalid)?
             .len()

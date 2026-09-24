@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
     http::HeaderMap,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
@@ -19,13 +19,13 @@ pub struct Search {
     language: String,
     limit: Option<i64>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ask {
-    institution_id: Uuid,
-    question: String,
-    language: String,
-    conversation_id: Option<Uuid>,
+    pub(crate) institution_id: Uuid,
+    pub(crate) question: String,
+    pub(crate) language: String,
+    pub(crate) conversation_id: Option<Uuid>,
     #[serde(default)]
     discover: bool,
 }
@@ -82,7 +82,7 @@ pub async fn ask(
     Json(b): Json<Ask>,
 ) -> Result<Json<Value>> {
     let u = auth::member(&s, &h, b.institution_id, false).await?;
-    let _: Uuid = h
+    let key: Uuid = h
         .get("idempotency-key")
         .and_then(|v| v.to_str().ok())
         .ok_or(Error("invalid_request"))?
@@ -96,12 +96,68 @@ pub async fn ask(
     }
     if let Some(id) = b.conversation_id {
         let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM product.conversations c JOIN product.memberships m ON m.institution_id=c.institution_id AND m.user_id=c.user_id AND m.revoked_at IS NULL WHERE c.institution_id=$1 AND c.id=$2 AND c.user_id=$3)")
-            .bind(b.institution_id).bind(id).bind(u.user_id).fetch_one(s.pool()?).await?;
+            .bind(b.institution_id).bind(id).bind(&u.user_id).fetch_one(s.pool()?).await?;
         if !exists {
             return Err(Error("not_found"));
         }
     }
-    let _discovery_requested = b.discover;
-    // status: paid orchestration deliberately unavailable until pricing plans and job runner are integrated.
-    Err(Error("provider_unavailable"))
+    if b.discover {
+        return Err(Error("provider_unavailable"));
+    }
+    s.config.ai_keys()?;
+    if b.question.len() > 8000 || h.get_all("idempotency-key").iter().count() != 1 {
+        return Err(Error("invalid_request"));
+    }
+    use sha2::{Digest, Sha256};
+    use sqlx::Row;
+    let hash = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&b).map_err(crate::error::invalid)?)
+    );
+    let permit = s
+        .pipeline_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| Error("rate_limited"))?;
+    let operation = Uuid::new_v4();
+    let inserted = sqlx::query("INSERT INTO product.idempotency_keys(institution_id,user_id,key,request_sha256,operation_id,state) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
+        .bind(b.institution_id).bind(&u.user_id).bind(key).bind(&hash).bind(operation).execute(s.pool()?).await?.rows_affected();
+    if inserted == 0 {
+        let row = sqlx::query("SELECT request_sha256,state,response,expires_at>now() AS valid FROM product.idempotency_keys WHERE institution_id=$1 AND user_id=$2 AND key=$3")
+            .bind(b.institution_id).bind(&u.user_id).bind(key).fetch_one(s.pool()?).await?;
+        if row.try_get::<String, _>("request_sha256")? != hash
+            || !row.try_get::<bool, _>("valid")?
+            || row.try_get::<String, _>("state")? != "completed"
+        {
+            return Err(Error("conflict"));
+        }
+        let response: Value = row.try_get("response")?;
+        let id =
+            serde_json::from_value(response["answer_id"].clone()).map_err(|_| Error("conflict"))?;
+        return Ok(Json(
+            crate::answers::assemble(&s, b.institution_id, id, &u.user_id).await?,
+        ));
+    }
+    // The bounded task survives a disconnected client. Its durable root and reservations survive shutdown.
+    let db = s.pool()?.clone();
+    let task = tokio::spawn(async move {
+        let _permit = permit;
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_secs(140),
+            crate::pipeline::execute(s, h, b, u.user_id, operation),
+        )
+        .await
+        .unwrap_or(Err(Error("provider_unavailable")));
+        if let Err(e) = &outcome {
+            let _ = sqlx::query("UPDATE product.idempotency_keys SET state='failed',response=$2 WHERE operation_id=$1 AND state='pending'").bind(operation).bind(json!({"error_code":e.0})).execute(&db).await;
+            let _ = sqlx::query(
+                "UPDATE product.pipeline_stages SET result=NULL WHERE root_operation_id=$1",
+            )
+            .bind(operation)
+            .execute(&db)
+            .await;
+        }
+        outcome
+    });
+    Ok(Json(task.await.map_err(|_| Error("core_unavailable"))??))
 }

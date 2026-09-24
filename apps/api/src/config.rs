@@ -9,6 +9,9 @@ pub struct Config {
     pub web_dist: PathBuf,
     pub uploads: PathBuf,
     pub mode: String,
+    pub openai_key: Option<String>,
+    pub jev_key: Option<String>,
+    pub generation_model: Option<String>,
 }
 impl Config {
     pub fn load() -> Result<Self> {
@@ -83,14 +86,48 @@ impl Config {
         if let Some(raw) = &database_url {
             validate_database(raw)?;
         }
+        let openai_key = optional("OPENAI_API_KEY");
+        let jev_key = optional("TYPESAFE_API_KEY");
+        let generation_model = optional("OPENAI_CHAT_MODEL");
+        for value in [&openai_key, &jev_key, &generation_model]
+            .into_iter()
+            .flatten()
+        {
+            if value.len() > 512
+                || value
+                    .bytes()
+                    .any(|b| b.is_ascii_whitespace() || b.is_ascii_control())
+            {
+                return Err(Error("invalid_request"));
+            }
+        }
         Ok(Self {
             origin,
             secret,
             database_url,
             mode,
+            openai_key,
+            jev_key,
+            generation_model,
             web_dist: get("WEB_DIST_DIR", "./apps/web/dist").into(),
             uploads: get("UPLOAD_DIR", "./data/uploads").into(),
         })
+    }
+    pub fn ai_keys(&self) -> Result<(&str, &str, &str)> {
+        if self.mode != "live" {
+            return Err(Error("provider_unavailable"));
+        }
+        Ok((
+            self.openai_key
+                .as_deref()
+                .ok_or(Error("provider_unavailable"))?,
+            self.jev_key
+                .as_deref()
+                .ok_or(Error("provider_unavailable"))?,
+            self.generation_model
+                .as_deref()
+                .ok_or(Error("provider_unavailable"))?,
+        ))
     }
 }
 pub fn validate_database(raw: &str) -> Result<()> {

@@ -1,11 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { endpoint, request, safeLink, readAnswer, RequestError } from '../../apps/web/src/api.ts';
+import { endpoint, request, safeLink, readAnswer, RequestError, takeAuthCallback } from '../../apps/web/src/api.ts';
 import { Schemas } from '../../packages/contracts/src/index.ts';
 test('public endpoint registry excludes internals and encodes IDs',()=>{
   assert.throws(()=>endpoint('/internal/session'));
+  assert.throws(()=>endpoint('/internal/accounts/delete'));
+  assert.throws(()=>endpoint('/internal/capabilities'));
   assert.throws(()=>endpoint('/invented'));
   assert.equal(endpoint('/api/v1/institutions/{institution_id}/sources',{institution_id:'a/b'}),'/api/v1/institutions/a%2Fb/sources');
+});
+test('hash and query callbacks are consumed without retaining tokens or raw provider errors',()=>{
+  for (const url of ['https://noti.school/?token=synthetic#/auth', 'https://noti.school/#/auth?token=synthetic']) {
+    const result=takeAuthCallback(url);assert.equal(result.token,'synthetic');assert.equal(result.clean,'/#/auth');
+  }
+  const result=takeAuthCallback('https://noti.school/#/auth/error?delete_token=synthetic&error=private&error_description=private');
+  assert.equal(result.deletion,'synthetic');assert.equal(result.error,true);assert.equal(result.clean,'/#/auth/error');
 });
 test('safe links reject executable, relative and insecure schemes',()=>{
   for(const value of ['javascript:alert(1)','data:text/html,test','http://example.com','//evil.test','/foo'])assert.equal(safeLink(value),undefined);

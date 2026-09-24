@@ -1,6 +1,6 @@
 # HomeLab Deployment Contract
 
-Status: planned, not applied. Application processes, migration scripts and production bundles do not exist in this bootstrap yet. The owner approved PM2 plus the existing Cloudflare Tunnel, with API keys supplied later. This replaces the earlier Compose/Caddy proposal.
+Status: deployment not applied. Application manifests, guarded migration scripts and build entries exist. The owner approved PM2 plus the existing Cloudflare Tunnel, with API keys supplied later. This replaces the earlier Compose/Caddy proposal.
 
 ## Layout and Ownership
 
@@ -48,6 +48,10 @@ Google login remains unavailable until its OAuth client is configured. Password 
 The owner clarified that the SMTP source is the Financial tab in the HomeLab dashboard, not the separate financial portal. Source inspection confirms that the invoice form persists SMTP settings in browser local storage and submits them to Nodemailer on each send. Those settings are not an existing server environment file. Transfer authorized mail settings to restricted server-side configuration during setup; do not copy browser-side password persistence into this application. Do not reuse another service's session secret, payment credentials, database identity or OpenAI key. No SMTP password has been retrieved and no live email has been sent during inspection.
 
 ## Rollout Gates
+
+Before rollout, install from the single root lock with `pnpm install --store-dir .cache/pnpm --ignore-scripts --frozen-lockfile`, run `pnpm run setup:check`, then `pnpm build` with pinned Rust available. Identity starts from `apps/auth/dist/server.js`; retain workspace dependencies and contracts in the release. See [operator commands](contracts/operator.md) for explicit bootstrap/pricing/retention actions. None creates databases or changes running services. Retention requires an approved scheduled invocation; no scheduler was installed by this worker.
+
+The identity-only internal capability route must never pass through the public auth path. Rust cleanup remains protected by internal Host/bearer and must return 404 under public Host. The coordinator must test the integrated Rust cleanup transaction and the non-atomic identity failure/retry boundary before enabling public account deletion. No successful mock is evidence of tunnel isolation or live cleanup.
 
 - Run application tests and three independent reviews against the frozen build SHA; preserve exact outputs and resolve blocking findings.
 - Provision a dedicated database and least-privilege roles on the approved local PostgreSQL installation; verify pgvector, migrations and restore behavior without changing unrelated databases.

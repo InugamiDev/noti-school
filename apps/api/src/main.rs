@@ -3,9 +3,16 @@ use std::time::Duration;
 
 fn main() {
     let args: Vec<_> = std::env::args_os().collect();
-    if args.get(1).is_some_and(|a| a == "--extract-pdf") {
+    if args
+        .get(1)
+        .is_some_and(|a| a == "--extract-pdf" || a == "--extract-html")
+    {
         if args.len() != 4
-            || noti_school_api::pdf::extract_child(
+            || (if args[1] == "--extract-html" {
+                noti_school_api::pdf::extract_html_child
+            } else {
+                noti_school_api::pdf::extract_child
+            })(
                 std::path::Path::new(&args[2]),
                 std::path::Path::new(&args[3]),
             )
@@ -28,6 +35,7 @@ fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::load().map_err(|_| "invalid API configuration")?;
     let state = AppState::new(config).map_err(|_| "API initialization failed")?;
+    let worker = tokio::spawn(noti_school_api::worker::run(state.clone()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3810").await?;
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
     let server =
@@ -38,6 +46,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     tokio::select! { _=tokio::signal::ctrl_c()=>{}, _=term.recv()=>{} }
     let _ = stop_tx.send(());
+    worker.abort();
+    let _ = worker.await;
     let _ = tokio::time::timeout(Duration::from_secs(14), task).await;
     Ok(())
 }

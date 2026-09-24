@@ -45,8 +45,14 @@ pub fn validate_url(raw: &str, allow: &[String]) -> Result<url::Url> {
     }
     Ok(u)
 }
+fn connected_address(remote: Option<SocketAddr>, pinned: &[SocketAddr]) -> Result<()> {
+    if remote.is_none_or(|a| !public_ip(a.ip()) || !pinned.iter().any(|p| p.ip() == a.ip())) {
+        return Err(Error("forbidden"));
+    }
+    Ok(())
+}
 // intent: validate every redirect and pin the socket resolver; no environment proxy or second DNS lookup.
-pub async fn fetch(raw: &str, allow: &[String]) -> Result<Vec<u8>> {
+pub async fn fetch(raw: &str, allow: &[String]) -> Result<(String, Vec<u8>)> {
     tokio::time::timeout(Duration::from_secs(15), async {
         let mut url = validate_url(raw, allow)?;
         for hop in 0..=3 {
@@ -71,12 +77,7 @@ pub async fn fetch(raw: &str, allow: &[String]) -> Result<Vec<u8>> {
                 .send()
                 .await
                 .map_err(|_| Error("provider_unavailable"))?;
-            if response
-                .remote_addr()
-                .is_none_or(|a| !public_ip(a.ip()) || !addresses.iter().any(|p| p.ip() == a.ip()))
-            {
-                return Err(Error("forbidden"));
-            }
+            connected_address(response.remote_addr(), &addresses)?;
             if response.status().is_redirection() {
                 if hop == 3 {
                     return Err(Error("invalid_request"));
@@ -95,10 +96,88 @@ pub async fn fetch(raw: &str, allow: &[String]) -> Result<Vec<u8>> {
             if !response.status().is_success() {
                 return Err(Error("provider_unavailable"));
             }
-            return crate::http::limited_body(response, 20 * 1024 * 1024).await;
+            let mime = response
+                .headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or("")
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            if !["application/pdf", "text/plain", "text/html"].contains(&mime.as_str()) {
+                return Err(Error("unsupported_media"));
+            }
+            let limit = if mime == "application/pdf" {
+                20 * 1024 * 1024
+            } else {
+                2 * 1024 * 1024
+            };
+            return Ok((mime, crate::http::limited_body(response, limit).await?));
         }
         Err(Error("invalid_request"))
     })
     .await
     .map_err(|_| Error("provider_unavailable"))?
+}
+pub async fn allowed_hosts(s: &crate::AppState, institution: uuid::Uuid) -> Result<Vec<String>> {
+    let slug: Option<String> =
+        sqlx::query_scalar("SELECT slug FROM product.institutions WHERE id=$1")
+            .bind(institution)
+            .fetch_optional(s.pool()?)
+            .await?;
+    Ok(if slug.as_deref() == Some("hcmiu") {
+        vec!["edusoftweb.hcmiu.edu.vn".into()]
+    } else {
+        vec![]
+    })
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn actual_connected_socket_and_redirect_denied() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new().route("/", axum::routing::get(|| async { "synthetic" })),
+            )
+            .await
+            .unwrap()
+        });
+        let response = reqwest::Client::builder()
+            .no_proxy()
+            .retry(reqwest::retry::never())
+            .build()
+            .unwrap()
+            .get(format!("http://{addr}/"))
+            .send()
+            .await
+            .unwrap();
+        assert!(connected_address(response.remote_addr(), &[addr]).is_err());
+        assert!(
+            connected_address(
+                Some("8.8.8.8:443".parse().unwrap()),
+                &["1.1.1.1:443".parse().unwrap()]
+            )
+            .is_err()
+        );
+        let allowed = vec!["edusoftweb.hcmiu.edu.vn".into()];
+        let base = validate_url("https://edusoftweb.hcmiu.edu.vn/policy.pdf", &allowed).unwrap();
+        for redirect in [
+            "http://edusoftweb.hcmiu.edu.vn/a",
+            "https://169.254.169.254/latest/meta-data",
+            "https://127.0.0.1/x",
+            "https://evil.example/a",
+            "https://sub.edusoftweb.hcmiu.edu.vn/a",
+        ] {
+            assert!(validate_url(base.join(redirect).unwrap().as_str(), &allowed).is_err());
+        }
+        assert!(fetch("https://127.0.0.1/a", &allowed).await.is_err());
+        task.abort();
+        let _ = task.await;
+    }
 }

@@ -3,7 +3,8 @@
 `endpoints.json` freezes method, path, request, response and scope. All product endpoints are under
 `/api/v1`. `/healthz` is liveness (200 if process alive); `/readyz` returns Health with 503 for failed
 DB/identity, 200 degraded when only optional providers are intentionally disabled. Capabilities return
-200 even in limited mode and contain no secrets. No application handlers are supplied by foundation.
+200 even in limited mode and contain no secrets. See the integration addendum for extended contracts;
+their presence in the manifest alone does not claim the Rust implementation has been integrated.
 
 ## Error and pagination behavior
 
@@ -106,3 +107,35 @@ secrets or treat retrieved instructions as authority. English and Vietnamese nee
 Default retention: conversations/answers/feedback 30 days, idempotency records 24h; operational usage
 ledger 13 months without question text. Account deletion revokes auth sessions, deletes product personal
 content and memberships; originals follow institution retention, not student deletion. No raw chat logs.
+
+## Integration extensions (v1 compatible)
+
+`IdentityCapabilities` is returned by authenticated `POST /internal/capabilities`, empty body, identity
+Host exactly `127.0.0.1:3811`. Core failures return unavailable states; configured mail/Google indicate
+ready to attempt, not external verification. A failed mail circuit reports `provider_failed`.
+
+Identity enables native Better Auth email-confirmed deletion. Initiation requires a session and working
+mail. Confirmation uses native POST `/api/auth/delete-user` with the transient email token, never a user
+ID supplied by the browser. Better Auth consumes the token and calls `beforeDelete`; identity then calls
+fixed `POST http://127.0.0.1:3810/internal/accounts/delete`, strict `AccountDelete`, exact Host/bearer,
+two-second timeout/no redirect, bounded strict `AccountDeleted` response. The public cleanup route stays
+unavailable. Cleanup failure prevents identity deletion. The consumed token cannot retry: request a new
+confirmation. Product cleanup followed by an identity failure is non-atomic; access must stay revoked
+and Rust cleanup must be idempotent. This lane verifies that boundary with an injected cleanup mock,
+not the Rust transaction. Mail exceptions swallowed by Better Auth are surfaced by a request-local hook.
+
+Account callbacks use `/#/auth`; OAuth failures use `/#/auth/error`. Reset/deletion mail links carry
+transient credentials in the fragment, which is not sent in HTTP requests. The browser synchronously
+consumes query/hash callbacks and replaces the address before creating API resources or rendering
+forms. It never persists tokens. Deletion requires an explicit confirmation POST; reset uses the
+library's native token-consuming POST. Legacy native reset redirects remain accepted.
+
+`ConversationPage` contains only owner-scoped IDs, institution IDs and creation times. History reads the
+persistent list endpoint and uses normal cursors. `VersionCreate.language` defaults to `en` when omitted;
+new upload/fetch controls explicitly submit `en|vi`. Saved-URL fetch returns a Job, never an approval.
+Graph create/action and optional discovery schemas/paths follow the addendum. Admin controls create
+entities and evidence-backed candidates, and approve/reject listed edges through those exact routes.
+An empty listing is explicitly empty; missing backend integration renders unavailable. Discovery results remain
+unreviewed; graph ID cursors are the documented institution/role-bound exception to timestamp cursors.
+
+See [operator commands](operator.md) for the guarded setup, immutable price import and retention paths.

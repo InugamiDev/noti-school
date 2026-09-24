@@ -15,7 +15,7 @@ import {
 } from 'lucide-solid';
 import { AskRequest, type AnswerOutput, type Schemas } from '@noti/contracts';
 import type { z } from 'zod';
-import { get, post, request, readAnswer, errorText, loadDraft, saveDraft, endpoint } from './api';
+import { get, post, request, readAnswer, errorText, loadDraft, saveDraft, endpoint, takeAuthCallback } from './api';
 import Archive from './Archive';
 import Sources from './Sources';
 import Auth from './Auth';
@@ -29,9 +29,20 @@ export const scoped = (institution: string, suffix: string, params: Record<strin
 
 // intent: stable prompt-first HTML with truthful service state; status: implemented.
 export default function App() {
+  const readCallback = () => {
+    if (!location.hash.startsWith('#/auth')) return undefined;
+    const callback = takeAuthCallback(location.href);
+    window.history.replaceState(null, '', callback.clean);
+    return callback;
+  };
+  // Scrub credentials before creating resources, so same-origin requests cannot carry them in Referer.
+  const [authCallback, setAuthCallback] = createSignal(readCallback());
   const [route, setRoute] = createSignal(location.hash.slice(1) || '/');
   const hash = () => {
+    setAuthCallback(readCallback());
     setRoute(location.hash.slice(1) || '/');
+    void refreshCapabilities();
+    void refreshMe();
     cancel(false);
     clearTimeout(transitionTimer);
     setTransitioning(false);
@@ -41,7 +52,7 @@ export default function App() {
   };
   window.addEventListener('hashchange', hash);
   onCleanup(() => window.removeEventListener('hashchange', hash));
-  const [capabilities] = createResource(() => get('/api/v1/capabilities', 'Capabilities'));
+  const [capabilities, { refetch: refreshCapabilities }] = createResource(() => get('/api/v1/capabilities', 'Capabilities'));
   const [institutions] = createResource(() => get('/api/v1/institutions', 'InstitutionPage'));
   const [me, { refetch: refreshMe }] = createResource(() => get('/api/v1/me', 'Me'));
   const [institution, setInstitution] = createSignal('');
@@ -74,7 +85,19 @@ export default function App() {
   const [historyCursor,setHistoryCursor]=createSignal('');
   const [feedback, setFeedback] = createSignal(false),
     [feedbackMessage, setFeedbackMessage] = createSignal('');
-  const [history, setHistory] = createSignal<Array<{ id: string; institution: string }>>([]);
+  const [listCursor, setListCursor] = createSignal('');
+  const [history, { refetch: refreshHistory }] = createResource(
+    () => route().startsWith('/history') && institution() && me()
+      ? { institution: institution(), cursor: listCursor(), user: me()!.identity.user_id } : false,
+    async key => ({ ...await get(scoped(key.institution, '/conversations') + pageSuffix(key.cursor), 'ConversationPage'), owner: key.user, institution: key.institution }),
+  );
+  const visibleHistory = () => history()?.owner === me()?.identity.user_id && history()?.institution === institution() ? history() : undefined;
+  let lastUser: string | undefined;
+  createEffect(() => {
+    const user = me()?.identity.user_id;
+    if (user !== lastUser) { setAnswer(undefined); setConversation(undefined); setListCursor(''); }
+    lastUser = user;
+  });
   let controller: AbortController | undefined;
   let composer!: HTMLTextAreaElement;
   function cancel(announce = true) {
@@ -135,12 +158,6 @@ export default function App() {
       if (result.institution_id !== institution()) throw new Error('Scope mismatch');
       setAnswer(result);
       setConversation({id:result.conversation_id,institution:result.institution_id});
-      setHistory((rows) =>
-        [
-          { id: result.conversation_id, institution: result.institution_id },
-          ...rows.filter((r) => r.id !== result.conversation_id),
-        ].slice(0, 20),
-      );
     } catch (e) {
       if (!active.signal.aborted) setError(errorText(e));
     } finally {
@@ -238,6 +255,7 @@ export default function App() {
             class="hero"
             classList={{ leaving: route() !== '/' }}
             aria-hidden={route() !== '/'}
+            inert={route() !== '/'}
           >
             <Archive paused={paused()} zoom={zoom()} />
             <div class="hero-content">
@@ -275,7 +293,7 @@ export default function App() {
                 Your university questions,
                 <br class="mobile-break" /> answered with sources.
               </p>
-              {form()}
+              <Show when={route() === '/'}>{form()}</Show>
               <div class="suggestions">
                 <span>Start with a question</span>
                 <For
@@ -477,12 +495,13 @@ export default function App() {
             <Sources institution={institution()} source={route().split('/')[2] || ''} />
           </div>
         </Show>
-        <Show when={route().startsWith('/auth')}>
+        <Show when={route().startsWith('/auth') ? authCallback() : undefined} keyed>
           <div class="page">
             <Auth
+              callback={authCallback()}
               capabilities={capabilities()}
               authenticated={!!me()}
-              refresh={() => void refreshMe()}
+              refresh={() => { void refreshMe(); void refreshCapabilities(); }}
             />
           </div>
         </Show>
@@ -491,9 +510,9 @@ export default function App() {
             <Admin
               institution={institution()}
               allowed={
-                me()?.memberships.some(
+                !me.loading && (me()?.memberships.some(
                   (m) => m.institution_id === institution() && m.role === 'admin',
-                ) ?? false
+                ) ?? false)
               }
             />
           </div>
@@ -501,18 +520,21 @@ export default function App() {
         <Show when={route().startsWith('/history')}>
           <div class="page">
             <h1 tabIndex={-1}>Your conversations</h1>
-            <p class="muted">Conversations opened in this tab. Sign in to read them.</p>
-            <For each={history()} fallback={<p>No conversations opened yet.</p>}>
+            <p class="muted">Saved conversations for this institution. Sign in to read them.</p>
+            <Show when={history.loading}><p role="status">Loading saved conversations…</p></Show>
+            <Show when={history.error}><p role="alert">{errorText(history.error)}</p></Show>
+            <For each={visibleHistory()?.items} fallback={<Show when={!history.loading && !history.error}><p>No saved conversations available.</p></Show>}>
               {(row) => (
                 <a
                   class="list-row"
                   href={`#/history/${row.id}`}
-                  onClick={() => setInstitution(row.institution)}
+                  onClick={() => setInstitution(row.institution_id)}
                 >
                   Open conversation <ArrowUpRight size={17} />
                 </a>
               )}
             </For>
+            <Pagination cursor={listCursor()} next={visibleHistory()?.next_cursor} change={setListCursor} label="History pages"/>
             <Show when={prior.loading}>
               <p role="status">Loading conversation…</p>
             </Show>
@@ -546,7 +568,7 @@ export default function App() {
                       null,
                       { method: 'DELETE' },
                     );
-                    setHistory((h) => h.filter((v) => v.id !== route().split('/')[2]));
+                    await refreshHistory();
                     location.hash = '/history';
                   } catch (e) {
                     setError(errorText(e));
@@ -564,7 +586,7 @@ export default function App() {
         <Show
           when={
             !/^\/(?:$|answer$|sources(?:\/|$)|auth(?:\/|$)|admin(?:\/|$)|history(?:\/|$))/.test(
-              route(),
+              route().split('?')[0]!,
             )
           }
         >

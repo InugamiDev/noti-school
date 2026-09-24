@@ -4,7 +4,7 @@ Client-only SolidJS + Vite. Product responses are validated with the frozen work
 
 ## Commands
 
-Use the repository's pinned Node 24.18.0 and pnpm 10.29.2. The coordinator must update the root lock importer before a frozen install. During this scoped worker run: `pnpm install --store-dir .cache/pnpm --ignore-scripts --lockfile=false` preserved the root lock.
+Use the repository's pinned Node 24.18.0 and pnpm 10.29.2. Install the workspace from the root with `pnpm install --frozen-lockfile --ignore-scripts`. The root lock includes the browser application.
 
 - `pnpm --filter @noti/web typecheck`
 - `pnpm --filter @noti/web build`
@@ -17,13 +17,13 @@ Production delivery is the static `dist/` directory served by the Rust app. No p
 
 ## Boundaries
 
-History lists only conversation IDs opened in the current tab; the frozen API has no account conversation-list endpoint. Authentication remains Better Auth native wire format, with `X-Noti-Invitation` for password signup and Google initiation, matching the identity worker's read-only implementation observed during this run. Native reset callback query tokens are consumed into memory and removed from the URL. Passwords and invitation/reset tokens are never persisted. Draft, institution and language may be stored in tab session storage.
+History loads institution-scoped conversations for the signed-in owner. Authentication uses Better Auth native wire format, with `X-Noti-Invitation` for password signup and Google initiation. Reset and deletion callback tokens are consumed into memory and removed from the URL before application resource requests. Passwords and invitation/reset tokens are never persisted. Draft, institution and language may be stored in tab session storage.
 
 Source/citation reads, version files, upload, actions, feedback and budget depend on the real services. Missing services produce visible limitations. No test proves real identity/database/provider/mail operation or factual answer support. Schema and reference validation are a structural safety boundary only.
 
 ## Scene and asset
 
-The direct Three scene is dynamically imported. DPR is capped at 1.5, archive dimensions and geometry counts are fixed, and the request starts independently of submit motion. System reduced-motion applies before the first rendered frame. Pause, visibility, intersection and unmount stop animation; context loss reveals the approved fallback. Geometry/materials/renderer/listeners/observers are disposed.
+The direct Three scene is dynamically imported, with repeated geometry batched into six instanced meshes. DPR is capped at 1.5, archive dimensions and geometry counts are fixed, and the request starts independently of submit motion. Entry camera motion and submit zoom are separate; returning home does not replay the previous submission. System reduced-motion applies before the first rendered frame. Pause, visibility, intersection and unmount stop animation; context loss reveals the approved fallback. Geometry/materials/renderer/listeners/observers are disposed.
 
 The fallback was inspected before optimization. Reproducible Sharp conversion and source/output hashes are recorded in `public/archive.provenance.json`. It is illustrative and is not source evidence.
 

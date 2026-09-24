@@ -50,6 +50,16 @@ No Pinecone, Qdrant Cloud, Neo4j Aura, Supabase/Clerk, hosted object store, exte
 
 ## Documentation
 
+Integration setup commands are documented in [operator commands](contracts/operator.md). Bootstrap
+creates coverage-none HCMIU and an email-bound, explicitly chosen invitation role; private output does
+not imply mail delivery. Prices require a separate reviewed-rate acknowledgement. Retention uses actual
+runtime grants and leaves uncertain budget/audit records intact. None runs automatically during boot.
+
+Identity's authenticated internal capabilities endpoint reports configured Google/mail and core/mail
+failures. Account deletion requires email confirmation plus successful Rust cleanup before identity
+removal. These cross-service changes are locally tested with synthetic PostgreSQL identities and mocked
+cleanup/mail; real SMTP delivery, OAuth credentials and Rust cleanup remain release checks.
+
 - [Better Auth installation](https://better-auth.com/docs/installation)
 - [Google provider](https://better-auth.com/docs/authentication/google)
 - [TypeSafe HTTP API](https://docs.typesafe.ai/api)

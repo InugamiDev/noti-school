@@ -39,8 +39,9 @@ values, so the coordinator must start from a clean environment. No populated env
   Extra Better Auth origin/telemetry environment overrides are rejected. Cookies are HttpOnly,
   SameSite=Lax, host-only, and Secure in production. Built-in CSRF/origin checks remain enabled in tests.
 - Native Better Auth routes live below `/api/auth`; the public surface is explicitly limited to the
-  requested sign-in/signup/recovery/session functions. Account linking, email changes and account
-  deletion are not exposed. Product-wide deletion requires coordinator integration with Rust first.
+  requested sign-in/signup/recovery/session functions and supported email-confirmed deletion.
+  Account linking and email changes are not exposed. Deletion calls Rust's internal cleanup first;
+  missing cleanup fails closed. The integrated Rust transaction remains a coordinator release gate.
 - `POST /internal/session`: Host `127.0.0.1:3811`, exact internal bearer, empty body, original Cookie.
   Bearer comparison uses fixed-size SHA256 digests and `timingSafeEqual`. Only Cookie is passed to
   `auth.api.getSession`, with cookie cache and refresh disabled. Each call checks DB-backed identity,
@@ -81,8 +82,8 @@ not a role/institution assertion. It must not be retained in URL history, analyt
 
 There is no frozen invitation creation/sending endpoint. A server-side invitation mail template exists,
 but no public sender/admin grant route is invented. Coordinator provisioning must issue approved tokens.
-No shared endpoint or schema addition is needed for the flows implemented here; invitation administration
-and cross-service runtime capability reporting need coordinator-owned contracts if required by the UI.
+The integration addendum now freezes internal capabilities and cleanup. The guarded operator bootstrap
+creates invitation material in a private file; it does not send mail or grant a real account membership.
 
 ## Mail and replay
 
@@ -102,15 +103,25 @@ unavailable instead of claiming mail is queued. No durable mail queue is claimed
 The library's password reset consumes tokens atomically and revokes sessions. Its email JWT verification
 is additionally gated by an atomic single-use hash marker in the existing verification table. OAuth
 callbacks likewise consume a separate marker after checking the signed state cookie, closing the
-library state read/delete replay window. All markers expire; database/schema behavior still requires an
-isolated PostgreSQL rehearsal, including concurrent consumption with the actual runtime role.
+library state read/delete replay window. All markers expire. NOTI-6 rehearses real PostgreSQL verification,
+reset, session expiration/revocation and deletion concurrency using the non-owner auth runtime role.
+
+`POST /internal/capabilities` has the same exact Host/bearer and empty-body checks as introspection.
+It returns strict identity/Google/email capability states, including database and mail-circuit failure.
+Supported deletion sends a UI confirmation link; the browser consumes the token without storage and
+confirms through native POST. `beforeDelete` calls strict internal Rust cleanup via an injectable client.
+Cleanup failure leaves identity intact but consumes the confirmation token; request a new confirmation.
+An identity failure after cleanup requires an idempotent cleanup retry and must not restore product access.
+Better Auth catches the deletion mail callback exception, so the request-local after hook restores 503.
+See [lifecycle contract](../../docs/contracts/api.md) and [operator retention](../../docs/contracts/operator.md).
 
 ## Verification and remaining work
 
 Local tests exercise actual installed Better Auth handlers/types/core schema, memory-backed session
 creation/revocation, password and mocked Google signup, no-email linking, state tamper/replay/expiry,
 email/reset concurrent replay, bearer/CSRF/header/body limits, disabled/failing mail and Google, SMTP
-configuration/timeout, and compiled limited-mode startup/shutdown. They do not verify PostgreSQL,
+configuration/timeout, and compiled limited-mode startup/shutdown. Separate NOTI-6 integration tests verify
+the actual PostgreSQL identity runtime on the dedicated database. They do not verify
 Google credentials/JWKS/token exchange, SMTP TLS handshake/deliverability, Rust's real invitation
 transaction/role checks, ingress isolation or production readiness. Required independent audits remain
 coordinator-owned. See root `.fleet-handoff.json` and `docs/scratch/auth-task-ledger.md`.

@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from 'solid-js';
 import { createRemoteResource as createResource } from './resource';
-import { SourceCreate, VersionCreate, VersionAction } from '@noti/contracts';
+import { SourceCreate, VersionCreate, VersionAction, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction } from '@noti/contracts';
 import { get, post, request, errorText } from './api';
 import { Schemas } from '@noti/contracts';
 import { scoped } from './App';
@@ -11,6 +11,12 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
     [busy, setBusy] = createSignal(false),
     [jobId, setJobId] = createSignal('');
   const [sourceCursor,setSourceCursor]=createSignal(''),[versionCursor,setVersionCursor]=createSignal(''),[feedbackCursor,setFeedbackCursor]=createSignal('');
+  const [graphCursor, setGraphCursor] = createSignal(''), [entityId, setEntityId] = createSignal('');
+  const [graph, { refetch: refreshGraph }] = createResource(
+    () => props.allowed && props.institution ? { id: props.institution, cursor: graphCursor() } : false,
+    key => get(scoped(key.id, '/graph') + pageSuffix(key.cursor), 'GraphEdgePage'),
+  );
+  const urlSource = () => sources()?.items.find(s => s.id === selected())?.kind === 'url';
   const [sources, { refetch: refreshSources }] = createResource(
     () => props.allowed && props.institution ? {id:props.institution,cursor:sourceCursor()} : false,
     (key) => get(scoped(key.id, '/sources')+pageSuffix(key.cursor), 'SourcePage'),
@@ -135,15 +141,16 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                   const data = new FormData(e.currentTarget);
                   void act(async () => {
                     const file = data.get('file');
-                    if (
+                    if (!urlSource() && (
                       !(file instanceof File) ||
                       !file.size ||
                       file.size > 20 * 1024 * 1024 ||
                       !['application/pdf', 'text/plain'].includes(file.type)
-                    )
+                    ))
                       throw new Error('Invalid file');
                     const metadata = VersionCreate.parse({
                       label: data.get('label'),
+                      language: data.get('language'),
                       effective_from: data.get('from')
                         ? new Date(String(data.get('from'))).toISOString()
                         : null,
@@ -153,13 +160,13 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                     });
                     const body = new FormData();
                     body.set('metadata', JSON.stringify(metadata));
-                    body.set('file', file);
+                    if (file instanceof File) body.set('file', file);
                     const result = await post(
-                      scoped(props.institution, '/sources/{source_id}/versions', {
+                      scoped(props.institution, urlSource() ? '/sources/{source_id}/fetch' : '/sources/{source_id}/versions', {
                         source_id: selected(),
                       }),
                       'Job',
-                      body,
+                      urlSource() ? metadata : body,
                       { headers: { 'Idempotency-Key': crypto.randomUUID() } },
                     );
                     setJobId(result.id);
@@ -167,15 +174,17 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                   });
                 }}
               >
-                <h3>Upload a version</h3>
+                <h3>{urlSource() ? 'Fetch a saved URL' : 'Upload a version'}</h3>
                 <label>
                   Version label
                   <input name="label" maxLength={100} required />
                 </label>
-                <label>
+                <label>Document language<select name="language"><option value="en">English</option><option value="vi">Tiếng Việt</option></select></label>
+                <Show when={!urlSource()}><label>
                   PDF or UTF-8 text · up to 20 MiB
                   <input name="file" type="file" accept="application/pdf,text/plain" required />
-                </label>
+                </label></Show>
+                <Show when={urlSource()}><p class="notice">Fetch only this source’s saved URL. Fetched content requires review and is not approved evidence.</p></Show>
                 <div class="form-row">
                   <label>
                     Effective from
@@ -186,7 +195,7 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                     <input name="until" type="datetime-local" />
                   </label>
                 </div>
-                <button disabled={busy()}>Upload version</button>
+                <button disabled={busy()}>{urlSource() ? 'Fetch saved URL' : 'Upload version'}</button>
               </form>
             </Show>
             <For each={versions()?.items}>
@@ -293,6 +302,49 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
           </section>
         </div>
         <Pagination cursor={feedbackCursor()} next={feedback()?.next_cursor} change={setFeedbackCursor} label="Feedback pages"/>
+        <details>
+          <summary>Evidence graph administration</summary>
+          <p class="muted">Relations require a readable evidence chunk in this institution. Creating a candidate does not approve evidence or establish coverage.</p>
+          <form class="stack" onSubmit={e => {
+            e.preventDefault(); const data = new FormData(e.currentTarget);
+            void act(async () => {
+              const body = GraphEntityCreate.parse({ kind: data.get('kind'), label: data.get('label') });
+              const result = await post(scoped(props.institution, '/graph/entities'), 'GraphEntity', body);
+              setEntityId(result.id);
+            });
+          }}>
+            <label>Entity kind<select name="kind"><For each={GraphEntityCreate.shape.kind.options}>{kind => <option value={kind}>{kind}</option>}</For></select></label>
+            <label>Entity label<input name="label" required maxLength={300}/></label>
+            <button disabled={busy()}>Create graph entity</button>
+          </form>
+          <Show when={entityId()}><p>Created entity ID: <code>{entityId()}</code></p></Show>
+          <form class="stack" onSubmit={e => {
+            e.preventDefault(); const data = new FormData(e.currentTarget);
+            void act(async () => {
+              const body = GraphEdgeCreate.parse({ from_entity_id: data.get('from'), to_entity_id: data.get('to'), relation: data.get('relation'), evidence_chunk_id: data.get('chunk') });
+              await post(scoped(props.institution, '/graph/edges'), 'GraphEdge', body); await refreshGraph();
+            });
+          }}>
+            <label>From entity ID<input name="from" required/></label>
+            <label>To entity ID<input name="to" required/></label>
+            <label>Relation<input name="relation" maxLength={100} required/></label>
+            <label>Evidence chunk ID<input name="chunk" required/></label>
+            <button disabled={busy()}>Create candidate relation</button>
+          </form>
+          <Show when={graph.loading}><p role="status">Loading graph relations…</p></Show>
+          <Show when={graph.error}><p role="alert">{errorText(graph.error)}</p></Show>
+          <Show when={graph()}>
+            <For each={graph()?.items} fallback={<p>No graph relations returned for this institution.</p>}>{edge => <article class="version-row">
+              <h3>{edge.relation}</h3><p>{edge.status} · {edge.from_entity_id} → {edge.to_entity_id}</p>
+              <For each={edge.evidence}>{evidence => <a href={`#/sources/${evidence.source_id}`}>{evidence.title} · {evidence.version_label} · {evidence.locator.page ? `Page ${evidence.locator.page}` : evidence.locator.section}</a>}</For>
+              <For each={['approved', 'rejected'] as const}>{status => <button disabled={busy()} onClick={() => void act(async () => {
+                await request(scoped(props.institution, '/graph/edges/{edge_id}', { edge_id: edge.id }), Schemas.GraphEdge, { method: 'PATCH', body: JSON.stringify(GraphEdgeAction.parse({ status })) });
+                await refreshGraph();
+              })}>{status === 'approved' ? 'Approve relation' : 'Reject relation'}</button>}</For>
+            </article>}</For>
+            <Pagination cursor={graphCursor()} next={graph()?.next_cursor} change={setGraphCursor} label="Graph pages"/>
+          </Show>
+        </details>
         <Show when={sources.loading || budget.loading || feedback.loading}>
           <div class="skeleton" role="status" aria-label="Loading management data" />
         </Show>

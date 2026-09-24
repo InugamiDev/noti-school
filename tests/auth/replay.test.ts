@@ -27,11 +27,11 @@ test('concurrent reset consumes one token; expired reset does not change credent
   await f.request('/sign-up/email', signup, { 'x-noti-invitation': 'invite-one' });
   await f.service(new Request(f.sent[0]!.url));
   await f.request('/request-password-reset', { email: signup.email });
-  const token = new URL(f.sent.at(-1)!.url).pathname.split('/').at(-1)!;
+  const token = new URLSearchParams(new URL(f.sent.at(-1)!.url).hash.split('?')[1]).get('token')!;
   const outcomes = await Promise.all([1, 2].map(() => f.request('/reset-password', { token, newPassword: 'Synthetic-replacement-passphrase' })));
   assert.deepEqual(outcomes.map(r => r.status).sort(), [200, 400]);
   await f.request('/request-password-reset', { email: signup.email });
-  const expired = new URL(f.sent.at(-1)!.url).pathname.split('/').at(-1)!;
+  const expired = new URLSearchParams(new URL(f.sent.at(-1)!.url).hash.split('?')[1]).get('token')!;
   for (const value of f.db.verification!) if (value.identifier === `reset-password:${expired}`) value.expiresAt = new Date(0);
   assert.equal((await f.request('/reset-password', { token: expired, newPassword: 'Another-synthetic-password' })).status, 400);
 });

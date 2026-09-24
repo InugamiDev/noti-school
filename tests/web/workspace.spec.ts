@@ -12,6 +12,8 @@ async function setup(page:Page,admin=false){await page.emulateMedia({reducedMoti
  if(path.endsWith('/capabilities')){const cap={state:'available',reason:'ready'};body={mode:'mock',answers:cap,indexing:cap,discovery:cap,google:cap,email:cap,identity:cap};}
  else if(path.endsWith('/institutions'))body={items:[{id,slug:'demo',name:'Demo university',coverage:'synthetic_demo'}],next_cursor:null};
  else if(path.endsWith('/me'))body={identity:{user_id:'synthetic-test-user',session_id:'synthetic-session',email_verified:true,expires_at:'2027-01-01T00:00:00Z'},memberships:[{institution_id:id,role:admin?'admin':'student'}]};
+ else if(path.endsWith('/conversations'))body={items:[{id,institution_id:id,created_at:time}],next_cursor:null};
+ else if(path.endsWith('/graph'))body={items:[],next_cursor:null};
  else if(path.endsWith('/answers'))body=method==='POST'?answer:{items:[answer],next_cursor:null};
  else if(path.includes('/citations/'))body=evidence;
  else if(path.includes('/chunks/'))body={id,institution_id:id,source_id:sourceId,version_id:versionId,ordinal:0,text:'Synthetic full passage only.',locator:evidence.locator,language:'vi'};
@@ -44,4 +46,69 @@ test('auth reset callback and invitation header are wired without persisting sec
 });
 test('source pagination sends opaque cursor and keeps authenticated scope',async({page})=>{
  await setup(page);await page.route('**/api/v1/institutions/*/sources*',async route=>{const cursor=new URL(route.request().url()).searchParams.get('cursor');await route.fulfill({json:{items:[{...source,title:cursor?'Demo second page':'Demo first page'}],next_cursor:cursor?null:'opaque_demo_cursor'}});});await page.goto('/#/sources');await expect(page.getByRole('link',{name:/Demo first page/})).toBeVisible();await page.getByRole('button',{name:'Next page'}).click();await expect(page.getByRole('link',{name:/Demo second page/})).toBeVisible();await page.getByRole('button',{name:'First page'}).click();await expect(page.getByRole('link',{name:/Demo first page/})).toBeVisible();
+});
+
+test('history loads after reload, paginates and surfaces a missing backend',async({page})=>{
+ await setup(page);let reads=0;
+ await page.route('**/conversations*',async route=>{if(!new URL(route.request().url()).pathname.endsWith('/conversations'))return route.fallback();reads++;await route.fulfill({json:{items:[{id,institution_id:id,created_at:time}],next_cursor:reads===1?'opaque_history':null}});});
+ await page.goto('/#/history');await expect(page.getByRole('link',{name:'Open conversation'})).toBeVisible();
+ const next=page.waitForRequest(r=>r.url().includes('cursor=opaque_history'));await page.getByRole('button',{name:'Next page'}).click();await next;
+ await page.reload();await expect(page.getByRole('link',{name:'Open conversation'})).toBeVisible();expect(reads).toBeGreaterThan(2);
+ await page.route('**/conversations*',route=>route.fulfill({status:503,json:{error:{code:'core_unavailable',message:'Synthetic missing backend',request_id:id,retryable:true}}}));
+ await page.reload();await expect(page.getByRole('alert')).toContainText('unavailable');await expect(page.getByRole('link',{name:'Open conversation'})).toHaveCount(0);
+});
+
+test('saved URL fetch submits Vietnamese metadata and never claims indexed evidence',async({page})=>{
+ await setup(page,true);
+ await page.route('**/sources',route=>route.fulfill({json:{items:[{...source,kind:'url',original_url:'https://edusoftweb.hcmiu.edu.vn/synthetic-only'}],next_cursor:null}}));
+ await page.goto('/#/admin');await page.getByLabel('Select source').selectOption(sourceId);
+ await page.getByLabel('Version label').fill('Synthetic vi');await page.getByLabel('Document language').selectOption('vi');
+ const sent=page.waitForRequest(r=>r.url().endsWith('/fetch'));
+ await page.getByRole('button',{name:'Fetch saved URL',exact:true}).click();
+ const req=await sent;expect(req.postDataJSON()).toEqual({label:'Synthetic vi',language:'vi',effective_from:null,effective_until:null});
+ expect(req.headers()['x-noti-csrf']).toBe('1');expect(req.headers()['idempotency-key']).toBeTruthy();
+ await expect(page.getByRole('status').filter({hasText:'unavailable'})).toBeVisible();
+});
+
+test('deletion confirms through POST, strips callback token and shows cleanup failure',async({page})=>{
+ await setup(page);
+ await page.route('**/api/auth/delete-user',route=>route.fulfill({status:503,json:{error:{code:'core_unavailable',message:'Synthetic cleanup failure',request_id:id,retryable:true}}}));
+ await page.goto('/#/auth?delete_token=synthetic-delete');
+ expect(page.url()).not.toContain('synthetic-delete');
+ page.on('dialog',dialog=>dialog.accept());
+ const sent=page.waitForRequest(r=>r.url().endsWith('/delete-user'));
+ await page.getByRole('button',{name:'Confirm account deletion'}).click();
+ expect((await sent).postDataJSON()).toEqual({token:'synthetic-delete'});
+ await expect(page.getByRole('status')).toContainText('unavailable');
+ expect(await page.evaluate(()=>JSON.stringify(localStorage)+JSON.stringify(sessionStorage))).not.toContain('synthetic-delete');
+});
+
+test('OAuth errors are readable, hash reset is scrubbed, and draft survives account navigation',async({page})=>{
+ await setup(page);await page.goto('/');await page.getByLabel('Your question').fill('Synthetic persistent draft');
+ await page.goto('/#/auth/error?error=synthetic-private-detail');
+ await expect(page.getByRole('status')).toContainText('could not be completed');expect(page.url()).not.toContain('synthetic-private-detail');
+ await page.goto('/#/auth?token=synthetic-hash-reset');await expect(page.locator('form h2')).toHaveText('Reset password');expect(page.url()).not.toContain('synthetic-hash-reset');
+ await page.getByRole('link',{name:'Return to your question',exact:true}).click();await expect(page.getByLabel('Your question')).toHaveValue('Synthetic persistent draft');
+});
+
+test('transition leaves one composer and disabled identity remains explicit',async({page})=>{
+ await setup(page);await page.emulateMedia({reducedMotion:'no-preference'});
+ await page.route('**/api/v1/answers',async route=>{await new Promise(r=>setTimeout(r,800));await route.fulfill({json:answer});});
+ await page.goto('/');await page.getByLabel('Your question').fill('Synthetic transition');await page.getByRole('button',{name:'Ask',exact:true}).click();
+ await expect(page.locator('#question')).toHaveCount(1);await expect(page.locator('.hero')).toHaveAttribute('inert','');
+ await page.route('**/capabilities',route=>{const cap={state:'disabled',reason:'not_configured'};return route.fulfill({json:{mode:'disabled',answers:cap,indexing:cap,discovery:cap,google:cap,email:cap,identity:cap}});});
+ await page.goto('/#/auth');await expect(page.getByRole('button',{name:'Continue with Google'})).toBeDisabled();await expect(page.getByRole('button',{name:'Request account deletion'})).toBeDisabled();
+});
+
+test('graph administration uses provenance contracts and exposes unavailable writes',async({page})=>{
+ await setup(page,true);await page.goto('/#/admin');await page.getByText('Evidence graph administration',{exact:true}).click();
+ await expect(page.getByText('No graph relations returned for this institution.')).toBeVisible();
+ await page.getByLabel('Entity label').fill('Synthetic office');await page.getByLabel('Entity kind').selectOption('office');
+ const sent=page.waitForRequest(r=>r.url().endsWith('/graph/entities'));
+ await page.getByRole('button',{name:'Create graph entity'}).click();expect((await sent).postDataJSON()).toEqual({kind:'office',label:'Synthetic office'});
+ await expect(page.getByRole('status').filter({hasText:'unavailable'})).toBeVisible();
+ await page.getByLabel('From entity ID').fill(id);await page.getByLabel('To entity ID').fill(sourceId);await page.getByLabel('Relation',{exact:true}).fill('synthetic relation');await page.getByLabel('Evidence chunk ID').fill(versionId);
+ const edge=page.waitForRequest(r=>r.url().endsWith('/graph/edges'));await page.getByRole('button',{name:'Create candidate relation'}).click();
+ expect((await edge).postDataJSON()).toEqual({from_entity_id:id,to_entity_id:sourceId,relation:'synthetic relation',evidence_chunk_id:versionId});
+ await expect(page.getByRole('button',{name:'Approve relation'})).toHaveCount(0);
 });
