@@ -1,0 +1,29 @@
+[package]
+name = "noti-school-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+tokio = { workspace = true, features = ["net", "fs", "io-util", "sync", "process"] }
+sqlx.workspace = true
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+uuid = { version = "=1.26.1", features = ["v4", "serde"] }
+chrono = { version = "=0.4.45", features = ["serde"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls", "json", "stream"] }
+tower = { version = "=0.5.3", features = ["util"] }
+hmac = "=0.12.1"
+sha2 = "=0.10.9"
+base64 = "=0.22.1"
+subtle = "=2.6.1"
+url = "=2.5.8"
+dotenvy = "=0.15.7"
+pdf-extract = "=0.12.1"
+lopdf = { version = "=0.42.0", default-features = false }
+
+[[test]]
+name = "security"
+path = "../../tests/api/security.rs"

@@ -1,0 +1,11 @@
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import sharp from 'sharp';
+const source = process.argv[2] || '/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/assets/noti-school-archive-background.png';
+const bytes = await readFile(source);
+const sha = createHash('sha256').update(bytes).digest('hex');
+if (sha !== '3f21acc149cd3c9b75e9a06ab08f0a3939969a92b17021f2850a777b965dd63d') throw new Error('Unapproved asset');
+await mkdir('public', { recursive: true });
+const result = await sharp(bytes).resize({ width: 1680, withoutEnlargement: true }).webp({ quality: 78, effort: 6 }).toBuffer();
+await writeFile('public/archive.webp', result);
+await writeFile('public/archive.provenance.json', JSON.stringify({ source, source_sha256: sha, output_sha256: createHash('sha256').update(result).digest('hex'), bytes: result.length, operation: 'sharp 0.35.4, width 1680 without enlargement, WebP quality 78 effort 6', use: 'Approved illustrative fallback only; not institutional evidence' }, null, 2));

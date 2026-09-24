@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["packages/foundation-rs"]
+members = ["packages/foundation-rs", "apps/api"]
 
 [workspace.package]
 version = "0.1.0"

@@ -1,0 +1,26 @@
+{
+  "name": "@noti/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node build.mjs",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "pnpm build && tsx --test ../../tests/auth/*.test.ts"
+  },
+  "dependencies": {
+    "@noti/contracts": "workspace:*",
+    "better-auth": "catalog:",
+    "pg": "catalog:",
+    "zod": "catalog:",
+    "nodemailer": "10.0.10"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "8.0.2",
+    "@types/node": "24.13.6",
+    "@types/pg": "8.20.0",
+    "tsx": "4.23.15",
+    "typescript": "catalog:"
+  }
+}
