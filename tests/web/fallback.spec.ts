@@ -87,7 +87,20 @@ test('initial reduced motion creates no animation; visibility, intersection and 
       disconnect() { performance.mark('test-observer-remove'); super.disconnect(); }
     };
   });
+  // App-level listeners outlive Archive. Measure them before its lazy module can mount.
+  let release!: () => void;
+  let importing = false;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/assets/scene-*.js', async route => { importing = true; await gate; await route.continue(); });
+  const balance = () => page.evaluate(() => ({
+    listeners: performance.getEntriesByName('test-listener-add').length - performance.getEntriesByName('test-listener-remove').length,
+    observers: performance.getEntriesByName('test-observer-add').length - performance.getEntriesByName('test-observer-remove').length,
+  }));
   await fixture(page); await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto('/');
+  await expect.poll(() => importing).toBe(true);
+  const baseline = await balance();
+  expect(baseline.observers).toBe(0);
+  release();
   await expect(page.locator('.archive')).toHaveClass(/fallback/);
   expect(await page.locator('.archive img').evaluate(el => el.getAnimations().length)).toBe(0);
   await frozen(page, 'initial-reduced');
@@ -115,8 +128,7 @@ test('initial reduced motion creates no animation; visibility, intersection and 
   expect(await animation.evaluate(a => ({ state: a.playState, finish: a.onfinish, time: a.currentTime }))).toEqual({ state: 'idle', finish: null, time: null });
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   expect(await image!.evaluate(el => el.getAnimations().length)).toBe(0);
-  expect(await page.evaluate(() => ({ listeners: performance.getEntriesByName('test-listener-add').length - performance.getEntriesByName('test-listener-remove').length,
-    observers: performance.getEntriesByName('test-observer-add').length - performance.getEntriesByName('test-observer-remove').length }))).toEqual({ listeners: 0, observers: 0 });
+  expect(await balance()).toEqual(baseline);
 });
 
 test('submit during a failing lazy import keeps one immediate request and pending zoom', async ({ page }) => {
