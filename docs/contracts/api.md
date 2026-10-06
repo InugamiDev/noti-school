@@ -86,19 +86,17 @@ Retry indexing is bounded and retains prior job diagnostics. Scans without text 
 Ask returns one final validated Answer; progress streaming is deferred (no unvalidated token stream in v1).
 `Idempotency-Key` UUID is mandatory on ask and ingestion enqueue; persist unique user/institution/key plus
 request hash and final response in the same transaction as job/operation creation. Same key/different body
-is 409, same in-flight key is 409, completed key replays the response; no second paid dispatch. Retain 24h.
+is 409, same in-flight key is 409. Ask also hashes the selected evidence provider, exact generation/embedding models and request templates, and pipeline/prompt/schema versions; secrets are excluded. Completed and racing replays require the same body and execution contract or return 409 without another provider call. Keys from older request-only hashes conflict; authorized historical answer reads remain separate from ask replay. Retain 24h.
 Retain in-flight/uncertain keys beyond 24h until terminal reconciliation; expiry alone is not cleanup permission.
 Conversation institution/owner is immutable. `discover=true` requires separately available discovery and
 explicit user opt-in; discovery candidates never enter approved answer evidence without review.
 
-Missing either OpenAI/Jev, unknown/stale pricing, exhausted budget or provider outage disables paid answers,
-embedding/indexing and discovery. Return 503 with the affected capability, never mock text in live mode or
-OpenAI classification replacing Jev. Lexical/source-only search may continue against approved indexed
+Missing OpenAI or the explicitly selected evidence provider, unknown/stale required pricing, exhausted budget or selected-provider outage disables paid answers, embedding/indexing and discovery. EVIDENCE_PROVIDER defaults to openai; jev adds its own key/model/prices. Return 503 with the affected capability, never mock text in live mode or automatic OpenAI fallback for selected Jev. Lexical/source-only search may continue against approved indexed
 records, explicitly indicating coverage; no inference pass is implied. Provider failures mark capabilities
 unavailable; intentionally missing configuration marks disabled. Configuration presence is not health.
 
-Provider dispatch: at most 3 total attempts, 30s request timeout (Jev 15s), bounded backoff 250ms/1000ms
-plus jitter <=250ms; reserve every attempt including repair prompts and tool calls before dispatch.
+Provider dispatch: no automatic retries. Embeddings have 30s, reranking/evidence/support calls 15s each, generation 45s, within the existing 140s overall work allowance. Reserve each paid stage before dispatch; auxiliary OpenAI stages use the configured OPENAI_CHAT_MODEL, strict Responses schemas, store:false and no tools.
+Answer persistence holds membership/source/graph mutation locks and bounds SQL lock waits to five seconds. All potentially blocking persistence writes precede the final identity introspection and current evidence/graph-seed/ownership/expiry checks on the held transaction. Failure rolls back answer and citations. These checks immediately precede commit, but identity is a separate service: this is not an atomic cross-service authorization transaction, nor a guarantee against revocation after the last observation.
 Persist dispatched state before HTTP; cancellation, disconnect, malformed usage or ambiguous timeout
 retains reservation. No retry on schema-invalid replies unless explicitly budgeted. Jev pinned version
 `jev-1.13.0`; validate expected question IDs exactly and finite probabilities in [0,1]. Never send auth

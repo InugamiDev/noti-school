@@ -18,6 +18,7 @@ pub mod pipeline;
 mod pipeline_tests;
 pub mod provider_http;
 pub mod providers;
+pub mod rag;
 pub mod retrieval;
 pub mod sources;
 pub mod ssrf;
@@ -278,7 +279,7 @@ async fn capabilities(State(s): State<AppState>) -> Json<Value> {
                 json!({"state":"unavailable","reason":"pricing_missing"})
             } else if !available {
                 json!({"state":"unavailable","reason":"budget_exhausted"})
-            } else if s.providers.failed() {
+            } else if s.providers.failed(s.config.evidence_provider) {
                 json!({"state":"unavailable","reason":"provider_failed"})
             } else {
                 json!({"state":"available","reason":"ready"})

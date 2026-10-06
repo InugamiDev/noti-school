@@ -7,6 +7,7 @@ use axum::{
     Json, Router,
     body::{Body, to_bytes},
     http::{HeaderMap, Request, StatusCode},
+    response::IntoResponse,
     routing::post,
 };
 use serde_json::{Value, json};
@@ -28,6 +29,8 @@ const MIGRATOR: &str =
     "postgresql://noti_school_migrator:synthetic-test-only@127.0.0.1:54390/noti_school_test_api2";
 const SECRET: &str = "synthetic-internal-secret-test-only-0000";
 
+#[path = "rag.rs"]
+mod rag;
 #[path = "repairs.rs"]
 mod repairs;
 
@@ -209,8 +212,6 @@ async fn runtime_sql_and_complete_pipeline() {
         ),
         ("openai", "synthetic-model", "input_tokens", 1000),
         ("openai", "synthetic-model", "output_tokens", 1000),
-        ("jev", "jev-1.13.0", "jev_input_tokens", 1000),
-        ("jev", "jev-1.13.0", "jev_output_tokens", 0),
     ] {
         sqlx::query("INSERT INTO product.ai_prices(id,provider,model,component,micro_usd_per_million_units,effective_at,valid_until,source_url) VALUES($1,$2,$3,$4,$5,now()-interval '1 minute',now()+interval '1 hour','https://example.invalid/synthetic-priced-fixture')")
             .bind(format!("synthetic-{}",Uuid::new_v4())).bind(provider).bind(model).bind(component).bind(rate).execute(&migration).await.unwrap();
@@ -269,11 +270,18 @@ async fn runtime_sql_and_complete_pipeline() {
             let m=mode.load(Ordering::SeqCst);
             if m==4 {tokio::time::sleep(Duration::from_secs(1)).await;}
             if uri.path().ends_with("embeddings") {
-                if m==6 {return (StatusCode::OK,Json(json!({"model":"text-embedding-3-small","data":[{"index":1,"embedding":vec![0.01f32;1536]}],"usage":{"prompt_tokens":10,"total_tokens":10}})));}
-                return (StatusCode::OK,Json(json!({"model":"text-embedding-3-small","data":[{"index":0,"embedding":vec![0.01f32;1536]}],"usage":{"prompt_tokens":10,"total_tokens":10}})));
+                if let Some(raw) = rag::mock_raw_other(&b, m, true) {
+                    return (StatusCode::OK, [("content-type", "application/json")], raw).into_response();
+                }
+                if m==6 {return (StatusCode::OK,Json(json!({"model":"text-embedding-3-small","data":[{"index":1,"embedding":vec![0.01f32;1536]}],"usage":{"prompt_tokens":10,"total_tokens":10}}))).into_response();}
+                return (StatusCode::OK,Json(json!({"model":"text-embedding-3-small","data":[{"index":0,"embedding":vec![0.01f32;1536]}],"usage":{"prompt_tokens":10,"total_tokens":10}}))).into_response();
             }
             if uri.path().ends_with("systemone") {
-                if m==3 {return (StatusCode::SERVICE_UNAVAILABLE,Json(json!({})));}
+                if let Some(raw) = rag::mock_raw_other(&b, m, false) {
+                    return (StatusCode::OK, [("content-type", "application/json")], raw).into_response();
+                }
+                if m==31 && b["questions"].get("claim_0").is_some() { tokio::time::sleep(Duration::from_secs(2)).await; }
+                if m==3 {return (StatusCode::SERVICE_UNAVAILABLE,Json(json!({}))).into_response();}
                 let answers: serde_json::Map<String,Value>=b["questions"].as_object().unwrap().keys().map(|k| {
                     let n=if k=="conflict" {if m==2{0.99}else{0.0}} else if (k.starts_with("claim_") && m==1) || m==8 {0.01}else{0.99};
                     (k.clone(),json!({"type":"noul","noul":n}))
@@ -283,22 +291,34 @@ async fn runtime_sql_and_complete_pipeline() {
                     assert!(b["state"]["evidence"][0]["quote"].is_string());
                     assert!(b["questions"]["claim_0"]["instructions"].as_str().unwrap().contains("ONLY"));
                 }
-                return (StatusCode::OK,Json(json!({"model":"jev-1.13.0","answers":answers,"usage":{"input_tokens":20,"output_tokens":5}})));
+                return (StatusCode::OK,Json(json!({"model":"jev-1.13.0","answers":answers,"usage":{"input_tokens":20,"output_tokens":5}}))).into_response();
             }
             assert_eq!(uri.path(),"/v1/responses");
             assert_eq!(b["store"],false); assert!(b.get("tools").is_none());
             let input:Value=serde_json::from_str(b["input"].as_str().unwrap()).unwrap();
+            if let Some(raw) = rag::mock_raw_response(&b, &input, m) {
+                return (StatusCode::OK, [("content-type", "application/json")], raw).into_response();
+            }
+            if let Some(result) = rag::mock_result(&b, &input, m) {
+                if m == 19 { tokio::time::sleep(Duration::from_secs(16)).await; }
+                if m == 20 && b["text"]["format"]["name"]=="rag_v1_claim_support" { tokio::time::sleep(Duration::from_secs(2)).await; }
+                let mut response=json!({"model":b["model"],"status":"completed","output":[{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":result.to_string()}]}],"usage":{"input_tokens":30,"output_tokens":20,"total_tokens":50}});
+                if m==16 { response["usage"]["total_tokens"]=json!(51); }
+                if m==17 { response["status"]=json!("incomplete"); }
+                if m==18 { response["output"][0]["content"][0]=json!({"type":"refusal","refusal":"synthetic"}); }
+                return (StatusCode::OK,Json(response)).into_response();
+            }
             let text=if m==1 {"An unsupported invented claim."}else{input["evidence"][0]["quote"].as_str().unwrap()};
             let evidence_id=if m==5 {json!(Uuid::new_v4())}else{input["evidence"][0]["id"].clone()};
             let generated=json!({"claims":[{"text":text,"evidence_ids":[evidence_id]}]});
-            (StatusCode::OK,Json(json!({"model":b["model"],"status":"completed","output":[{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":generated.to_string()}]}],"usage":{"input_tokens":30,"output_tokens":20,"total_tokens":50}})))
+            (StatusCode::OK,Json(json!({"model":b["model"],"status":"completed","output":[{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":generated.to_string()}]}],"usage":{"input_tokens":30,"output_tokens":20,"total_tokens":50}}))).into_response()
         }
     }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
     let provider_task = tokio::spawn(async move { axum::serve(listener, provider).await.unwrap() });
     let upload_dir = format!(
-        "{}/tests/api/.uploads-{}",
+        "{}/../../.cache/rag-1/uploads-{}",
         env!("CARGO_MANIFEST_DIR"),
         Uuid::new_v4()
     );
@@ -308,7 +328,6 @@ async fn runtime_sql_and_complete_pipeline() {
         ("AI_MODE".into(), "live".into()),
         ("AI_LIVE_CALLS_ENABLED".into(), "true".into()),
         ("OPENAI_API_KEY".into(), "synthetic-only".into()),
-        ("TYPESAFE_API_KEY".into(), "synthetic-only".into()),
         ("OPENAI_CHAT_MODEL".into(), "synthetic-model".into()),
         ("UPLOAD_DIR".into(), upload_dir.clone()),
     ]);
@@ -456,6 +475,22 @@ async fn runtime_sql_and_complete_pipeline() {
         .0,
         202
     );
+    rag::runtime(
+        &s, &pool, i, &student, &admin, version, &hits, &mode, &revoked,
+    )
+    .await;
+    // The remainder preserves the original opt-in Jev integration suite.
+    let migration = sqlx::PgPool::connect(MIGRATOR).await.unwrap();
+    for (component, rate) in [("jev_input_tokens", 1000i64), ("jev_output_tokens", 0)] {
+        sqlx::query("INSERT INTO product.ai_prices(id,provider,model,component,micro_usd_per_million_units,effective_at,valid_until,source_url) VALUES($1,'jev','jev-1.13.0',$2,$3,now()-interval '1 minute',now()+interval '1 hour','https://example.invalid/synthetic-priced-fixture')")
+            .bind(format!("synthetic-{}",Uuid::new_v4())).bind(component).bind(rate).execute(&migration).await.unwrap();
+    }
+    migration.close().await;
+    let mut config = (*s.config).clone();
+    config.evidence_provider = crate::config::EvidenceProvider::Jev;
+    config.jev_key = Some("synthetic-only".into());
+    s.config = Arc::new(config);
+    rag::ambiguous_json(&s, &pool, i, &student, &mode, &hits).await;
     let ask = json!({"institution_id":i,"question":"What does the synthetic office accept?","language":"en"});
     let key = Uuid::new_v4();
     let before = hits.load(Ordering::SeqCst);
@@ -470,7 +505,7 @@ async fn runtime_sql_and_complete_pipeline() {
     .await;
     assert_eq!(status, 200, "{answer}");
     assert_eq!(answer["status"], "answered");
-    assert_eq!(hits.load(Ordering::SeqCst) - before, 4);
+    assert_eq!(hits.load(Ordering::SeqCst) - before, 5);
     let (chunk_page, feedback_context) = repairs::runtime_repairs(
         &s, &pool, i, other, &admin, &student, &outsider, &source, &answer, &hits,
     )
@@ -495,14 +530,14 @@ async fn runtime_sql_and_complete_pipeline() {
     );
     assert_eq!(hits.load(Ordering::SeqCst), count);
     let stage_count:i64=sqlx::query_scalar("SELECT count(*) FROM product.pipeline_stages p JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1").bind(key).fetch_one(&pool).await.unwrap();
-    assert_eq!(stage_count, 4);
+    assert_eq!(stage_count, 5);
     let embedding_units:i64=sqlx::query_scalar("SELECT (r.plan->0->>'units')::bigint FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND p.stage='question_embedding'").bind(key).fetch_one(&pool).await.unwrap();
     assert_eq!(
         embedding_units, 16_000,
         "accepted UTF-8 bytes, not scalar count, bound the reservation"
     );
     let stages_settled:i64=sqlx::query_scalar("SELECT count(*) FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state='settled'").bind(key).fetch_one(&pool).await.unwrap();
-    assert_eq!(stages_settled, 4);
+    assert_eq!(stages_settled, 5);
     let other_key = Uuid::new_v4();
     let (a, b) = tokio::join!(
         call(
@@ -528,7 +563,7 @@ async fn runtime_sql_and_complete_pipeline() {
             .iter()
             .all(|x| [StatusCode::OK, StatusCode::CONFLICT].contains(x))
     );
-    assert_eq!(hits.load(Ordering::SeqCst) - count, 4);
+    assert_eq!(hits.load(Ordering::SeqCst) - count, 5);
     let (status,vietnamese)=call(&s,"POST","/api/v1/answers",&student,json!({"institution_id":i,"question":"Văn phòng giả định chấp nhận mẫu nào?","language":"vi"}),Some(Uuid::new_v4())).await;
     assert_eq!(status, 200, "{vietnamese}");
     assert_eq!(vietnamese["language"], "vi");
@@ -591,8 +626,9 @@ async fn runtime_sql_and_complete_pipeline() {
         assert_eq!(value["status"], expected);
         assert_eq!(value["claims"], json!([]));
     }
-    for (m, calls) in [(5, 3), (6, 1)] {
+    for (m, calls) in [(5, 4), (6, 1)] {
         mode.store(m, Ordering::SeqCst);
+        s.providers.expire_cooldown();
         let before = hits.load(Ordering::SeqCst);
         assert_eq!(
             call(
@@ -632,7 +668,7 @@ async fn runtime_sql_and_complete_pipeline() {
     );
     assert_eq!(
         hits.load(Ordering::SeqCst) - before,
-        2,
+        3,
         "Jev outage must stop before generation"
     );
     assert_eq!(
@@ -653,6 +689,44 @@ async fn runtime_sql_and_complete_pipeline() {
     let (_, failed_caps) = call(&s, "GET", "/api/v1/capabilities", &student, json!({}), None).await;
     assert_eq!(failed_caps["answers"]["reason"], "provider_failed");
     assert_eq!(failed_caps["indexing"]["reason"], "provider_failed");
+    // An explicit OpenAI selection ignores Jev's failed circuit, without changing Jev mode.
+    let mut openai = s.clone();
+    let mut config = (*openai.config).clone();
+    config.evidence_provider = crate::config::EvidenceProvider::Openai;
+    config.jev_key = None;
+    openai.config = Arc::new(config);
+    assert_eq!(
+        call(
+            &openai,
+            "GET",
+            "/api/v1/capabilities",
+            &student,
+            json!({}),
+            None
+        )
+        .await
+        .1["answers"]["state"],
+        "available"
+    );
+    assert_eq!(
+        call(
+            &openai,
+            "POST",
+            "/api/v1/answers",
+            &student,
+            ask.clone(),
+            Some(Uuid::new_v4())
+        )
+        .await
+        .1["status"],
+        "answered"
+    );
+    assert_eq!(
+        call(&s, "GET", "/api/v1/capabilities", &student, json!({}), None)
+            .await
+            .1["answers"]["reason"],
+        "provider_failed"
+    );
     let cooldown_hits = hits.load(Ordering::SeqCst);
     let cooldown_key = Uuid::new_v4();
     assert_eq!(
@@ -920,8 +994,8 @@ async fn runtime_sql_and_complete_pipeline() {
             .await
             .unwrap();
     assert_eq!(current, v2);
-    // Four current documents make a one-hop graph candidate observably different from top-three RRF.
-    for n in 0..3 {
+    // Twelve current documents distinguish one-hop graph evidence from eleven RRF seeds.
+    for n in 0..11 {
         let (_,new_source)=call(&s,"POST",&source_path,&admin,json!({"title":format!("Synthetic graph {n}"),"kind":"text","visibility":"institution"}),None).await;
         let new_source_id = id(&new_source, "id");
         let (_, new_job) = upload(
@@ -960,14 +1034,14 @@ async fn runtime_sql_and_complete_pipeline() {
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(eligible.len(), 4);
+    assert_eq!(eligible.len(), 12);
     let seed = eligible[0];
-    let target = eligible[3];
+    let target = eligible[11];
     let baseline =
         crate::pipeline::candidates(&s, i, &student, "zzzz-no-lexical-hit", &vec![0.01; 1536])
             .await
             .unwrap();
-    assert_eq!(baseline.len(), 3);
+    assert_eq!(baseline.len(), 11);
     assert!(baseline.iter().all(|e| e["id"] != target.to_string()));
     let mut expanded_edges = Vec::new();
     for chunk in [seed, target] {
@@ -992,8 +1066,71 @@ async fn runtime_sql_and_complete_pipeline() {
         crate::pipeline::candidates(&s, i, &student, "zzzz-no-lexical-hit", &vec![0.01; 1536])
             .await
             .unwrap();
-    assert_eq!(expanded.len(), 4);
+    assert_eq!(expanded.len(), 12);
     assert!(expanded.iter().any(|e| e["id"] == target.to_string()));
+    let graph_passage = expanded
+        .iter()
+        .find(|e| e["id"] == target.to_string())
+        .unwrap();
+    assert_eq!(
+        graph_passage["graph_provenance"][0]["seed_chunk_id"],
+        seed.to_string()
+    );
+    let graph_ask = json!({"institution_id":i,"question":"zzzz-no-lexical-hit","language":"en"});
+    mode.store(30, Ordering::SeqCst);
+    let (status, graph_answer) = call(
+        &s,
+        "POST",
+        "/api/v1/answers",
+        &student,
+        graph_ask.clone(),
+        Some(Uuid::new_v4()),
+    )
+    .await;
+    assert_eq!(status, 200, "{graph_answer}");
+    assert_eq!(graph_answer["evidence"][0]["chunk_id"], target.to_string());
+    mode.store(31, Ordering::SeqCst);
+    let initial = hits.load(Ordering::SeqCst);
+    let task_state = s.clone();
+    let task_student = student.clone();
+    let task = tokio::spawn(async move {
+        call(
+            &task_state,
+            "POST",
+            "/api/v1/answers",
+            &task_student,
+            graph_ask,
+            Some(Uuid::new_v4()),
+        )
+        .await
+    });
+    for _ in 0..200 {
+        if hits.load(Ordering::SeqCst) >= initial + 5 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(hits.load(Ordering::SeqCst), initial + 5);
+    assert_eq!(
+        call(
+            &s,
+            "PATCH",
+            &format!("/api/v1/institutions/{i}/graph/edges/{}", expanded_edges[1]),
+            &admin,
+            json!({"status":"rejected"}),
+            None
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        task.await.unwrap().0,
+        404,
+        "graph approval revoked during inference must fail final commit"
+    );
+    mode.store(0, Ordering::SeqCst);
+
     assert_eq!(
         call(
             &s,
@@ -1012,7 +1149,7 @@ async fn runtime_sql_and_complete_pipeline() {
             .await
             .unwrap()
             .len(),
-        3
+        11
     );
     assert_eq!(call(&s,"POST",&format!("/api/v1/institutions/{other}/graph/edges"),&admin,json!({"from_entity_id":entity1["id"],"to_entity_id":entity2["id"],"relation":"forbidden","evidence_chunk_id":chunk_id}),None).await.0,404);
     // A disabled upload can explicitly recover after configuration and an expired indexing window.
@@ -1327,10 +1464,13 @@ async fn runtime_sql_and_complete_pipeline() {
     );
     // Synthetic runtime SQL and loopback-provider wire fixtures; no live quality claim.
     let artifacts = json!({"Answer":answer,"GraphEdge":approved_edge,"Source":source,"Job":job,"Capabilities":caps,"ChunkPage":chunk_page,"FeedbackContext":feedback_context});
+    tokio::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.cache/rag-1r"))
+        .await
+        .unwrap();
     tokio::fs::write(
         concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/api/pipeline-wire.json"
+            "/../../.cache/rag-1r/pipeline-wire.json"
         ),
         serde_json::to_vec_pretty(&artifacts).unwrap(),
     )

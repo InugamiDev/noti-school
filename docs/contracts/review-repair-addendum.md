@@ -40,8 +40,7 @@ These are frozen repair requirements, not a claim of completed implementation or
 
 ## Provider Admission and Retention
 
-- Both providers and all five required dated price entries are checked before the first paid
-  stage of asks and indexing, not only when rendering capabilities. Stage-time checks remain.
+- Selected-mode readiness and dated prices are checked before the first paid stage of asks and indexing, not only when rendering capabilities. Default OpenAI needs its key/model and three rates; explicit Jev adds its key/model and two rates. Stage-time checks remain; no selected-Jev fallback.
 - Observed provider failures affect capabilities for a bounded cooldown; no active paid health
   probes. A later explicit admitted operation may re-test after cooldown; success clears failure.
 - Retention must bound personal text and user/linkable request metadata. At 13 months, terminal

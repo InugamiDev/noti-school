@@ -1,6 +1,20 @@
 use crate::error::{Error, Result};
 use std::{collections::HashMap, path::PathBuf};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvidenceProvider {
+    Openai,
+    Jev,
+}
+impl EvidenceProvider {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Openai => "openai",
+            Self::Jev => "jev",
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Config {
     pub origin: String,
@@ -9,6 +23,7 @@ pub struct Config {
     pub web_dist: PathBuf,
     pub uploads: PathBuf,
     pub mode: String,
+    pub evidence_provider: EvidenceProvider,
     pub openai_key: Option<String>,
     pub jev_key: Option<String>,
     pub generation_model: Option<String>,
@@ -62,6 +77,11 @@ impl Config {
             }
         }
         let mode = get("AI_MODE", "disabled");
+        let evidence_provider = match get("EVIDENCE_PROVIDER", "openai").as_str() {
+            "openai" => EvidenceProvider::Openai,
+            "jev" => EvidenceProvider::Jev,
+            _ => return Err(Error("invalid_request")),
+        };
         let live = get("AI_LIVE_CALLS_ENABLED", "false");
         if !["disabled", "mock", "live"].contains(&mode.as_str())
             || !["true", "false"].contains(&live.as_str())
@@ -106,6 +126,7 @@ impl Config {
             secret,
             database_url,
             mode,
+            evidence_provider,
             openai_key,
             jev_key,
             generation_model,
@@ -121,9 +142,13 @@ impl Config {
             self.openai_key
                 .as_deref()
                 .ok_or(Error("provider_unavailable"))?,
-            self.jev_key
-                .as_deref()
-                .ok_or(Error("provider_unavailable"))?,
+            match self.evidence_provider {
+                EvidenceProvider::Jev => self
+                    .jev_key
+                    .as_deref()
+                    .ok_or(Error("provider_unavailable"))?,
+                EvidenceProvider::Openai => "",
+            },
             self.generation_model
                 .as_deref()
                 .ok_or(Error("provider_unavailable"))?,

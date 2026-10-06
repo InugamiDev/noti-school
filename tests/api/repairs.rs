@@ -1,6 +1,241 @@
 // Synthetic fixtures only. Exercises the actual router and SQL with the existing runtime role.
 use super::*;
 
+pub(super) async fn month_recovery(
+    s: &AppState,
+    pool: &sqlx::PgPool,
+    i: Uuid,
+    admin: &str,
+    version: Uuid,
+    hits: &Arc<AtomicUsize>,
+) {
+    use sha2::{Digest, Sha256};
+    for scenario in [
+        "rollover",
+        "released",
+        "exhausted",
+        "dispatched",
+        "uncertain",
+        "settled",
+        "root_dispatched",
+        "root_uncertain",
+        "root_settled",
+        "attempt_bound",
+    ] {
+        let root = Uuid::new_v4();
+        let stage = Uuid::new_v4();
+        let receipt = Uuid::new_v4();
+        let input = format!("Synthetic month recovery {scenario}");
+        let bytes = crate::pipeline::embedding_identity(&input).unwrap();
+        sqlx::query("INSERT INTO product.idempotency_keys(institution_id,user_id,key,request_sha256,operation_id,state,response) VALUES($1,$2,$3,repeat('c',64),$4,'completed','{}')").bind(i).bind(admin).bind(Uuid::new_v4()).bind(root).execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO product.ingestion_jobs(id,institution_id,version_id,state) VALUES($1,$2,$3,'running')").bind(root).bind(i).bind(version).execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO product.pipeline_stages(id,root_operation_id,stage,input_sha256) VALUES($1,$2,'month_recovery',$3)").bind(stage).bind(root).bind(format!("{:x}",Sha256::digest(&bytes))).execute(pool).await.unwrap();
+        let price: (String,i64)=sqlx::query_as("SELECT id,micro_usd_per_million_units FROM product.ai_prices WHERE provider='openai' AND model='text-embedding-3-small' AND component='embedding_tokens' AND effective_at<=clock_timestamp() AND valid_until>clock_timestamp() ORDER BY effective_at DESC,id LIMIT 1").fetch_one(pool).await.unwrap();
+        let plan = json!([{"price_id":price.0,"units":16000}]);
+        sqlx::query("SELECT product.reserve_ai($1,$2,1,$3)")
+            .bind(receipt)
+            .bind(stage)
+            .bind(&plan)
+            .execute(pool)
+            .await
+            .unwrap();
+        let migration = sqlx::PgPool::connect(MIGRATOR).await.unwrap();
+        if scenario == "rollover" || scenario == "exhausted" {
+            let mut tx = migration.begin().await.unwrap();
+            sqlx::query("SELECT pg_advisory_xact_lock(718443901)")
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO product.ai_months(month) VALUES(date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date-interval '1 month') ON CONFLICT DO NOTHING").execute(&mut *tx).await.unwrap();
+            sqlx::query("UPDATE product.ai_months SET reserved_micro_usd=reserved_micro_usd-(SELECT reserved_micro_usd FROM product.ai_reservations WHERE id=$1) WHERE month=(SELECT month FROM product.ai_reservations WHERE id=$1)").bind(receipt).execute(&mut *tx).await.unwrap();
+            sqlx::query("UPDATE product.ai_reservations SET month=date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date-interval '1 month' WHERE id=$1").bind(receipt).execute(&mut *tx).await.unwrap();
+            sqlx::query("UPDATE product.ai_months SET reserved_micro_usd=reserved_micro_usd+(SELECT reserved_micro_usd FROM product.ai_reservations WHERE id=$1) WHERE month=(SELECT month FROM product.ai_reservations WHERE id=$1)").bind(receipt).execute(&mut *tx).await.unwrap();
+            tx.commit().await.unwrap();
+            assert!(
+                sqlx::query("SELECT product.mark_ai($1,'dispatched')")
+                    .bind(receipt)
+                    .execute(pool)
+                    .await
+                    .is_err(),
+                "SQL UTC fence remains intact"
+            );
+        }
+        if scenario == "released" || scenario == "attempt_bound" {
+            sqlx::query("SELECT product.mark_ai($1,'released')")
+                .bind(receipt)
+                .execute(pool)
+                .await
+                .unwrap();
+            if scenario == "attempt_bound" {
+                for attempt in 2..=3 {
+                    let extra = Uuid::new_v4();
+                    sqlx::query("SELECT product.reserve_ai($1,$2,$3,$4)")
+                        .bind(extra)
+                        .bind(stage)
+                        .bind(attempt)
+                        .bind(&plan)
+                        .execute(pool)
+                        .await
+                        .unwrap();
+                    sqlx::query("SELECT product.mark_ai($1,'released')")
+                        .bind(extra)
+                        .execute(pool)
+                        .await
+                        .unwrap();
+                }
+            }
+        }
+        if scenario.contains("dispatched")
+            || scenario.contains("uncertain")
+            || scenario.contains("settled")
+        {
+            let fenced = if scenario.starts_with("root_") {
+                let root_receipt = Uuid::new_v4();
+                sqlx::query("SELECT product.reserve_ai($1,$2,1,$3)")
+                    .bind(root_receipt)
+                    .bind(root)
+                    .bind(&plan)
+                    .execute(pool)
+                    .await
+                    .unwrap();
+                root_receipt
+            } else {
+                receipt
+            };
+            sqlx::query("SELECT product.mark_ai($1,'dispatched')")
+                .bind(fenced)
+                .execute(pool)
+                .await
+                .unwrap();
+            if scenario.ends_with("uncertain") {
+                sqlx::query("SELECT product.mark_ai($1,'uncertain')")
+                    .bind(fenced)
+                    .execute(pool)
+                    .await
+                    .unwrap();
+            }
+            if scenario.ends_with("settled") {
+                sqlx::query("SELECT product.settle_ai($1,$2)")
+                    .bind(fenced)
+                    .bind(json!([{"price_id":price.0,"units":10}]))
+                    .execute(pool)
+                    .await
+                    .unwrap();
+            }
+        }
+        let run = crate::pipeline::Run {
+            state: s,
+            institution: i,
+            user: admin,
+            operation: root,
+        };
+        let before = hits.load(Ordering::SeqCst);
+        if scenario == "exhausted" {
+            let fill_price = format!("synthetic-fill-{}", Uuid::new_v4());
+            let fill = Uuid::new_v4();
+            let mut tx = migration.begin().await.unwrap();
+            sqlx::query("SELECT pg_advisory_xact_lock(718443901)")
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO product.ai_prices(id,provider,model,component,micro_usd_per_million_units,effective_at,valid_until,source_url) VALUES($1,'openai','synthetic-fill','embedding_tokens',1000000,clock_timestamp()-interval '1 second',clock_timestamp()+interval '1 hour','https://example.invalid/synthetic-fill')").bind(&fill_price).execute(&mut *tx).await.unwrap();
+            let available:i64=sqlx::query_scalar("SELECT (cap_micro_usd-spent_micro_usd-(SELECT sum(reserved_micro_usd) FROM product.ai_months))::bigint FROM product.ai_months WHERE month=date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date").fetch_one(&mut *tx).await.unwrap();
+            assert!(available > 0);
+            sqlx::query("SELECT product.reserve_ai($1,$2,1,$3)")
+                .bind(fill)
+                .bind(Uuid::new_v4())
+                .bind(json!([{"price_id":fill_price,"units":available}]))
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO product.ai_prices(id,provider,model,component,micro_usd_per_million_units,effective_at,valid_until,source_url) VALUES($1,'openai','text-embedding-3-small','embedding_tokens',$2,clock_timestamp(),clock_timestamp()+interval '1 hour','https://example.invalid/synthetic-reprice')").bind(format!("synthetic-higher-{}",Uuid::new_v4())).bind(price.1*2).execute(&mut *tx).await.unwrap();
+            tx.commit().await.unwrap();
+            for _ in 0..2 {
+                assert_eq!(
+                    run.embed("month_recovery", &input).await.unwrap_err().0,
+                    "budget_exhausted"
+                );
+            }
+            let state: String =
+                sqlx::query_scalar("SELECT state FROM product.ai_reservations WHERE id=$1")
+                    .bind(receipt)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                state, "reserved",
+                "failed replacement must roll back safe release"
+            );
+            assert_eq!(hits.load(Ordering::SeqCst), before);
+            sqlx::query("SELECT product.mark_ai($1,'released')")
+                .bind(fill)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+        if matches!(scenario, "rollover" | "released" | "exhausted") {
+            let (one, two) = tokio::join!(
+                run.embed("month_recovery", &input),
+                run.embed("month_recovery", &input)
+            );
+            assert!(one.is_ok() || two.is_ok(), "{scenario}: {one:?}, {two:?}");
+            assert_eq!(hits.load(Ordering::SeqCst) - before, 1);
+            assert_eq!(
+                run.embed("month_recovery", &input).await.unwrap().len(),
+                1536
+            );
+            assert_eq!(hits.load(Ordering::SeqCst) - before, 1);
+            let states: Vec<String> = sqlx::query_scalar(
+                "SELECT state FROM product.ai_reservations WHERE operation_id=$1 ORDER BY attempt",
+            )
+            .bind(stage)
+            .fetch_all(pool)
+            .await
+            .unwrap();
+            assert_eq!(states, vec!["released", "settled"]);
+            let current:bool=sqlx::query_scalar("SELECT month=date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date FROM product.ai_reservations WHERE operation_id=$1 AND attempt=2").bind(stage).fetch_one(pool).await.unwrap();
+            assert!(current);
+        } else {
+            let states_before: Vec<(Uuid,String)> = sqlx::query_as("SELECT id,state FROM product.ai_reservations WHERE operation_id=ANY($1) ORDER BY id")
+                .bind(vec![stage,root]).fetch_all(pool).await.unwrap();
+            for _ in 0..2 {
+                assert_eq!(
+                    run.embed("month_recovery", &input).await.unwrap_err().0,
+                    "conflict",
+                    "{scenario}"
+                );
+            }
+            let states_after: Vec<(Uuid,String)> = sqlx::query_as("SELECT id,state FROM product.ai_reservations WHERE operation_id=ANY($1) ORDER BY id")
+                .bind(vec![stage,root]).fetch_all(pool).await.unwrap();
+            assert_eq!(
+                states_after, states_before,
+                "fenced receipts must remain unchanged"
+            );
+            assert_eq!(hits.load(Ordering::SeqCst), before);
+            let count: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM product.ai_reservations WHERE operation_id=$1",
+            )
+            .bind(stage)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+            assert_eq!(count, if scenario == "attempt_bound" { 3 } else { 1 });
+        }
+        if scenario == "exhausted" {
+            sqlx::query("INSERT INTO product.ai_prices(id,provider,model,component,micro_usd_per_million_units,effective_at,valid_until,source_url) VALUES($1,'openai','text-embedding-3-small','embedding_tokens',$2,clock_timestamp(),clock_timestamp()+interval '1 hour','https://example.invalid/synthetic-restore-rate')").bind(format!("synthetic-restored-{}",Uuid::new_v4())).bind(price.1).execute(&migration).await.unwrap();
+        }
+        sqlx::query("UPDATE product.ingestion_jobs SET state='failed' WHERE id=$1")
+            .bind(root)
+            .execute(pool)
+            .await
+            .unwrap();
+        migration.close().await;
+    }
+    println!(
+        "PASS R2-03: SQL UTC fence, stale/released concurrent one-time recovery, repeated replay, atomic budget-exhaustion rollback, three-attempt bound and dispatched/uncertain/settled stage/root fences"
+    );
+}
+
 #[test]
 fn unicode_boundary_and_finite_packing() {
     for text in [
@@ -608,7 +843,7 @@ async fn recovery(
                         &uploader,
                         root,
                         &format!("chunk_{chunk}"),
-                        text.as_bytes(),
+                        &crate::pipeline::embedding_identity(&text).unwrap(),
                         OperationKind::Embedding,
                         "synthetic-model",
                     )
@@ -1041,19 +1276,21 @@ async fn native_pdf(s: &AppState, i: Uuid, source: Uuid, admin: &str) {
         .bind("127.0.0.1:3810".parse().unwrap())
         .expect("native API port must be unused under services.lock");
     drop(probe);
-    let mut child = tokio::process::Command::new(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../target/debug/noti-school-api"
-    ))
-    .env_clear()
-    .env("DATABASE_URL", DB)
-    .env("INTERNAL_AUTH_SECRET", SECRET)
-    .env("UPLOAD_DIR", &s.config.uploads)
-    .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null())
-    .kill_on_drop(true)
-    .spawn()
-    .unwrap();
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target")
+        });
+    let mut child = tokio::process::Command::new(target.join("debug/noti-school-api"))
+        .env_clear()
+        .env("DATABASE_URL", DB)
+        .env("INTERNAL_AUTH_SECRET", SECRET)
+        .env("UPLOAD_DIR", &s.config.uploads)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
     let client = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(15))

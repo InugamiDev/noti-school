@@ -6,8 +6,8 @@ These are the confirmed initial choices. No live application credentials have be
 
 | Item | Required values | Purpose |
 | --- | --- | --- |
-| OpenAI | OPENAI_API_KEY; available chat model | Answers, embeddings and optional official-domain discovery |
-| TypeSafe AI | TYPESAFE_API_KEY | Jev passage/evidence decisions |
+| OpenAI | OPENAI_API_KEY; available chat model | Answers, embeddings, reranking and default evidence/claim checks; optional official-domain discovery |
+| TypeSafe AI (opt-in) | EVIDENCE_PROVIDER=jev; TYPESAFE_API_KEY; pinned JEV_MODEL | Jev evidence/claim decisions; no outage fallback |
 | Google OAuth web application | GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET | Google sign-in |
 | Existing SMTP | Path to the existing HomeLab mail configuration, or host/port/TLS/sender and locally stored credentials | Verification, invitations and password reset; may remain disabled until configured |
 | Deployment | /home/inu/projects/noti-school; existing PM2 and Cloudflare Tunnel; DNS ownership/access for the selected hostname | Approved HomeLab rollout after verification; no main merge implied |

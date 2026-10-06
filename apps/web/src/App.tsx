@@ -1,4 +1,12 @@
-import { createComputed, createEffect, createSignal, For, Show, onCleanup, untrack } from 'solid-js';
+import {
+  createComputed,
+  createEffect,
+  createSignal,
+  For,
+  Show,
+  onCleanup,
+  untrack,
+} from 'solid-js';
 import { createRemoteResource as createResource, accessScope, setAccessScope } from './resource';
 import {
   ArrowUp,
@@ -7,20 +15,41 @@ import {
   Pause,
   Play,
   School,
-  LogIn,
-  History,
   X,
   MessageSquare,
-  ExternalLink,
 } from 'lucide-solid';
-import { AskRequest, QUESTION_MAX_CHARACTERS, QUESTION_MAX_BYTES, type AnswerOutput, type Schemas } from '@noti/contracts';
+import {
+  AskRequest,
+  QUESTION_MAX_CHARACTERS,
+  QUESTION_MAX_BYTES,
+  type AnswerOutput,
+  type Schemas,
+} from '@noti/contracts';
 import type { z } from 'zod';
-import { get, post, request, readAnswer, errorText, loadDraft, saveDraft, loadDraftConversation, endpoint, takeAuthCallback, operationKey, clearOperations, retainOperations, requestScope } from './api';
+import {
+  get,
+  post,
+  request,
+  readAnswer,
+  errorText,
+  loadDraft,
+  saveDraft,
+  loadDraftConversation,
+  endpoint,
+  takeAuthCallback,
+  operationKey,
+  clearOperations,
+  retainOperations,
+  requestScope,
+} from './api';
 import Archive from './Archive';
 import Sources from './Sources';
 import Auth from './Auth';
 import Admin from './Admin';
-import CollectionPreview from './CollectionPreview';
+import { isSiteRoute, sitePages, SiteHeader, SiteFooter } from './site/SiteShell';
+import MarketingPages from './site/MarketingPages';
+import { HomeSections } from './site/Sections';
+import './site/site.css';
 import Pagination, { pageSuffix } from './Pagination';
 type Institution = z.infer<typeof Schemas.Institution>;
 const institutionPath = '/api/v1/institutions/{institution_id}';
@@ -46,19 +75,29 @@ export default function App() {
     cancel(false);
     clearTimeout(transitionTimer);
     setTransitioning(false);
-    if (route() === '/') {setAnswer(undefined);setConversation(undefined);saveDraft(draft(), draftOwner);}
+    if (route() === '/') {
+      setAnswer(undefined);
+      setConversation(undefined);
+      saveDraft(draft(), draftOwner);
+    }
     setHistoryCursor('');
-    queueMicrotask(() => document.querySelector<HTMLElement>('main h1, main h2')?.focus());
   };
   window.addEventListener('hashchange', hash);
   onCleanup(() => window.removeEventListener('hashchange', hash));
-  const [capabilities, { refetch: refreshCapabilities }] = createResource(() => get('/api/v1/capabilities', 'Capabilities'));
+  const [capabilities, { refetch: refreshCapabilities }] = createResource(() =>
+    get('/api/v1/capabilities', 'Capabilities'),
+  );
   const [institutions] = createResource(() => get('/api/v1/institutions', 'InstitutionPage'));
   const [me, { refetch: refreshMe, mutate: setMe }] = createResource(() => get('/api/v1/me', 'Me'));
-  const revalidate = () => { if (document.visibilityState === 'visible') void refreshMe(); };
+  const revalidate = () => {
+    if (document.visibilityState === 'visible') void refreshMe();
+  };
   window.addEventListener('focus', revalidate);
   document.addEventListener('visibilitychange', revalidate);
-  onCleanup(() => { window.removeEventListener('focus', revalidate); document.removeEventListener('visibilitychange', revalidate); });
+  onCleanup(() => {
+    window.removeEventListener('focus', revalidate);
+    document.removeEventListener('visibilitychange', revalidate);
+  });
   const [institution, setInstitution] = createSignal('');
   createEffect(() => {
     const first = institutions()?.items[0];
@@ -77,7 +116,7 @@ export default function App() {
     setDraft(text);
     saveDraft(text, draftOwner, conversation());
   };
-  const [paused, setPaused] = createSignal(false),
+  const [paused, setPaused] = createSignal(readPreference('motion-paused') === 'true'),
     [zoom, setZoom] = createSignal(0),
     [transitioning, setTransitioning] = createSignal(false);
   const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
@@ -85,30 +124,85 @@ export default function App() {
   const motionChange = () => setReduced(motionQuery.matches);
   motionQuery.addEventListener('change', motionChange);
   onCleanup(() => motionQuery.removeEventListener('change', motionChange));
+  const [visible, setVisible] = createSignal(document.visibilityState === 'visible');
+  const visibility = () => setVisible(document.visibilityState === 'visible');
+  document.addEventListener('visibilitychange', visibility);
+  onCleanup(() => document.removeEventListener('visibilitychange', visibility));
+  const siteMotion = () => !paused() && !reduced() && visible();
+  createEffect(() => writePreference('motion-paused', String(paused())));
+  createEffect(() => {
+    if (paused() || reduced()) setTransitioning(false);
+  });
+  createEffect(() => {
+    const current = route();
+    const marketing = isSiteRoute(current) ? sitePages[current] : undefined;
+    const appTitle = current.startsWith('/sources')
+      ? 'Sources'
+      : current.startsWith('/history')
+        ? 'History'
+        : current.startsWith('/auth')
+          ? 'Account'
+          : current.startsWith('/admin')
+            ? 'Collection administration'
+            : current === '/answer'
+              ? 'Your answer'
+              : 'Page not found';
+    document.title = `${marketing?.[0] || appTitle} — noti.school`;
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute(
+        'content',
+        marketing?.[1] || 'Your noti.school workspace for questions, sources and account access.',
+      );
+    queueMicrotask(() => {
+      if (route() !== current) return;
+      const heading = document.querySelector<HTMLElement>('main h1, main h2');
+      heading?.setAttribute('tabindex', '-1');
+      heading?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    });
+  });
   let transitionTimer: ReturnType<typeof setTimeout> | undefined;
   const [busy, setBusy] = createSignal(false),
     [error, setError] = createSignal(''),
     [answer, setAnswer] = createSignal<AnswerOutput>();
   const [citation, setCitation] = createSignal('');
-  const [conversation,setConversation]=createSignal<{id:string;institution:string}>();
-  const [historyCursor,setHistoryCursor]=createSignal('');
+  const [conversation, setConversation] = createSignal<{ id: string; institution: string }>();
+  const [historyCursor, setHistoryCursor] = createSignal('');
   const [feedback, setFeedback] = createSignal(false),
     [feedbackMessage, setFeedbackMessage] = createSignal('');
   const [listCursor, setListCursor] = createSignal('');
   const [history, { refetch: refreshHistory }] = createResource(
-    () => route().startsWith('/history') && institution() && member()
-      ? { institution: institution(), cursor: listCursor(), user: me()!.identity.user_id } : false,
-    async key => ({ ...await get(scoped(key.institution, '/conversations') + pageSuffix(key.cursor), 'ConversationPage'), owner: key.user, institution: key.institution }),
+    () =>
+      route().startsWith('/history') && institution() && member()
+        ? { institution: institution(), cursor: listCursor(), user: me()!.identity.user_id }
+        : false,
+    async (key) => ({
+      ...(await get(
+        scoped(key.institution, '/conversations') + pageSuffix(key.cursor),
+        'ConversationPage',
+      )),
+      owner: key.user,
+      institution: key.institution,
+    }),
   );
-  const visibleHistory = () => history()?.owner === me()?.identity.user_id && history()?.institution === institution() ? history() : undefined;
-  function member() { return me()?.memberships.some(m => m.institution_id === institution()); }
+  const visibleHistory = () =>
+    history()?.owner === me()?.identity.user_id && history()?.institution === institution()
+      ? history()
+      : undefined;
+  function member() {
+    return me()?.memberships.some((m) => m.institution_id === institution());
+  }
   let draftOwner = 'anonymous';
   let initialized = false;
   let controller: AbortController | undefined;
   createComputed(() => {
     if (!institution() || (me.loading && !me())) return;
     const user = me()?.identity.user_id;
-    const memberships = me()?.memberships.map(m => `${m.institution_id}:${m.role}`).sort() || [];
+    const memberships =
+      me()
+        ?.memberships.map((m) => `${m.institution_id}:${m.role}`)
+        .sort() || [];
     const anonymous = `anonymous:${institution()}`;
     const owner = user ? JSON.stringify([user, institution(), memberships]) : anonymous;
     const scope = JSON.stringify([owner, institution()]);
@@ -116,16 +210,29 @@ export default function App() {
       if (scope === accessScope()) return;
       cancel(false);
       const adopt = (draftOwner === 'anonymous' || draftOwner === anonymous) && !!user;
-      const nextDraft = !initialized ? draft() || loadDraft(owner, adopt ? anonymous : undefined) : adopt ? draft() : '';
-      const restoredConversation = !initialized && route() === '/answer' ? loadDraftConversation(owner) : undefined;
-      if (initialized) { clearOperations(); clearAuthCallback(); }
-      else retainOperations(scope);
+      const nextDraft = !initialized
+        ? draft() || loadDraft(owner, adopt ? anonymous : undefined)
+        : adopt
+          ? draft()
+          : '';
+      const restoredConversation =
+        !initialized && route() === '/answer' ? loadDraftConversation(owner) : undefined;
+      if (initialized) {
+        clearOperations();
+        clearAuthCallback();
+      } else retainOperations(scope);
       draftOwner = owner;
       initialized = true;
       setDraft(nextDraft);
       saveDraft(nextDraft, owner, restoredConversation);
-      setAnswer(undefined); setConversation(restoredConversation); setCitation(''); setError('');
-      setFeedback(false); setFeedbackMessage(''); setListCursor(''); setHistoryCursor('');
+      setAnswer(undefined);
+      setConversation(restoredConversation);
+      setCitation('');
+      setError('');
+      setFeedback(false);
+      setFeedbackMessage('');
+      setListCursor('');
+      setHistoryCursor('');
       setAccessScope(scope);
     });
   });
@@ -134,10 +241,19 @@ export default function App() {
     if (callback) setAuthCallback({ ...callback, token: '', deletion: '', error: false });
   }
   function signedOut() {
-    cancel(false); clearOperations(); setDraft(''); setMe(undefined);
+    cancel(false);
+    clearOperations();
+    setDraft('');
+    setMe(undefined);
     clearAuthCallback();
-    setAnswer(undefined); setConversation(undefined); setCitation('');
-    setFeedback(false); setFeedbackMessage(''); setError(''); setListCursor(''); setHistoryCursor('');
+    setAnswer(undefined);
+    setConversation(undefined);
+    setCitation('');
+    setFeedback(false);
+    setFeedbackMessage('');
+    setError('');
+    setListCursor('');
+    setHistoryCursor('');
     draftOwner = `anonymous:${institution()}`;
     setAccessScope(JSON.stringify([draftOwner, institution()]));
   }
@@ -147,7 +263,10 @@ export default function App() {
       controller.abort();
       controller = undefined;
       setBusy(false);
-      if (announce) setError('Stopped waiting. Processing may continue. Submit the same question to check the same operation.');
+      if (announce)
+        setError(
+          'Stopped waiting. Processing may continue. Submit the same question to check the same operation.',
+        );
     }
   }
   onCleanup(() => {
@@ -169,13 +288,18 @@ export default function App() {
       institution_id: institution(),
       question: draft(),
       language: language(),
-      ...(previous?.institution === institution()
-        ? { conversation_id: previous.id }
-        : {}),
+      ...(previous?.institution === institution() ? { conversation_id: previous.id } : {}),
       discover: false,
     });
-    if (!parsed.success || !draft().trim() || new TextEncoder().encode(draft()).length > QUESTION_MAX_BYTES || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(draft())) {
-      setError(`Enter 1–${QUESTION_MAX_CHARACTERS.toLocaleString('en')} Unicode characters, at most ${QUESTION_MAX_BYTES.toLocaleString('en')} UTF-8 bytes. Only tab and line breaks are allowed as control characters.`);
+    if (
+      !parsed.success ||
+      !draft().trim() ||
+      new TextEncoder().encode(draft()).length > QUESTION_MAX_BYTES ||
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(draft())
+    ) {
+      setError(
+        `Enter 1–${QUESTION_MAX_CHARACTERS.toLocaleString('en')} Unicode characters, at most ${QUESTION_MAX_BYTES.toLocaleString('en')} UTF-8 bytes. Only tab and line breaks are allowed as control characters.`,
+      );
       return;
     }
     setBusy(true);
@@ -185,8 +309,15 @@ export default function App() {
     saveDraft(draft(), draftOwner, previous);
     const owner = accessScope();
     let key: string;
-    try { key = await operationKey(owner, parsed.data, active.signal); }
-    catch { if (controller === active) { controller = undefined; setBusy(false); } return; }
+    try {
+      key = await operationKey(owner, parsed.data, active.signal);
+    } catch {
+      if (controller === active) {
+        controller = undefined;
+        setBusy(false);
+      }
+      return;
+    }
     if (active.signal.aborted || owner !== accessScope()) return;
     // The request starts before any visual transition. No automatic retries of paid work.
     const pending = post('/api/v1/answers', 'Answer', parsed.data, {
@@ -205,9 +336,10 @@ export default function App() {
       if (active.signal.aborted || owner !== accessScope() || controller !== active) return;
       if (result.institution_id !== institution()) throw new Error('Scope mismatch');
       setAnswer(result);
-      setConversation({id:result.conversation_id,institution:result.institution_id});
+      setConversation({ id: result.conversation_id, institution: result.institution_id });
     } catch (e) {
-      if (!active.signal.aborted && owner === accessScope() && controller === active) setError(errorText(e));
+      if (!active.signal.aborted && owner === accessScope() && controller === active)
+        setError(errorText(e));
     } finally {
       if (controller === active) {
         controller = undefined;
@@ -220,13 +352,26 @@ export default function App() {
   );
   createEffect(() => writePreference('language', language()));
   const [prior] = createResource(
-    () => (/^\/history\/[^/]+$/.test(route()) && institution() && member() ? {id:route().split('/')[2]!,cursor:historyCursor(), institution:institution(), owner:accessScope()} : false),
+    () =>
+      /^\/history\/[^/]+$/.test(route()) && institution() && member()
+        ? {
+            id: route().split('/')[2]!,
+            cursor: historyCursor(),
+            institution: institution(),
+            owner: accessScope(),
+          }
+        : false,
     async (key) => {
       const page = await get(
-        scoped(key.institution, '/conversations/{conversation_id}/answers', { conversation_id: key.id })+pageSuffix(key.cursor),
+        scoped(key.institution, '/conversations/{conversation_id}/answers', {
+          conversation_id: key.id,
+        }) + pageSuffix(key.cursor),
         'AnswerPage',
       );
-      if (page.items.some(a => a.institution_id !== key.institution || a.conversation_id !== key.id)) throw new Error('Scope mismatch');
+      if (
+        page.items.some((a) => a.institution_id !== key.institution || a.conversation_id !== key.id)
+      )
+        throw new Error('Scope mismatch');
       return { ...page, items: page.items.map(readAnswer) };
     },
   );
@@ -244,7 +389,10 @@ export default function App() {
         }
         required
       />
-      <span id="question-limits" class="sr-only">Up to {QUESTION_MAX_CHARACTERS} Unicode characters and {QUESTION_MAX_BYTES} UTF-8 bytes. Tabs and line breaks are allowed.</span>
+      <span id="question-limits" class="sr-only">
+        Up to {QUESTION_MAX_CHARACTERS} Unicode characters and {QUESTION_MAX_BYTES} UTF-8 bytes.
+        Tabs and line breaks are allowed.
+      </span>
       <div class="composer-tools">
         <select
           aria-label="Answer language"
@@ -257,7 +405,12 @@ export default function App() {
         <Show
           when={busy()}
           fallback={
-            <button class="primary" type="submit" title="Ask noti.school" disabled={accessScope() === 'initial'}>
+            <button
+              class="primary"
+              type="submit"
+              title="Ask noti.school"
+              disabled={accessScope() === 'initial'}
+            >
               Ask <ArrowUp size={18} />
             </button>
           }
@@ -270,7 +423,24 @@ export default function App() {
     </form>
   );
   return (
-    <>
+    <div
+      class="app-shell"
+      data-motion={siteMotion() ? 'on' : 'off'}
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+          return;
+        const link = event.target instanceof Element ? event.target.closest('a') : null;
+        if (link?.getAttribute('href') !== `#${route()}`) return;
+        // A same-route hash link emits no route change; still return to the primary task.
+        event.preventDefault();
+        const target =
+          route() === '/'
+            ? document.getElementById('question')
+            : document.querySelector<HTMLElement>('main h1, main h2');
+        target?.focus({ preventScroll: true });
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }}
+    >
       <a
         class="skip"
         href="#main"
@@ -281,138 +451,119 @@ export default function App() {
       >
         Skip to content
       </a>
-      <header>
-        <a class="wordmark" href="#/">
-          noti<span> school</span>
-          <span class="brand-dot">.</span>
-        </a>
-        <nav aria-label="Main navigation">
-          <a href="#/sources">
-            <BookOpen size={17} />
-            Sources
-          </a>
-          <a href="#/history">
-            <History size={17} />
-            History
-          </a>
-          <a href="#/auth">
-            <LogIn size={17} />
-            {me() ? 'Account' : 'Sign in'}
-          </a>
-        </nav>
-      </header>
+      <SiteHeader route={route()} signedIn={!!me()} />
       <main id="main" tabIndex={-1}>
         <Show when={route() === '/' || transitioning()}>
-          <section
-            class="hero"
-            classList={{ leaving: route() !== '/' }}
-            aria-hidden={route() !== '/'}
-            inert={route() !== '/'}
-          >
-            <Archive paused={paused()} zoom={zoom()} />
-            <div class="hero-content">
-              <div class="institution">
-                <School size={17} />
-                <label class="sr-only" for="institution">
-                  Institution
-                </label>
-                <select
-                  id="institution"
-                  value={institution()}
-                  onChange={(e) => {
-                    cancel(false);
-                    setInstitution(e.currentTarget.value);
-                    setAnswer(undefined);
-                  }}
-                >
-                  <Show
-                    when={institutions()?.items.length}
-                    fallback={<option value="">HCMIU · coverage unavailable</option>}
-                  >
-                    <For each={institutions()?.items}>
-                      {(item: Institution) => (
-                        <option value={item.id}>
-                          {item.name}
-                          {item.coverage === 'synthetic_demo' ? ' · Demo' : ''}
-                        </option>
-                      )}
-                    </For>
-                  </Show>
-                </select>
-              </div>
-              <h1 tabIndex={-1}>noti.school</h1>
-              <p class="promise">
-                Your university questions,
-                <br class="mobile-break" /> answered with sources.
-              </p>
-              <Show when={route() === '/'}>{form()}</Show>
-              <div class="suggestions">
-                <span>Start with a question</span>
-                <For
-                  each={[
-                    'Where can I find the student handbook?',
-                    'How do I find the right course form?',
-                    'Tôi có thể tìm quy chế học vụ ở đâu?',
-                  ]}
-                >
-                  {(question) => (
-                    <button
-                      onClick={() => {
-                        updateDraft(draft() ? `${draft()}\n${question}` : question);
-                        composer.focus();
-                      }}
-                    >
-                      {question}
-                      <ArrowUpRight size={15} />
-                    </button>
-                  )}
-                </For>
-              </div>
-              <p class="coverage">
-                {selected()?.coverage === 'approved_sources'
-                  ? 'Approved sources available'
-                  : selected()?.coverage === 'synthetic_demo'
-                    ? 'Demo collection · synthetic examples only'
-                    : 'Pilot collection · source coverage not yet confirmed'}
-              </p>
-              <Show when={error()}>
-                <p role="alert" class="error">
-                  {error()}
-                </p>
-              </Show>
-            </div>
-            <button
-              class="motion-control"
-              title={paused() ? 'Resume animation' : 'Pause animation'}
-              aria-label={paused() ? 'Resume animation' : 'Pause animation'}
-              aria-pressed={paused()}
-              disabled={reduced()}
-              aria-describedby={reduced() ? 'system-motion' : undefined}
-              onClick={() => setPaused((v) => !v)}
+          <div class="site-home" data-site-page="home">
+            <section
+              class="hero"
+              classList={{ leaving: route() !== '/' }}
+              aria-hidden={route() !== '/'}
+              inert={route() !== '/'}
             >
-              {paused() ? <Play size={16} /> : <Pause size={16} />}
-            </button>
-            <Show when={reduced()}><span id="system-motion" class="sr-only">Animation is disabled by your system’s reduced-motion preference.</span></Show>
-          </section>
-          <section class="collection-preview">
-            <div>
-              <span class="section-number">01 / The collection</span>
-              <h2>Go straight to the source.</h2>
-              <p>Find the document. Check the version. Read it for yourself.</p>
-            </div>
-            <a class="text-link" href="#/sources">
-              Explore sources <ArrowUpRight size={20} />
-            </a>
-          </section>
-          <CollectionPreview institution={institution()} />
-          <section class="university">
-            <School size={26} />
-            <h2>Reconnect with your students.</h2>
-            <p>A clearer way to share your institution’s knowledge.</p>
-            <a href="#/admin">
-              Manage your collection <ArrowUpRight size={17} />
-            </a>
-          </section>
+              <Archive paused={paused()} zoom={zoom()} />
+              <div class="hero-content">
+                <div class="institution">
+                  <School size={17} />
+                  <label class="sr-only" for="institution">
+                    Institution
+                  </label>
+                  <select
+                    id="institution"
+                    value={institution()}
+                    onChange={(e) => {
+                      cancel(false);
+                      setInstitution(e.currentTarget.value);
+                      setAnswer(undefined);
+                    }}
+                  >
+                    <Show
+                      when={institutions()?.items.length}
+                      fallback={<option value="">HCMIU · coverage unavailable</option>}
+                    >
+                      <For each={institutions()?.items}>
+                        {(item: Institution) => (
+                          <option value={item.id}>
+                            {item.name}
+                            {item.coverage === 'synthetic_demo' ? ' · Demo' : ''}
+                          </option>
+                        )}
+                      </For>
+                    </Show>
+                  </select>
+                </div>
+                <h1 tabIndex={-1}>noti.school</h1>
+                <p class="promise">
+                  Your university questions,
+                  <br class="mobile-break" /> answered with sources.
+                </p>
+                <Show when={route() === '/'}>{form()}</Show>
+                <div class="suggestions">
+                  <span>Start with a question</span>
+                  <For
+                    each={[
+                      'Where can I find the student handbook?',
+                      'How do I find the right course form?',
+                      'Tôi có thể tìm quy chế học vụ ở đâu?',
+                    ]}
+                  >
+                    {(question) => (
+                      <button
+                        onClick={() => {
+                          updateDraft(draft() ? `${draft()}\n${question}` : question);
+                          composer.focus();
+                        }}
+                      >
+                        {question}
+                        <ArrowUpRight size={15} />
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <p class="coverage">
+                  {selected()?.coverage === 'approved_sources'
+                    ? 'Approved sources available'
+                    : selected()?.coverage === 'synthetic_demo'
+                      ? 'Demo collection · synthetic examples only'
+                      : 'Pilot collection · source coverage not yet confirmed'}
+                </p>
+                <Show when={error()}>
+                  <p role="alert" class="error">
+                    {error()}
+                  </p>
+                </Show>
+              </div>
+              <button
+                class="motion-control"
+                title={paused() ? 'Resume animation' : 'Pause animation'}
+                aria-label={paused() ? 'Resume animation' : 'Pause animation'}
+                aria-pressed={paused()}
+                disabled={reduced()}
+                aria-describedby={reduced() ? 'system-motion' : undefined}
+                onClick={() => setPaused((v) => !v)}
+              >
+                {paused() ? <Play size={16} /> : <Pause size={16} />}
+              </button>
+              <Show when={reduced()}>
+                <span id="system-motion" class="sr-only">
+                  Animation is disabled by your system’s reduced-motion preference.
+                </span>
+              </Show>
+            </section>
+            <Show when={route() === '/'}>
+              <HomeSections motion={siteMotion()} institution={institution()} />
+            </Show>
+          </div>
+        </Show>
+        <Show
+          when={
+            isSiteRoute(route()) && route() !== '/'
+              ? (route() as Exclude<keyof typeof sitePages, '/'>)
+              : undefined
+          }
+          keyed
+        >
+          {(page) => <MarketingPages route={page} motion={siteMotion()} />}
         </Show>
         <Show when={route() === '/answer'}>
           <div class="workspace">
@@ -541,46 +692,74 @@ export default function App() {
                 </For>
               </Show>
               <Show when={citation()}>
-                <Show when={accessScope()} keyed>{_scope => <Sources institution={institution()} citation={citation()} />}</Show>
+                <Show when={accessScope()} keyed>
+                  {(_scope) => <Sources institution={institution()} citation={citation()} />}
+                </Show>
               </Show>
             </aside>
           </div>
         </Show>
         <Show when={route().startsWith('/sources')}>
           <div class="page">
-            <Show when={accessScope()} keyed>{_scope => <Sources institution={institution()} source={route().split('/')[2] || ''} />}</Show>
+            <Show when={accessScope()} keyed>
+              {(_scope) => (
+                <Sources institution={institution()} source={route().split('/')[2] || ''} />
+              )}
+            </Show>
           </div>
         </Show>
         <Show when={route().startsWith('/auth') ? authCallback() : undefined} keyed>
           <div class="page">
-            <Show when={accessScope()} keyed>{_scope => <Auth
-              callback={authCallback()}
-              capabilities={capabilities()}
-              authenticated={!!me()}
-              refresh={() => { void refreshMe(); void refreshCapabilities(); }}
-              signedOut={signedOut}
-            />}</Show>
+            <Show when={accessScope()} keyed>
+              {(_scope) => (
+                <Auth
+                  callback={authCallback()}
+                  capabilities={capabilities()}
+                  authenticated={!!me()}
+                  refresh={() => {
+                    void refreshMe();
+                    void refreshCapabilities();
+                  }}
+                  signedOut={signedOut}
+                />
+              )}
+            </Show>
           </div>
         </Show>
         <Show when={route().startsWith('/admin')}>
           <div class="page">
-            <Show when={accessScope()} keyed>{_scope => <Admin
-              institution={institution()}
-              allowed={
-                (me()?.memberships.some(
-                  (m) => m.institution_id === institution() && m.role === 'admin',
-                ) ?? false)
-              }
-            />}</Show>
+            <Show when={accessScope()} keyed>
+              {(_scope) => (
+                <Admin
+                  institution={institution()}
+                  allowed={
+                    me()?.memberships.some(
+                      (m) => m.institution_id === institution() && m.role === 'admin',
+                    ) ?? false
+                  }
+                />
+              )}
+            </Show>
           </div>
         </Show>
         <Show when={route().startsWith('/history')}>
           <div class="page">
             <h1 tabIndex={-1}>Your conversations</h1>
             <p class="muted">Saved conversations for this institution. Sign in to read them.</p>
-            <Show when={history.loading}><p role="status">Loading saved conversations…</p></Show>
-            <Show when={history.error}><p role="alert">{errorText(history.error)}</p></Show>
-            <For each={visibleHistory()?.items} fallback={<Show when={!history.loading && !history.error}><p>No saved conversations available.</p></Show>}>
+            <Show when={history.loading}>
+              <p role="status">Loading saved conversations…</p>
+            </Show>
+            <Show when={history.error}>
+              <p role="alert">{errorText(history.error)}</p>
+            </Show>
+            <For
+              each={visibleHistory()?.items}
+              fallback={
+                <Show when={!history.loading && !history.error}>
+                  <p>No saved conversations available.</p>
+                </Show>
+              }
+            >
               {(row) => (
                 <a
                   class="list-row"
@@ -591,7 +770,12 @@ export default function App() {
                 </a>
               )}
             </For>
-            <Pagination cursor={listCursor()} next={visibleHistory()?.next_cursor} change={setListCursor} label="History pages"/>
+            <Pagination
+              cursor={listCursor()}
+              next={visibleHistory()?.next_cursor}
+              change={setListCursor}
+              label="History pages"
+            />
             <Show when={prior.loading}>
               <p role="status">Loading conversation…</p>
             </Show>
@@ -604,7 +788,7 @@ export default function App() {
                   class="list-row"
                   onClick={() => {
                     setAnswer(readAnswer(a));
-                    setConversation({id:a.conversation_id,institution:a.institution_id});
+                    setConversation({ id: a.conversation_id, institution: a.institution_id });
                     location.hash = '/answer';
                   }}
                 >
@@ -613,11 +797,17 @@ export default function App() {
               )}
             </For>
             <Show when={prior()}>
-              <Pagination cursor={historyCursor()} next={prior()?.next_cursor} change={setHistoryCursor} label="Conversation pages"/>
+              <Pagination
+                cursor={historyCursor()}
+                next={prior()?.next_cursor}
+                change={setHistoryCursor}
+                label="Conversation pages"
+              />
               <button
                 onClick={async () => {
                   if (!confirm('Delete this conversation?')) return;
-                  const owner = requestScope(), path = route();
+                  const owner = requestScope(),
+                    path = route();
                   try {
                     await request(
                       scoped(institution(), '/conversations/{conversation_id}', {
@@ -645,6 +835,7 @@ export default function App() {
         </Show>
         <Show
           when={
+            !isSiteRoute(route()) &&
             !/^\/(?:$|answer$|sources(?:\/|$)|auth(?:\/|$)|admin(?:\/|$)|history(?:\/|$))/.test(
               route().split('?')[0]!,
             )
@@ -656,14 +847,8 @@ export default function App() {
           </div>
         </Show>
       </main>
-      <footer>
-        <a href="#/">noti.school</a>
-        <span>Independent HCMIU pilot · No official affiliation claimed</span>
-        <a href="#/admin">
-          For institutions <ExternalLink size={14} />
-        </a>
-      </footer>
-    </>
+      <SiteFooter paused={paused()} reduced={reduced()} toggle={() => setPaused((v) => !v)} />
+    </div>
   );
 }
 function historyReplace(path: string) {

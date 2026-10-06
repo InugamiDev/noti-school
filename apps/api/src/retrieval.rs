@@ -115,6 +115,17 @@ pub async fn chunks(
     Ok(Json(json!({"items":rows,"next_cursor":cursor})))
 }
 
+pub(crate) fn request_hash(b: &Ask, execution: &Value) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&json!({"request":b,"execution":execution}))
+                .map_err(crate::error::invalid)?
+        )
+    ))
+}
+
 pub async fn ask(
     State(s): State<AppState>,
     h: HeaderMap,
@@ -144,12 +155,8 @@ pub async fn ask(
     if h.get_all("idempotency-key").iter().count() != 1 {
         return Err(Error("invalid_request"));
     }
-    use sha2::{Digest, Sha256};
     use sqlx::Row;
-    let hash = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&b).map_err(crate::error::invalid)?)
-    );
+    let hash = request_hash(&b, &crate::pipeline::execution_contract(&s.config)?)?;
     // Replay/conflict remains stable during a provider cooldown and never pays again.
     if let Some(row) = sqlx::query("SELECT request_sha256,state,response,expires_at>now() AS valid FROM product.idempotency_keys WHERE institution_id=$1 AND user_id=$2 AND key=$3")
         .bind(b.institution_id).bind(&u.user_id).bind(key).fetch_optional(s.pool()?).await? {

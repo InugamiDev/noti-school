@@ -10,6 +10,11 @@ export default function Archive(props: { paused: boolean; zoom: number }) {
   let pendingZoom = false;
   const [fallback, setFallback] = createSignal(false);
   onMount(() => {
+    // Without visibility observation, keep the archive still and the page usable.
+    if (typeof IntersectionObserver === 'undefined') {
+      setFallback(true);
+      return;
+    }
     void import('./scene')
       .then((module) => {
         if (disposed) return;
@@ -27,6 +32,7 @@ export default function Archive(props: { paused: boolean; zoom: number }) {
   // intent: animate only the visible fallback, without a JS frame loop; status: implemented.
   createEffect(() => {
     if (!fallback()) return;
+    if (typeof IntersectionObserver === 'undefined' || !bitmap.animate) return;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
     let visible = false;
     let animation: Animation | undefined;
@@ -43,35 +49,68 @@ export default function Archive(props: { paused: boolean; zoom: number }) {
     };
     const sync = () => {
       if (stopped) return;
-      if (!canPlay()) { animation?.pause(); return; }
-      if (animation) { animation.play(); return; }
-      replace([{ transform: 'scale(1.04)' }, { transform: resting }],
-        { duration: 2200, easing: 'ease-out', fill: 'forwards' });
+      if (!canPlay()) {
+        if (animation) {
+          // Resolve the pending pause at this frame, including an offscreen observation.
+          const time = animation.currentTime;
+          animation.pause();
+          if (time !== null) animation.currentTime = time;
+        }
+        return;
+      }
+      if (animation) {
+        animation.play();
+        return;
+      }
+      replace([{ transform: 'scale(1.04)' }, { transform: resting }], {
+        duration: 2200,
+        easing: 'ease-out',
+        fill: 'forwards',
+      });
       animation!.onfinish = () => {
-        replace([{ transform: resting }, { transform: 'translate(-0.8%, 0.5%) scale(1.12)' }],
-          { duration: 10000, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out' });
+        replace([{ transform: resting }, { transform: 'translate(-0.8%, 0.5%) scale(1.12)' }], {
+          duration: 10000,
+          direction: 'alternate',
+          iterations: Infinity,
+          easing: 'ease-in-out',
+        });
       };
     };
     fallbackZoom = () => {
-      if (!visible) { pendingZoom = true; return; }
+      if (!visible) {
+        pendingZoom = true;
+        return;
+      }
       if (!canPlay()) return;
       const transform = getComputedStyle(bitmap).transform;
-      replace([{ transform }, { transform: 'translate(-0.6%, 0.3%) scale(1.2)' }],
-        { duration: 600, easing: 'ease-out', fill: 'forwards' });
+      replace([{ transform }, { transform: 'translate(-0.6%, 0.3%) scale(1.2)' }], {
+        duration: 600,
+        easing: 'ease-out',
+        fill: 'forwards',
+      });
     };
     const observer = new IntersectionObserver(([entry]) => {
       visible = entry?.isIntersecting ?? false;
       sync();
-      if (visible && pendingZoom) { pendingZoom = false; fallbackZoom?.(); }
+      if (visible && pendingZoom) {
+        pendingZoom = false;
+        fallbackZoom?.();
+      }
     });
     observer.observe(host.parentElement!);
     document.addEventListener('visibilitychange', sync);
     reduced.addEventListener('change', sync);
-    createEffect(() => { props.paused; sync(); });
+    createEffect(() => {
+      props.paused;
+      sync();
+    });
     onCleanup(() => {
       stopped = true;
       fallbackZoom = undefined;
-      if (animation) { animation.onfinish = null; animation.cancel(); }
+      if (animation) {
+        animation.onfinish = null;
+        animation.cancel();
+      }
       observer.disconnect();
       document.removeEventListener('visibilitychange', sync);
       reduced.removeEventListener('change', sync);

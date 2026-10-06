@@ -26,8 +26,8 @@ Use a dedicated database and least-privilege roles. Better Auth and product tabl
 3. Store page-preserving chunks and OpenAI embeddings. Keep embedding model/dimension metadata; a model change requires a deliberate reindex.
 4. Retrieve lexical and vector candidates within the authorized institution/source filters. Fuse ranks, deduplicate and apply limits.
 5. Expand through a small number of approved evidence-backed graph links. Graph entities include courses, procedures, regulations, offices, forms and programs. Extracted relations are candidates until approved; graph nodes are not sources of truth.
-6. Ask Jev bounded structured questions about each retained passage. Pin the version and evaluate English/Vietnamese errors. Validate response types, numerical ranges and expected question IDs. Classifier results do not override access controls or factual checks.
-7. Ask OpenAI for an answer with explicit claim-to-evidence references, only using retained authorized evidence. Validate references against supplied passage IDs. Unsupported claims, missing support or unresolved conflicts trigger retry within a small bound, qualification or abstention.
+6. Retain at most 12 candidates including approved graph evidence, rerank capped excerpts with one strict OpenAI Responses call, then pack at most four full passages. EVIDENCE_PROVIDER=openai (default) uses typed sufficiency/conflict and claim-support verdicts; jev explicitly opts into pinned Jev with strict question-ID/probability validation. Model decisions never override access controls. Separate calls to the same provider are fallible and may share errors.
+7. Ask OpenAI for an answer with explicit claim-to-evidence references, only using retained authorized evidence. Validate references against supplied passage IDs. A separate selected-provider support call must support every atomic claim using only its cited evidence. Unsupported claims, missing support, uncertainty or unresolved conflicts cause abstention; no automatic retry.
 8. Return original source identifiers and locators, not model-invented URLs. Record model versions, retrieval/citation trace, token usage and feedback without logging secrets or unnecessary personal content.
 
 During generation, the UI may stream progress. Do not present unvalidated claim text as verified while citation/evidence checks are still pending.
@@ -42,4 +42,4 @@ The initial combined AI budget is USD 50 per calendar month in UTC. Include Open
 
 Use configurable, dated model/tool pricing. Fail closed on missing prices or credentials. An application ledger cannot prevent unrelated spending with the same credentials; dedicated project keys and provider-level controls are also needed. Provider budget dashboards may be alerts rather than hard caps, so do not promise an absolute billing guarantee.
 
-If Jev is down, do not silently drop the agreed evidence check. Return a clear unavailable state or source-only search results. Provider 429/5xx responses use bounded retry/backoff and never create an infinite agent loop.
+If a selected provider is unavailable, return a clear unavailable state or source-only search results. Selected Jev never falls back to OpenAI. Provider 429/5xx responses are not automatically retried. See [RAG pipeline](rag-pipeline.md) for bounds and accounting.

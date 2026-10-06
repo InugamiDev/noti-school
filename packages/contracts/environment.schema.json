@@ -60,6 +60,14 @@
         "false"
       ]
     },
+    "EVIDENCE_PROVIDER": {
+      "default": "openai",
+      "type": "string",
+      "enum": [
+        "openai",
+        "jev"
+      ]
+    },
     "AI_MODE": {
       "default": "disabled",
       "type": "string",

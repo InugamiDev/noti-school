@@ -2,7 +2,7 @@
 
 Answers students can trace. A connection universities can rebuild.
 
-noti.school is an evidence-grounded university knowledge assistant in development. Students ask about regulations, handbooks, courses, forms and procedures. Its answer pipeline retrieves approved institutional evidence, checks it with Jev, and uses OpenAI to compose a cited answer. A bounded knowledge graph connects related documents and institutional entities without replacing source evidence. Live inference and real institutional coverage still require configuration and evaluation.
+noti.school is an evidence-grounded university knowledge assistant in development. Students ask about regulations, handbooks, courses, forms and procedures. Its answer pipeline retrieves approved institutional evidence, reranks it with OpenAI and checks it with the selected evidence provider, and uses OpenAI to compose a cited answer. A bounded knowledge graph connects related documents and institutional entities without replacing source evidence. Live inference and real institutional coverage still require configuration and evaluation.
 
 For universities: **Reconnect with your students.**
 
@@ -10,13 +10,13 @@ For students: **Your university questions, answered with sources.**
 
 ## Current State
 
-The application includes an animated SolidJS/Three.js landing and student/admin interface, Better Auth identity service, and a Rust evidence pipeline: document extraction/indexing, hybrid retrieval, approved graph expansion, Jev evidence and claim checks, and OpenAI cited answers. Account setup, history, feedback, guarded migrations and a persistent budget ledger are implemented. Optional OpenAI web discovery is not implemented and remains visibly disabled; administrators can propose and fetch allowed official URLs for review.
+The application includes an animated SolidJS/Three.js landing and student/admin interface, Better Auth identity service, and a Rust evidence pipeline: document extraction/indexing, hybrid retrieval, approved graph expansion, selected-provider evidence and claim checks, and OpenAI cited answers. Account setup, history, feedback, guarded migrations and a persistent budget ledger are implemented. Optional OpenAI web discovery is not implemented and remains visibly disabled; administrators can propose and fetch allowed official URLs for review.
 
 Automated checks exercise actual PostgreSQL runtime roles and Better Auth, synthetic provider/email transports, browser workflows, and animation pixels/lifecycle. The integrated repair snapshot passes 53 browser tests, 10 web unit tests, 19 identity tests, seven identity/operator integration tests, Rust unit/security and SQL pipeline tests, and the actual Better Auth-to-Rust account/source journey. Independent experience review separately reran all 53 browser tests successfully. The animated background includes entry and submit zoom, pause/reduced-motion controls, and a moving bitmap fallback when WebGL is unavailable.
 
 Three fresh independent reviews still identified seven medium-severity application defects, including recovery/accounting fences, authentication load isolation and account-flow edge cases. Passing tests do not clear those findings. See [verification and open release gates](docs/verification-status.md). Live providers, approved HCMIU coverage, human-labeled bilingual quality, and production release gates remain unverified. Nothing is publicly deployed.
 
-The first pilot targets HCMIU and English/Vietnamese questions. Application services, files and PostgreSQL will run in HomeLab. OpenAI and TypeSafe's Jev remain external inference services. Worldwide SaaS access is a later release, gated on testing, privacy and operational readiness.
+The first pilot targets HCMIU and English/Vietnamese questions. Application services, files and PostgreSQL will run in HomeLab. OpenAI is the default external inference service; TypeSafe's Jev is an explicit opt-in evidence provider. Worldwide SaaS access is a later release, gated on testing, privacy and operational readiness.
 
 ## Confirmed Stack
 
@@ -28,7 +28,7 @@ The first pilot targets HCMIU and English/Vietnamese questions. Application serv
 | Retrieval | PostgreSQL full-text search, pgvector, reciprocal-rank fusion |
 | Knowledge graph | PostgreSQL entity/edge tables with evidence provenance |
 | Generation and embeddings | OpenAI |
-| Evidence classification | TypeSafe AI / Jev, required from the first live build |
+| Evidence classification | OpenAI by default; TypeSafe AI / Jev opt-in |
 | Email | Existing SMTP server |
 | Files | Private local volume initially |
 | Deployment | Existing HomeLab PM2 daemon and Cloudflare Tunnel; same-origin routing |

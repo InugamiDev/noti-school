@@ -356,7 +356,7 @@ pub async fn action(
         {
             return Err(Error("conflict"));
         }
-        let job: Option<Uuid> = sqlx::query_scalar("UPDATE product.ingestion_jobs j SET state='queued',error_code=NULL,updated_at=now() WHERE j.institution_id=$1 AND j.version_id=$2 AND j.state IN ('failed','disabled') AND j.attempt<3 AND EXISTS(SELECT 1 FROM product.idempotency_keys k WHERE k.operation_id=j.id AND k.institution_id=j.institution_id) AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p JOIN product.ai_reservations r ON r.operation_id=p.id WHERE p.root_operation_id=j.id AND r.state IN ('dispatched','uncertain')) RETURNING j.id")
+        let job: Option<Uuid> = sqlx::query_scalar("UPDATE product.ingestion_jobs j SET state='queued',error_code=NULL,updated_at=now() WHERE j.institution_id=$1 AND j.version_id=$2 AND j.state IN ('failed','disabled') AND j.attempt<3 AND EXISTS(SELECT 1 FROM product.idempotency_keys k WHERE k.operation_id=j.id AND k.institution_id=j.institution_id) AND NOT EXISTS(SELECT 1 FROM product.ai_reservations r WHERE (r.operation_id=j.id OR r.operation_id IN (SELECT p.id FROM product.pipeline_stages p WHERE p.root_operation_id=j.id)) AND r.state IN ('dispatched','uncertain')) RETURNING j.id")
             .bind(i).bind(id).fetch_optional(&mut *tx).await?;
         let job = job.ok_or(Error("conflict"))?;
         // Explicit administrator recovery extends the indexing operation, never an answer replay window.

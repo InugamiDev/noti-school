@@ -45,13 +45,18 @@ Currency is integer micro-USD; global calendar UTC cap is 50,000,000. The shared
 `ai_prices` holds versioned dated rate IDs (micro-USD per million units), source URL and validity window.
 Explicit zero-rate components are allowed and must still appear in complete usage reconciliation;
 missing prices remain invalid. A reservation must include at least one positive-cost component.
-No rates ship enabled: the coordinator supplies reviewed OpenAI model/token/cache/tool/search content,
-embedding and Jev input/output prices before live dispatch. Unpriced components fail closed. Record
+No rates ship enabled; paid calls remain disabled by default. For default `EVIDENCE_PROVIDER=openai`,
+the coordinator supplies an OpenAI key, exact configured `OPENAI_CHAT_MODEL` and three reviewed rates
+whose dated validity windows cover dispatch: that chat model's `input_tokens` and `output_tokens`,
+plus `text-embedding-3-small`'s `embedding_tokens`. Only explicit `EVIDENCE_PROVIDER=jev` additionally
+requires the TypeSafe/Jev key, pinned `jev-1.13.0` model and its two current dated rates,
+`jev_input_tokens` and `jev_output_tokens`. Missing selected-provider configuration or prices fails
+closed; selected-provider failure never triggers automatic fallback. Unpriced components fail closed. Record
 cached tokens conservatively at uncached rate unless independently priced. Never overwrite a used price;
 insert a new ID. Retain old prices for reconciliation and audit.
 
 API assembles a complete conservative dispatch plan from bounded input/output tokens, every allowed tool
-invocation and its content-token charge, embedding batch size, Jev request/input/output limits. If any
+invocation and its content-token charge, embedding batch size and, only in Jev mode, Jev request/input/output limits. If any
 maximum or price is unknown, reject dispatch. The model cannot choose the cost plan. `reserve_ai` accepts
 `[{price_id,units}]` with positive integer units; rounds each component up and atomically checks/reserves
 under a global transaction advisory lock. `operation_id` and attempt (1..3) are unique; retry gets a new
@@ -67,5 +72,6 @@ Release is only `mark_ai(id,'released')` before dispatch. After uncertain transp
 usage, mark uncertain or leave dispatched; neither releases funds. No TTL releases. Operator reconciliation
 requires authoritative usage or proof of no charge. Outstanding prior-month reservations also reduce
 the current month's available cap. Dispatch across UTC rollover is rejected and must be re-reserved.
+For a matching recoverable stage, the API holds root/stage ownership locks followed by the global accounting lock. It may atomically release a proven never-dispatched prior-month `reserved` receipt and reserve a new current-month attempt using current dated prices. Already safely `released` receipts also permit a new attempt; all historical receipts remain, with the existing maximum of three attempts. A failed replacement reservation rolls back the release, preserving funds. Same-month reserved recovery keeps the original receipt and exact plan. Dispatched, uncertain and settled-without-result stage/root receipts remain fenced; no automatic paid request is retried. Settlement takes ownership locks before the accounting lock to match recovery and avoid inverted lock ordering.
 Late settlement is charged to the reservation month; coordinator reconciles provider billing attribution
 before clearing cross-month uncertainty. Pure estimate tests are not proof of SQL concurrency correctness.

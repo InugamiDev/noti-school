@@ -18,7 +18,7 @@ Make institutional information accessible through an answer-first interface whil
 - Interactive prompt-first landing page and usable answer workspace, source library, source reader and feedback form.
 - Email/password and Google login using Better Auth, initially invite-only. SMTP-backed verification and password reset once configured. Administrative membership is assigned explicitly, not inferred from an email suffix.
 - PDF/text ingestion, extraction diagnostics, page-preserving chunks, source-version checksums and document lifecycle states.
-- Hybrid lexical/vector retrieval scoped by institution, visibility, approval and validity; bounded graph expansion; Jev assessment; OpenAI answer generation.
+- Hybrid lexical/vector retrieval scoped by institution, visibility, approval and validity; bounded graph expansion; OpenAI reranking; selected-provider evidence and claim checks (OpenAI by default, Jev opt-in); OpenAI answer generation.
 - Source-grounded citations, abstention and conflict handling. Separate evidence support from syntactically valid links.
 - Optional on-demand official-domain web discovery using OpenAI. Search results are not automatically approved corpus evidence. They remain separately labeled until fetched, validated and reviewed.
 - Persistent conversations and feedback with access controls; user deletion and clear retention defaults.

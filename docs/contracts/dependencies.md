@@ -35,3 +35,5 @@ OpenAI chat model deliberately has no guessed default or price. `text-embedding-
 is retained from approved requirements; API worker must verify account availability and all current
 generation/embedding/tool prices before enabling live calls. Jev English preference requires bilingual
 evaluation; this foundation makes no measured retrieval, citation-support or Vietnamese-quality claim.
+
+RAG-1 reuses the existing Rust/HTTP dependencies and configured OPENAI_CHAT_MODEL for strict Responses reranking and typed evidence/support checks. No new model default, price, provider SDK or dependency is introduced. Jev remains pinned for explicit EVIDENCE_PROVIDER=jev.

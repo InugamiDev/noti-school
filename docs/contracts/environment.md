@@ -11,12 +11,12 @@ the internal secret, then checks identity reachability. Auth does not require th
 Safe limited boot has AI_MODE=disabled and AI_LIVE_CALLS_ENABLED=false. Missing DB, auth secret or
 internal secret permits public static/health/capabilities only; protected operations fail 503. Secrets,
 when configured, need >=32 high-entropy characters. Production mock mode is forbidden. Live mode requires
-both switches to agree; missing either provider, prices or DB keeps dependent capabilities disabled.
+both switches to agree; missing OpenAI, the selected evidence provider, its required dated prices or DB keeps dependent capabilities disabled. EVIDENCE_PROVIDER is openai|jev, default openai. OpenAI mode needs three OpenAI rates; Jev mode additionally needs its key, pinned model and two Jev rates. No automatic fallback.
 Environment presence is never evidence of credential validity, mail delivery or provider readiness.
 
 API restricted file (`shared/api.env`, 0600): NODE_ENV, APP_ORIGIN, DATABASE_URL, INTERNAL_AUTH_SECRET,
 API_BIND_ADDRESS, AUTH_INTERNAL_URL, WEB_DIST_DIR, UPLOAD_DIR, AI_MODE, AI_LIVE_CALLS_ENABLED,
-AI_MONTHLY_BUDGET_USD, OPENAI_API_KEY, TYPESAFE_API_KEY, OPENAI_CHAT_MODEL,
+AI_MONTHLY_BUDGET_USD, EVIDENCE_PROVIDER, OPENAI_API_KEY, TYPESAFE_API_KEY, OPENAI_CHAT_MODEL,
 OPENAI_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, JEV_MODEL.
 Auth restricted file (`shared/auth.env`, 0600): NODE_ENV, APP_ORIGIN, AUTH_DATABASE_URL,
 BETTER_AUTH_SECRET, INTERNAL_AUTH_SECRET, AUTH_BIND_HOST, AUTH_PORT, GOOGLE_CLIENT_ID,

@@ -29,20 +29,23 @@ impl ProviderHttp {
                 .map_err(|_| Error("core_unavailable"))?,
         })
     }
-    pub fn failed(&self) -> bool {
-        !self
-            .failures
+    pub fn failed(&self, selected: crate::config::EvidenceProvider) -> bool {
+        self.failures
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .is_empty()
+            .keys()
+            .any(|p| p == "openai" || selected == crate::config::EvidenceProvider::Jev)
     }
-    pub fn admit(&self) -> Result<()> {
+    pub fn admit(&self, selected: crate::config::EvidenceProvider) -> Result<()> {
         if self
             .failures
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .values()
-            .any(|at| at.elapsed() < Duration::from_secs(30))
+            .iter()
+            .any(|(p, at)| {
+                (p == "openai" || selected == crate::config::EvidenceProvider::Jev)
+                    && at.elapsed() < Duration::from_secs(30)
+            })
         {
             return Err(Error("provider_unavailable"));
         }
@@ -145,6 +148,26 @@ impl ProviderHttp {
             .await?;
         let (result, usage) =
             self.observe("openai", providers::validate_generation(&bytes, model))?;
+        let input: Value =
+            serde_json::from_str(body["input"].as_str().ok_or(Error("invalid_request"))?)
+                .map_err(crate::error::invalid)?;
+        let allowed = crate::rag::ids(
+            input["evidence"]
+                .as_array()
+                .ok_or(Error("invalid_request"))?,
+        )?;
+        self.observe(
+            "openai",
+            if result
+                .claims
+                .iter()
+                .any(|c| c.evidence_ids.iter().any(|id| !allowed.contains(id)))
+            {
+                Err(Error("provider_unavailable"))
+            } else {
+                Ok(())
+            },
+        )?;
         attempt
             .settle(
                 usage,
@@ -152,6 +175,30 @@ impl ProviderHttp {
             )
             .await?;
         Ok(result)
+    }
+    pub async fn structured(
+        &self,
+        key: &str,
+        body: &Value,
+        model: &str,
+        attempt: Attempt,
+        validate: impl FnOnce(Value) -> Result<Value>,
+    ) -> Result<Value> {
+        if !attempt.is_for(OperationKind::Generation) {
+            return Err(Error("invalid_request"));
+        }
+        let bytes = self
+            .exchange(
+                "https://api.openai.com/v1/responses",
+                key,
+                body,
+                Duration::from_secs(15),
+            )
+            .await?;
+        let (value, usage) = self.observe("openai", providers::validate_response(&bytes, model))?;
+        let value = self.observe("openai", validate(value))?;
+        attempt.settle(usage, value.clone()).await?;
+        Ok(value)
     }
     async fn exchange(
         &self,
