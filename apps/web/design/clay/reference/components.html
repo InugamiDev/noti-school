@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clay Components</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="clay.css">
+<style>
+.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--page) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 12px; height: 60px; }
+.top .logo { display: inline-flex; gap: 10px; align-items: center; font: 700 1.05rem/1 var(--font-display); text-decoration: none; }
+.top .logo i { width: 22px; height: 22px; border-radius: 8px; background: var(--clay); box-shadow: inset 0 -3px 0 rgba(0,0,0,.18); }
+.top .btn:first-of-type { margin-left: auto; }
+header.intro { padding: 48px 0 8px; }
+header.intro h1 { font-size: clamp(2rem, 4vw, 3rem); }
+header.intro p { color: var(--muted); max-width: 64ch; margin-top: 10px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 28px 0 80px; }
+.demo { padding: 22px; }
+.demo.wide { grid-column: 1 / -1; }
+.demo-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.demo-h h2 { font-size: 1.125rem; }
+.demo-h code { margin-left: auto; font: 500 .72rem/1.3 var(--font-mono); color: var(--muted); background: var(--page); padding: 4px 8px; border-radius: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.stack { display: grid; gap: 12px; }
+.note { font-size: .82rem; color: var(--muted); margin-top: 12px; }
+.sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.sw div { border-radius: var(--r-sm); border: 1px solid var(--line); overflow: hidden; font-size: .78rem; }
+.sw span { display: block; height: 56px; }
+.sw p { padding: 8px 10px; }
+.sw p b { display: block; }
+.sw p code { font-family: var(--font-mono); color: var(--muted); }
+.type-spec p { margin: 4px 0; }
+.empty { text-align: center; padding: 28px 16px; border: 1px dashed var(--line-strong); border-radius: var(--r-md); }
+.empty .ico { width: 48px; height: 48px; border-radius: 16px; margin: 0 auto 12px; display: grid; place-items: center; background: var(--clay-soft); color: var(--clay); }
+.empty h3 { font-size: 1.05rem; margin-bottom: 4px; }
+.empty p { color: var(--muted); font-size: .9rem; margin-bottom: 14px; }
+.list-item { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.list-item:last-child { border-bottom: 0; }
+.list-item .badge { margin-left: auto; }
+.list-item .meta { margin-left: auto; font: 400 .74rem/1 var(--font-mono); color: var(--faint); }
+.list-item .t { font-weight: 600; font-size: .9375rem; }
+.list-item .s { font-size: .8125rem; color: var(--muted); }
+.feedback { display: flex; align-items: center; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: .82rem; color: var(--muted); }
+.feedback .btn { --h: 32px; }
+.feedback .btn[aria-pressed="true"] { background: var(--sage-soft); color: #3c5a4b; }
+.unavail { display: flex; gap: 12px; padding: 14px; border-radius: var(--r-sm); background: var(--danger-soft); color: #7a1b13; font-size: .9rem; }
+.unavail .lucide { margin-top: 2px; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="top"><div class="wrap">
+  <a class="logo" href="index.html"><i aria-hidden="true"></i>Clay components</a>
+  <a class="btn btn-ghost btn-sm" href="index.html"><i data-lucide="arrow-left"></i>Landing</a>
+  <button class="btn btn-secondary btn-sm" type="button" data-open-cmdk><i data-lucide="command"></i>Command menu <span class="kbd" data-mod>⌘K</span></button>
+</div></div>
+
+<main class="wrap">
+<header class="intro">
+  <h1>Clay components</h1>
+  <p>Each component shows the Solid primitive it is built from (code label, top right). Behaviour and keyboard rules here are the contract for the Solid port. Example content uses a sample handbook, not HCMIU policy.</p>
+</header>
+
+<div class="grid">
+
+  <section class="card demo wide"><div class="demo-h"><h2>Colour tokens</h2><code>styles/_tokens.scss</code></div>
+    <div class="sw">
+      <div><span style="background:var(--page)"></span><p><b>page</b><code>#f4f5f2</code></p></div>
+      <div><span style="background:var(--surface)"></span><p><b>surface</b><code>#ffffff</code></p></div>
+      <div><span style="background:var(--sunken)"></span><p><b>sunken</b><code>#eceee9</code></p></div>
+      <div><span style="background:var(--ink)"></span><p><b>ink</b><code>#1e2529</code></p></div>
+      <div><span style="background:var(--muted)"></span><p><b>muted</b><code>#56616a</code></p></div>
+      <div><span style="background:var(--clay)"></span><p><b>clay</b><code>#a8431f</code></p></div>
+      <div><span style="background:var(--clay-soft)"></span><p><b>clay-soft</b><code>#f6e6dc</code></p></div>
+      <div><span style="background:var(--sage)"></span><p><b>sage</b><code>#5f7d6e</code></p></div>
+      <div><span style="background:var(--mark)"></span><p><b>mark</b><code>#f6d9b8</code></p></div>
+      <div><span style="background:var(--danger)"></span><p><b>danger</b><code>#b42318</code></p></div>
+    </div>
+  </section>
+
+  <section class="card demo"><div class="demo-h"><h2>Type</h2><code>Bricolage · Hanken · JetBrains</code></div>
+    <div class="type-spec">
+      <p style="font:700 2.5rem/1.05 var(--font-display);letter-spacing:-.03em">Hạn rút môn học</p>
+      <p style="font:700 1.5rem/1.2 var(--font-display);letter-spacing:-.02em">Section heading</p>
+      <p>Body text at 16px with 1.65 line height keeps Vietnamese diacritics clear: Sinh viên cần kiểm tra quy định.</p>
+      <p class="mono" style="font-size:.78rem;color:var(--muted)">Sample Student Handbook · p. 31 · sec. 4.2</p>
+    </div>
+  </section>
+
+  <section class="card demo"><div class="demo-h"><h2>Buttons</h2><code>Solid UI Button</code></div>
+    <div class="stack">
+      <div class="row"><button class="btn btn-primary" type="button">Ask</button><button class="btn btn-secondary" type="button">Open sources</button><button class="btn btn-ghost" type="button">Cancel</button></div>
+      <div class="row"><button class="btn btn-primary btn-sm" type="button"><i data-lucide="plus"></i>New question</button><button class="btn btn-secondary btn-sm" type="button" id="load-btn"><span>Save</span></button><button class="btn btn-secondary btn-icon" type="button" aria-label="Copy" data-tip="Copy"><i data-lucide="copy"></i></button><button class="btn btn-primary" type="button" disabled>Disabled</button></div>
+    </div>
+    <p class="note">Primary is the only clay-filled control on a screen. Click Save to see the loading state.</p>
+  </section>
+
+  <section class="card demo wide"><div class="demo-h"><h2>Prompt input</h2><code>TextField + ToggleGroup + Button (shadcn Prompt Input)</code></div>
+    <form id="ask" novalidate>
+      <label class="label" for="q" style="display:block;margin-bottom:6px">Your question</label>
+      <div class="prompt">
+        <textarea id="q" rows="2" maxlength="500" placeholder="Ask about a deadline, form or rule"></textarea>
+        <div class="prompt-bar">
+          <div class="seg" role="group" aria-label="Answer language"><button type="button" aria-pressed="true" data-lang="en">English</button><button type="button" aria-pressed="false" data-lang="vi">Tiếng Việt</button></div>
+          <span class="hint"><span class="kbd">Enter</span> to ask <span class="kbd">Shift</span><span class="kbd">Enter</span> new line</span>
+          <button class="prompt-send" type="submit" aria-label="Ask"><i data-lucide="arrow-up"></i></button>
+        </div>
+      </div>
+    </form>
+    <p class="note">Draft and language persist per browser. IME composition never submits. Send is disabled while empty and shows a spinner while asking.</p>
+  </section>
+
+  <section class="card demo wide"><div class="demo-h"><h2>Answer states</h2><code>Tabs: Kobalte Tabs</code></div>
+    <div class="tabs">
+      <div role="tablist" aria-label="Answer state">
+        <button role="tab" id="t1" aria-controls="p1" aria-selected="true">Answer</button>
+        <button role="tab" id="t2" aria-controls="p2" aria-selected="false" tabindex="-1">Loading</button>
+        <button role="tab" id="t3" aria-controls="p3" aria-selected="false" tabindex="-1">No answer</button>
+        <button role="tab" id="t4" aria-controls="p4" aria-selected="false" tabindex="-1">Unavailable</button>
+      </div>
+      <div role="tabpanel" id="p1" aria-labelledby="t1">
+        <article class="card answer" style="box-shadow:var(--e1)">
+          <div class="answer-head"><span class="badge badge-clay">Sample handbook, not HCMIU policy</span><button class="btn btn-ghost btn-icon btn-sm" type="button" aria-label="Copy answer" data-tip="Copy answer" data-copy-answer><i data-lucide="copy"></i></button></div>
+          <p class="answer-text">You can withdraw from a course until the end of week 10<button class="cite" type="button" data-cite="a" aria-pressed="true" aria-label="Citation 1">1</button>. Later withdrawals need the dean's approval<button class="cite" type="button" data-cite="b" aria-pressed="false" aria-label="Citation 2">2</button>.</p>
+          <div class="source"><div class="source-meta"><i data-lucide="file-text" style="width:14px;height:14px"></i><span>Sample Student Handbook, 2025 ed. · p. 31 · sec. 4.2</span><button class="btn btn-ghost btn-icon btn-sm" type="button" id="copy-cite" aria-label="Copy citation" data-tip="Copy citation"><i data-lucide="link"></i></button></div>
+            <p>Students may withdraw from a course <mark data-mark="a" class="on">until the end of the tenth week</mark> of the semester. <mark data-mark="b">After this point, a withdrawal requires approval from the dean.</mark></p></div>
+          <div class="feedback">Was this answer supported by the source?
+            <button class="btn btn-ghost btn-sm" type="button" aria-pressed="false" data-fb><i data-lucide="thumbs-up"></i>Yes</button>
+            <button class="btn btn-ghost btn-sm" type="button" aria-pressed="false" data-fb><i data-lucide="flag"></i>Report a problem</button></div>
+        </article>
+      </div>
+      <div role="tabpanel" id="p2" aria-labelledby="t2" hidden>
+        <article class="card answer" style="box-shadow:var(--e1)" aria-busy="true" aria-label="Answer loading">
+          <div class="row" style="margin-bottom:14px;color:var(--muted);font-size:.875rem"><span class="spin" style="width:14px;height:14px;border-radius:50%;border:2px solid var(--clay);border-right-color:transparent;animation:spin .7s linear infinite"></span>Reading 3 matching passages</div>
+          <div class="skel" style="height:14px;width:92%"></div><div class="skel" style="height:14px;width:78%;margin-top:10px"></div>
+          <div class="skel" style="height:72px;margin-top:16px;border-radius:var(--r-sm)"></div>
+          <button class="btn btn-ghost btn-sm" type="button" style="margin-top:12px"><i data-lucide="square"></i>Stop</button>
+        </article>
+      </div>
+      <div role="tabpanel" id="p3" aria-labelledby="t3" hidden>
+        <div class="empty"><div class="ico"><i data-lucide="file-question"></i></div><h3>No supported answer</h3><p>The approved sources don't cover this. It won't guess.</p>
+          <div class="row" style="justify-content:center"><button class="btn btn-secondary btn-sm" type="button"><i data-lucide="library"></i>Search sources</button><button class="btn btn-ghost btn-sm" type="button"><i data-lucide="pencil"></i>Rephrase</button></div></div>
+      </div>
+      <div role="tabpanel" id="p4" aria-labelledby="t4" hidden>
+        <div class="unavail" role="alert"><i data-lucide="cloud-off"></i><div><b>Answers are unavailable right now.</b><br>The evidence service is not configured. Your question is saved in this tab; try again later.</div></div>
+      </div>
+    </div>
+    <p class="note">Arrow keys move between tabs. Every state is designed: loading shows real progress and a Stop control; unavailable never falls back to a guess.</p>
+  </section>
+
+  <section class="card demo"><div class="demo-h"><h2>Badges and chips</h2><code>Solid UI Badge</code></div>
+    <div class="stack">
+      <div class="row"><span class="badge badge-sage"><span class="dot"></span>Approved</span><span class="badge badge-clay"><span class="dot"></span>Under review</span><span class="badge"><span class="dot"></span>Superseded</span><span class="badge badge-danger"><span class="dot"></span>Unavailable</span></div>
+      <div class="row"><button class="chip" type="button">How do I register for courses?</button><button class="chip" type="button">Khi nào hạn rút môn học?</button></div>
+    </div>
+  </section>
+
+  <section class="card demo"><div class="demo-h"><h2>Fields</h2><code>Solid UI TextField</code></div>
+    <div class="stack">
+      <div class="field"><label class="label" for="em">University email</label><input class="input" id="em" type="email" placeholder="you@example.edu" autocomplete="email"><span class="hint">Use the email your invitation was sent to.</span></div>
+      <div class="input-wrap"><i data-lucide="search"></i><input class="input" type="search" placeholder="Filter sources" aria-label="Filter sources"></div>
+    </div>
+  </section>
+
+  <section class="card demo"><div class="demo-h"><h2>Source list</h2><code>List + Badge</code></div>
+    <div>
+      <div class="list-item"><i data-lucide="book-open"></i><div><div class="t">Sample Student Handbook</div><div class="s">2025 edition · 64 pages</div></div><span class="badge badge-sage">Approved</span></div>
+      <div class="list-item"><i data-lucide="book-open"></i><div><div class="t">Sample Student Handbook</div><div class="s">2023 edition</div></div><span class="badge">Superseded</span></div>
+      <div class="list-item"><i data-lucide="file-text"></i><div><div class="t">Sample withdrawal form guide</div><div class="s">4 pages</div></div><span class="badge badge-clay">Under review</span></div>
+    </div>
+  </section>
+
+  <section class="card demo"><div class="demo-h"><h2>Feedback</h2><code>Sonner toast · Tooltip</code></div>
+    <div class="row">
+      <button class="btn btn-secondary btn-sm" type="button" data-toast="Citation copied"><i data-lucide="bell"></i>Show toast</button>
+      <button class="btn btn-secondary btn-sm" type="button" data-tip="Tooltips appear after 300ms">Hover me</button>
+      <span class="row" style="gap:6px;font-size:.85rem;color:var(--muted)"><span class="kbd" data-mod>⌘K</span>command menu <span class="kbd">/</span>focus question</span>
+    </div>
+    <div class="acc" style="margin-top:18px">
+      <details><summary>Accordion item<i data-lucide="plus"></i></summary><div class="acc-body">Native details/summary in the mockup; Kobalte Accordion in the port for animated height and keyboard support.</div></details>
+    </div>
+  </section>
+
+  <section class="card demo wide"><div class="demo-h"><h2>Empty state</h2><code>Pattern</code></div>
+    <div class="empty"><div class="ico"><i data-lucide="history"></i></div><h3>No questions yet</h3><p>Your past questions and their sources will appear here.</p><a class="btn btn-primary btn-sm" href="index.html#q"><i data-lucide="message-square"></i>Ask your first question</a></div>
+  </section>
+</div>
+</main>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<dialog class="cmdk" id="cmdk" aria-label="Command menu">
+  <div class="cmdk-search"><i data-lucide="search"></i><input id="cmdk-input" type="text" placeholder="Search pages, questions and actions" aria-controls="cmdk-list" aria-autocomplete="list" role="combobox" aria-expanded="true"><span class="kbd">Esc</span></div>
+  <ul class="cmdk-list" id="cmdk-list" role="listbox"></ul>
+  <div class="cmdk-foot"><span><span class="kbd">↑</span><span class="kbd">↓</span>move</span><span><span class="kbd">Enter</span>select</span><span><span class="kbd">Esc</span>close</span></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/lucide@1.48.0/dist/umd/lucide.min.js"></script>
+<script src="ui.js"></script>
+<script>
+document.querySelectorAll('[data-toast]').forEach(b => b.addEventListener('click', () => notiToast(b.dataset.toast)));
+document.querySelectorAll('[data-fb]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-fb]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  notiToast(b.textContent.includes('Report') ? 'Thanks. Point to the claim and passage in the next step.' : 'Thanks for the feedback');
+}));
+document.querySelector('[data-copy-answer]')?.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(document.querySelector('.answer-text').textContent.replace(/\s+/g, ' ').trim()); notiToast('Answer copied with citations'); } catch { notiToast('Copy failed', 'triangle-alert'); }
+});
+const lb = document.getElementById('load-btn');
+lb.addEventListener('click', () => {
+  lb.disabled = true; lb.innerHTML = '<span class="spin" aria-hidden="true"></span><span>Saving</span>';
+  setTimeout(() => { lb.disabled = false; lb.innerHTML = '<span>Save</span>'; notiToast('Saved'); }, 1100);
+});
+</script>
+</body>
+</html>
