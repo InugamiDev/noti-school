@@ -7,7 +7,7 @@ import { Send } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { Band } from '../site/Band';
 import { Button, Select, TextField, toast } from '../ui';
-import { requestRoles, validateRequest, type RequestErrors, type RequestRole } from './landing';
+import { requestRoles, validateRequest, type RequestErrors, type RequestRole } from './logic';
 import styles from './Landing.module.scss';
 
 const joinSteps = [

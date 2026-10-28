@@ -21,7 +21,7 @@ import {
   type AnswerLanguage,
   type School as SchoolOption,
 } from '../ui';
-import { sampleQuestions } from './landing';
+import { sampleQuestions } from './logic';
 import styles from './Landing.module.scss';
 
 export interface ComposerProps {

@@ -19,7 +19,7 @@ import {
   Users,
 } from 'lucide-solid';
 import type { AnswerLanguage, CommandItem } from '../ui';
-import { sampleQuestions } from '../landing/landing';
+import { sampleQuestions } from '../landing/logic';
 
 export interface SiteCommandActions {
   language: AnswerLanguage;

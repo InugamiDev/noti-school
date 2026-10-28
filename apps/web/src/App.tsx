@@ -40,7 +40,7 @@ import { isSiteRoute, parseHash, sitePages, type LandingSection } from './site/r
 import { siteCommands } from './site/commands';
 import MarketingPages from './site/MarketingPages';
 import { Landing } from './landing/Landing';
-import { coverageText, heroLabel, membershipInstitution, schoolOptions } from './landing/landing';
+import { coverageText, heroLabel, membershipInstitution, schoolOptions } from './landing/logic';
 import { CommandMenu, looksVietnamese, Toaster, useCommandMenu } from './ui';
 import './site/site.scss';
 import Pagination, { pageSuffix } from './Pagination';

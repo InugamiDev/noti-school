@@ -9,7 +9,7 @@ import {
   schoolOptions,
   validateRequest,
   type InstitutionLike,
-} from '../src/landing/landing.ts';
+} from '../src/landing/logic.ts';
 import { looksVietnamese } from '../src/ui/lib/prompt.ts';
 
 const pilot: InstitutionLike = { id: 'a', slug: 'hcmiu', name: 'HCMIU', coverage: 'none' };
