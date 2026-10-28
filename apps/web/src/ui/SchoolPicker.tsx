@@ -124,7 +124,7 @@ export function SchoolPicker(props: SchoolPickerProps) {
                       <small>{school.subtitle}</small>
                     </span>
                     <Badge tone={school.status === 'pilot' ? 'sage' : 'neutral'} class={styles.badge}>
-                      {school.status === 'pilot' ? 'Pilot' : 'Available'}
+                      {school.status === 'pilot' ? 'Pilot' : 'Demo'}
                     </Badge>
                   </>,
                 )

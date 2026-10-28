@@ -41,7 +41,7 @@ export function schoolOptions(
     id: i.id,
     name: i.name,
     subtitle: coverageText(i.coverage),
-    status: i.coverage === 'synthetic_demo' ? 'available' : 'pilot',
+    status: i.coverage === 'synthetic_demo' ? 'demo' : 'pilot',
   }));
 }
 

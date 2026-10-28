@@ -19,7 +19,7 @@ const approved: InstitutionLike = { id: 'c', slug: 'c', name: 'C', coverage: 'ap
 test('signed-out visitors see the listed institutions and nothing invented', () => {
   const schools = schoolOptions([pilot, demo], undefined);
   assert.deepEqual(schools.map(s => s.id), ['a', 'b']);
-  assert.deepEqual(schools.map(s => s.status), ['pilot', 'available']);
+  assert.deepEqual(schools.map(s => s.status), ['pilot', 'demo']);
   assert.equal(schools[0]!.subtitle, 'Pilot collection, coverage not yet confirmed');
   assert.deepEqual(schoolOptions([], undefined), []);
 });

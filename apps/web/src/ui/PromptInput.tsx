@@ -108,26 +108,29 @@ export function PromptInput(props: PromptInputProps) {
             class={styles.textarea}
             rows={2}
             placeholder={props.placeholder}
+            lang={props.language}
             onKeyDown={onKeyDown}
           />
           <div class={styles.bar}>
             <Show when={props.school}>{school => school()()}</Show>
             <SegmentedToggle aria-label="Answer language" options={LANGUAGES} value={props.language} onChange={props.onLanguage} />
-            <span class={styles.hint}>
-              <Show when={props.hint} fallback={<><Kbd>Enter</Kbd> to ask</>}>
-                {props.hint}
+            <span class={styles.end}>
+              <span class={styles.hint}>
+                <Show when={props.hint} fallback={<><Kbd>Enter</Kbd> to ask</>}>
+                  {props.hint}
+                </Show>
+              </span>
+              <Show when={showCount()}>
+                <KTextField.Description class={cx(styles.count, overLimit() && styles.over)}>
+                  {length()}/{props.maxLength}
+                </KTextField.Description>
               </Show>
+              <button class={styles.send} type="submit" aria-label="Ask" disabled={!canSend()} aria-busy={pending() || undefined}>
+                <Show when={pending()} fallback={<ArrowUp size={18} aria-hidden="true" />}>
+                  <Spinner />
+                </Show>
+              </button>
             </span>
-            <Show when={showCount()}>
-              <KTextField.Description class={cx(styles.count, overLimit() && styles.over)}>
-                {length()}/{props.maxLength}
-              </KTextField.Description>
-            </Show>
-            <button class={styles.send} type="submit" aria-label="Ask" disabled={!canSend()} aria-busy={pending() || undefined}>
-              <Show when={pending()} fallback={<ArrowUp size={18} aria-hidden="true" />}>
-                <Spinner />
-              </Show>
-            </button>
           </div>
         </div>
       </KTextField>

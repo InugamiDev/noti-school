@@ -40,6 +40,11 @@ export function Landing(props: LandingProps) {
         {...props}
         school={scope() === 'request' ? REQUEST_SCHOOL_ID : props.institution}
         onSchool={chooseSchool}
+        onSubmit={() => {
+          if (scope() !== 'request') return props.onSubmit();
+          toast('Your university is not set up yet, so there is nothing to answer from. Request it below or pick a listed school.', 'info');
+          document.getElementById('join-title')?.focus();
+        }}
         scope={scope()}
       />
       <ScopeSection motion={props.motion} />

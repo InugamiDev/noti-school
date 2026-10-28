@@ -1,6 +1,6 @@
 import { matchesQuery } from './text';
 
-export type SchoolStatus = 'pilot' | 'available';
+export type SchoolStatus = 'pilot' | 'demo';
 
 export interface School {
   id: string;

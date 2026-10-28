@@ -64,10 +64,10 @@ test('Cmd/Ctrl+K detection and platform modifier label', () => {
 test('school filtering keeps the request option always reachable', () => {
   const schools: School[] = [
     { id: 'pilot-school', name: 'Pilot School', subtitle: 'Sample campus', status: 'pilot' },
-    { id: 'another', name: 'Trường Mẫu', subtitle: 'Sample listing', status: 'available' },
+    { id: 'another', name: 'Trường Mẫu', subtitle: 'Sample listing', status: 'demo' },
   ];
   assert.deepEqual(schoolOptionIds(schools, ''), ['pilot-school', 'another', REQUEST_SCHOOL_ID]);
   assert.deepEqual(schoolOptionIds(schools, 'truong mau'), ['another', REQUEST_SCHOOL_ID]);
   assert.deepEqual(schoolOptionIds(schools, 'no such place'), [REQUEST_SCHOOL_ID]);
-  assert.deepEqual(filterSchools([...schools, { id: REQUEST_SCHOOL_ID, name: 'x', subtitle: '', status: 'available' }], ''), schools);
+  assert.deepEqual(filterSchools([...schools, { id: REQUEST_SCHOOL_ID, name: 'x', subtitle: '', status: 'demo' }], ''), schools);
 });

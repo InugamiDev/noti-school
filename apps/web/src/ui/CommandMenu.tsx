@@ -87,7 +87,7 @@ export function CommandMenu(props: CommandMenuProps) {
               const action = pendingAction;
               pendingAction = undefined;
               if (action) action();
-              else opener?.focus();
+              if (!action || !document.activeElement || document.activeElement === document.body) opener?.focus();
             }}
           >
             <Dialog.Title class="sr-only">Command menu</Dialog.Title>
