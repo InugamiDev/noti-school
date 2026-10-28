@@ -1,10 +1,35 @@
+// intent: collection administration on the Clay kit: source creation and version upload/fetch (TextField, Select,
+//         loading Buttons), version status badges, passage and report review, budget and graph forms. Authority still
+//         comes from the Me membership passed in as `allowed`; every request body and header is unchanged.
+// status: done
+// next: file and datetime inputs stay native (no UI kit wrapper); style changes belong in app/Page.module.scss.
+// confidence: high
 import { createSignal, For, Show, onCleanup } from 'solid-js';
+import { CircleAlert, Download, RefreshCw, ShieldAlert } from 'lucide-solid';
 import { createRemoteResource as createResource } from './resource';
 import { SourceCreate, VersionCreate, VersionAction, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction } from '@noti/contracts';
 import { get, post, request, errorText, readAnswer, safeLink } from './api';
 import { Schemas } from '@noti/contracts';
 import { scoped } from './App';
 import Pagination, { pageSuffix } from './Pagination';
+import { Badge, Button, cx, Select, Skeleton, TextField } from './ui';
+import { answerPresentation, indexingText, versionBadge } from './app/workspace';
+import page from './app/Page.module.scss';
+import styles from './app/Admin.module.scss';
+const kinds = [
+  { value: 'pdf', label: 'PDF' },
+  { value: 'text', label: 'Text' },
+  { value: 'url', label: 'Official URL' },
+];
+const visibilities = [
+  { value: 'institution', label: 'Institution' },
+  { value: 'admin', label: 'Administrators' },
+];
+const languages = [
+  { value: 'en', label: 'English' },
+  { value: 'vi', label: 'Tiếng Việt' },
+];
+const entityKinds = GraphEntityCreate.shape.kind.options.map((kind) => ({ value: kind, label: kind }));
 export default function Admin(props: { institution: string; allowed: boolean }) {
   let disposed = false;
   onCleanup(() => { disposed = true; });
@@ -62,9 +87,21 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
     () => (props.allowed && jobId() ? jobId() : false),
     (id) => get(scoped(props.institution, '/jobs/{job_id}', { job_id: id }), 'Job'),
   );
-  async function act(work: () => Promise<unknown>) {
+  // Form drafts live in signals so the Clay fields stay controlled; a role change remounts this component and clears them.
+  const [title, setTitle] = createSignal(''), [titleError, setTitleError] = createSignal<string>();
+  const [sourceKind, setSourceKind] = createSignal('pdf'), [visibility, setVisibility] = createSignal('institution');
+  const [sourceUrl, setSourceUrl] = createSignal('');
+  const [versionLabel, setVersionLabel] = createSignal(''), [versionLanguage, setVersionLanguage] = createSignal('en');
+  const [uploadErrors, setUploadErrors] = createSignal<{ label?: string | undefined; file?: string | undefined }>({});
+  const [entityKind, setEntityKind] = createSignal<string>(entityKinds[0]!.value), [entityLabel, setEntityLabel] = createSignal('');
+  const [edgeFrom, setEdgeFrom] = createSignal(''), [edgeTo, setEdgeTo] = createSignal('');
+  const [edgeRelation, setEdgeRelation] = createSignal(''), [edgeChunk, setEdgeChunk] = createSignal('');
+  // Which control started the running action, so only that button shows its spinner.
+  const [pending, setPending] = createSignal('');
+  async function act(work: () => Promise<unknown>, key = '') {
     if (busy()) return;
     setBusy(true);
+    setPending(key);
     setMessage('');
     try {
       await work();
@@ -72,96 +109,118 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
     } catch (e) {
       if (!disposed) setMessage(errorText(e));
     } finally {
-      if (!disposed) setBusy(false);
+      if (!disposed) {
+        setBusy(false);
+        setPending('');
+      }
     }
   }
+  const sourceOptions = () => [
+    { value: '', label: 'Choose a source' },
+    ...(sources()?.items.map((s) => ({ value: s.id, label: s.title })) ?? []),
+  ];
+  const currentVersion = () => sources()?.items.find((s) => s.id === selected())?.current_version_id;
+  const fileUrl = (version: string) => scoped(props.institution, '/versions/{version_id}/file', { version_id: version });
   return (
     <>
-      <h1 tabIndex={-1}>Collection management</h1>
+      <h1 class={page.title} tabIndex={-1}>Collection management</h1>
+      <p class={page.lede}>Add documents, review extracted passages and handle reports for your school's collection.</p>
       <Show
         when={props.allowed}
         fallback={
-          <div class="notice">
-            <p>Sign in with an administrator membership to manage this collection.</p>
-            <a href="#/auth">Sign in</a>
+          <div class={page.notice}>
+            <ShieldAlert size={18} aria-hidden="true" />
+            <div class={page.noticeBody}>
+              <p>Sign in with an administrator membership to manage this collection.</p>
+              <div class={page.links}>
+                <Button size="sm" href="#/auth">Sign in</Button>
+              </div>
+            </div>
           </div>
         }
       >
-        <div class="admin-grid">
-          <section>
-            <h2>Sources & versions</h2>
+        <div class={styles.grid}>
+          <section class={cx(page.card, styles.section)} aria-labelledby="admin-sources">
+            <h2 id="admin-sources" class={styles.h2}>Sources & versions</h2>
             <form
-              class="stack"
+              class={page.form}
+              novalidate
               onSubmit={(e) => {
                 e.preventDefault();
-                const data = new FormData(e.currentTarget);
+                if (!title().trim()) {
+                  setTitleError('Enter a document title.');
+                  return;
+                }
                 void act(async () => {
-                  const kind = String(data.get('kind'));
+                  const kind = sourceKind();
                   const body = SourceCreate.parse({
-                    title: data.get('title'),
+                    title: title(),
                     kind,
-                    visibility: data.get('visibility'),
-                    ...(kind === 'url' ? { original_url: data.get('url') } : {}),
+                    visibility: visibility(),
+                    ...(kind === 'url' ? { original_url: sourceUrl() } : {}),
                   });
                   const result = await post(scoped(props.institution, '/sources'), 'Source', body);
                   setSelected(result.id);
                   setVersionCursor('');
                   await refreshSources();
-                });
+                }, 'source');
               }}
             >
-              <label>
-                Document title
-                <input name="title" required maxLength={300} />
-              </label>
-              <div class="form-row">
-                <label>
-                  Format
-                  <select name="kind">
-                    <option value="pdf">PDF</option>
-                    <option value="text">Text</option>
-                    <option value="url">Official URL</option>
-                  </select>
-                </label>
-                <label>
-                  Visibility
-                  <select name="visibility">
-                    <option value="institution">Institution</option>
-                    <option value="admin">Administrators</option>
-                  </select>
-                </label>
+              <h3 class={page.h3}>New source</h3>
+              <TextField
+                label="Document title"
+                name="title"
+                value={title()}
+                onChange={(value) => {
+                  setTitle(value);
+                  setTitleError(value.length > 300 ? 'Use at most 300 characters.' : undefined);
+                }}
+                error={titleError()}
+                required
+              />
+              <div class={page.formRow}>
+                <Select label="Format" name="kind" options={kinds} value={sourceKind()} onChange={setSourceKind} />
+                <Select label="Visibility" name="visibility" options={visibilities} value={visibility()} onChange={setVisibility} />
               </div>
-              <label>
-                Original URL (for URL sources)
-                <input name="url" type="url" placeholder="https://" />
-              </label>
-              <button disabled={busy()}>Create source</button>
+              <TextField
+                label="Original URL (for URL sources)"
+                name="url"
+                type="url"
+                placeholder="https://"
+                hint="Required for official URL sources. Only https addresses are accepted."
+                value={sourceUrl()}
+                onChange={setSourceUrl}
+              />
+              <Button type="submit" class={page.submit} disabled={busy()} loading={pending() === 'source'} loadingLabel="Creating">
+                Create source
+              </Button>
             </form>
-            <label class="stack">
-              Select source
-              <select value={selected()} onChange={(e) => {setSelected(e.currentTarget.value);setVersionCursor('');setReviewVersion('');setChunkCursor('');}}>
-                <option value="">Choose a source</option>
-                <For each={sources()?.items}>
-                  {(s) => (
-                    <option value={s.id} selected={selected() === s.id}>
-                      {s.title}
-                    </option>
-                  )}
-                </For>
-              </select>
-            </label>
+            <div class={styles.divider} />
+            <Select
+              label="Select source"
+              options={sourceOptions()}
+              value={selected()}
+              onChange={(value) => {setSelected(value);setVersionCursor('');setReviewVersion('');setChunkCursor('');}}
+            />
             <Pagination cursor={sourceCursor()} next={sources()?.next_cursor} change={setSourceCursor} label="Source pages"/>
             <Show when={selected()}>
-              <a class="text-link" href={`#/sources/${selected()}`}>
+              <a class={page.link} href={`#/sources/${selected()}`}>
                 Read source & versions
               </a>
               <form
-                class="stack"
+                class={page.form}
+                novalidate
                 onSubmit={(e) => {
                   e.preventDefault();
                   const data = new FormData(e.currentTarget);
+                  const file = data.get('file');
+                  const missing = {
+                    label: versionLabel().trim() ? undefined : 'Enter a version label.',
+                    file: !urlSource() && !(file instanceof File && file.size) ? 'Choose a PDF or text file.' : undefined,
+                  };
+                  setUploadErrors(missing);
+                  if (missing.label || missing.file) return;
                   void act(async () => {
-                    const file = data.get('file');
                     if (!urlSource() && (
                       !(file instanceof File) ||
                       !file.size ||
@@ -170,8 +229,8 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                     ))
                       throw new Error('Invalid file');
                     const metadata = VersionCreate.parse({
-                      label: data.get('label'),
-                      language: data.get('language'),
+                      label: versionLabel(),
+                      language: versionLanguage(),
                       effective_from: data.get('from')
                         ? new Date(String(data.get('from'))).toISOString()
                         : null,
@@ -192,234 +251,305 @@ export default function Admin(props: { institution: string; allowed: boolean }) 
                     );
                     setJobId(result.id);
                     await refreshVersions();
-                  });
+                  }, 'upload');
                 }}
               >
-                <h3>{urlSource() ? 'Fetch a saved URL' : 'Upload a version'}</h3>
-                <label>
-                  Version label
-                  <input name="label" maxLength={100} required />
-                </label>
-                <label>Document language<select name="language"><option value="en">English</option><option value="vi">Tiếng Việt</option></select></label>
-                <Show when={!urlSource()}><label>
-                  PDF or UTF-8 text · up to 20 MiB
-                  <input name="file" type="file" accept="application/pdf,text/plain" required />
-                </label></Show>
-                <Show when={urlSource()}><p class="notice">Fetch only this source’s saved URL. Fetched content requires review and is not approved evidence.</p></Show>
-                <div class="form-row">
-                  <label>
+                <h3 class={page.h3}>{urlSource() ? 'Fetch a saved URL' : 'Upload a version'}</h3>
+                <TextField
+                  label="Version label"
+                  name="label"
+                  value={versionLabel()}
+                  onChange={(value) => {
+                    setVersionLabel(value);
+                    setUploadErrors({ ...uploadErrors(), label: value.length > 100 ? 'Use at most 100 characters.' : undefined });
+                  }}
+                  error={uploadErrors().label}
+                  required
+                />
+                <Select label="Document language" name="language" options={languages} value={versionLanguage()} onChange={setVersionLanguage} />
+                <Show when={!urlSource()}>
+                  <div class={page.field}>
+                    <label for="admin-file">PDF or UTF-8 text · up to 20 MiB</label>
+                    <input
+                      id="admin-file"
+                      class={page.input}
+                      name="file"
+                      type="file"
+                      accept="application/pdf,text/plain"
+                      aria-invalid={uploadErrors().file ? 'true' : undefined}
+                      aria-describedby={uploadErrors().file ? 'admin-file-error' : undefined}
+                      onChange={() => setUploadErrors({ ...uploadErrors(), file: undefined })}
+                    />
+                    <Show when={uploadErrors().file}>
+                      <span id="admin-file-error" class={styles.fieldError}>{uploadErrors().file}</span>
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={urlSource()}><p class={page.notice}><CircleAlert size={18} aria-hidden="true" />Fetch only this source’s saved URL. Fetched content requires review and is not approved evidence.</p></Show>
+                <div class={page.formRow}>
+                  <label class={page.field}>
                     Effective from
-                    <input name="from" type="datetime-local" />
+                    <input class={page.input} name="from" type="datetime-local" />
                   </label>
-                  <label>
+                  <label class={page.field}>
                     Effective until
-                    <input name="until" type="datetime-local" />
+                    <input class={page.input} name="until" type="datetime-local" />
                   </label>
                 </div>
-                <button disabled={busy()}>{urlSource() ? 'Fetch saved URL' : 'Upload version'}</button>
+                <Button variant="primary" type="submit" class={page.submit} disabled={busy()} loading={pending() === 'upload'} loadingLabel={urlSource() ? 'Fetching' : 'Uploading'}>
+                  {urlSource() ? 'Fetch saved URL' : 'Upload version'}
+                </Button>
               </form>
             </Show>
+            <Show when={selected() && versions() && !versions()!.items.length}>
+              <p class={page.muted}>No versions for this source yet.</p>
+            </Show>
             <For each={versions()?.items}>
-              {(v) => (
-                <article class="version-row">
-                  <h3>{v.label}</h3>
-                  <p>
-                    {v.status} · Indexing: {v.indexing}
-                  </p>
-                  <div class="actions">
-                    <button onClick={() => { setReviewVersion(v.id); setChunkCursor(''); }}>Review passages</button>
-                    <For each={['approve', 'archive', 'retry_index'] as const}>
-                      {(action) => (
-                        <button
-                          disabled={busy()}
-                          onClick={() =>
-                            void act(async () => {
-                              const body = VersionAction.parse({
-                                action,
-                                expected_status: v.status,
-                              });
-                              const result = await post(
-                                scoped(props.institution, '/versions/{version_id}/actions', {
-                                  version_id: v.id,
-                                }),
-                                'Job',
-                                body,
-                                { headers: { 'Idempotency-Key': crypto.randomUUID() } },
-                              );
-                              setJobId(result.id);
-                              await refreshVersions();
-                            })
-                          }
-                        >
-                          {action === 'retry_index'
-                            ? 'Retry indexing'
-                            : action === 'approve'
-                              ? 'Approve'
-                              : 'Archive'}
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </article>
-              )}
+              {(v) => {
+                const badge = () => versionBadge(v, currentVersion());
+                return (
+                  <article class={page.item}>
+                    <div class={page.itemHead}>
+                      <h3 class={page.h3}>{v.label}</h3>
+                      <Badge tone={badge().tone} dot>{badge().label}</Badge>
+                    </div>
+                    <p class={page.small}>
+                      Status: {v.status} · {indexingText(v.indexing)}
+                    </p>
+                    <div class={page.actions}>
+                      <Button size="sm" variant="ghost" onClick={() => { setReviewVersion(v.id); setChunkCursor(''); }}>Review passages</Button>
+                      <For each={['approve', 'archive', 'retry_index'] as const}>
+                        {(action) => (
+                          <Button
+                            size="sm"
+                            disabled={busy()}
+                            loading={pending() === `${v.id}:${action}`}
+                            onClick={() =>
+                              void act(async () => {
+                                const body = VersionAction.parse({
+                                  action,
+                                  expected_status: v.status,
+                                });
+                                const result = await post(
+                                  scoped(props.institution, '/versions/{version_id}/actions', {
+                                    version_id: v.id,
+                                  }),
+                                  'Job',
+                                  body,
+                                  { headers: { 'Idempotency-Key': crypto.randomUUID() } },
+                                );
+                                setJobId(result.id);
+                                await refreshVersions();
+                              }, `${v.id}:${action}`)
+                            }
+                          >
+                            {action === 'retry_index'
+                              ? 'Retry indexing'
+                              : action === 'approve'
+                                ? 'Approve'
+                                : 'Archive'}
+                          </Button>
+                        )}
+                      </For>
+                    </div>
+                  </article>
+                );
+              }}
             </For>
             <Pagination cursor={versionCursor()} next={versions()?.next_cursor} change={setVersionCursor} label="Version pages"/>
             <Show when={reviewVersion()}>
-              <section class="reader" aria-label="Extracted passages">
-                <h3>Extracted passages</h3>
-                <p class="muted">Read each page before deciding whether to approve this version. Opening this view does not mark it reviewed.</p>
-                <a href={scoped(props.institution, '/versions/{version_id}/file', { version_id: reviewVersion() })} target="_blank" rel="noopener noreferrer">Open original file</a>
-                <Show when={chunks.loading}><p role="status">Loading passages…</p></Show>
-                <Show when={chunks.error}><p role="alert">{errorText(chunks.error)}</p></Show>
-                <Show when={chunks()}>{page => <>
-                  <For each={page().items} fallback={<p>No extracted text on this page. Inspect the original file; extraction may need attention.</p>}>{chunk => <article class="version-row">
-                    <h4>Passage {chunk.ordinal + 1}</h4>
-                    <p>{chunk.locator.page ? `Page ${chunk.locator.page}` : 'Page not supplied'}{chunk.locator.section ? ` · ${chunk.locator.section}` : ''}</p>
-                    <p class="passage">{chunk.text}</p>
-                    <label class="stack">Evidence chunk ID<input readonly value={chunk.id} onFocus={e => e.currentTarget.select()}/></label>
-                    <label class="stack">Version ID<input readonly value={chunk.version_id}/></label>
-                    <label class="stack">Source ID<input readonly value={chunk.source_id}/></label>
+              <section class={cx(page.reader, styles.passages)} aria-label="Extracted passages" data-reader>
+                <h3 class={page.h3}>Extracted passages</h3>
+                <p class={page.small}>Read each page before deciding whether to approve this version. Opening this view does not mark it reviewed.</p>
+                <a class={page.link} href={fileUrl(reviewVersion())} target="_blank" rel="noopener noreferrer"><Download size={16} aria-hidden="true" />Open original file</a>
+                <Show when={chunks.loading}><p role="status" class={page.small}>Loading passages…</p></Show>
+                <Show when={chunks.error}><p role="alert" class={cx(page.notice, page.error)}>{errorText(chunks.error)}</p></Show>
+                <Show when={chunks()}>{data => <>
+                  <For each={data().items} fallback={<p class={page.notice}>No extracted text on this page. Inspect the original file; extraction may need attention.</p>}>{chunk => <article class={page.item}>
+                    <h4 class={page.h3}>Passage {chunk.ordinal + 1}</h4>
+                    <p class={page.meta}>{chunk.locator.page ? `Page ${chunk.locator.page}` : 'Page not supplied'}{chunk.locator.section ? ` · ${chunk.locator.section}` : ''}</p>
+                    <p class={cx(page.quote, page.passage)}>{chunk.text}</p>
+                    <div class={styles.ids}>
+                      <label class={page.field}>Evidence chunk ID<input class={page.input} readonly value={chunk.id} onFocus={e => e.currentTarget.select()}/></label>
+                      <label class={page.field}>Version ID<input class={page.input} readonly value={chunk.version_id}/></label>
+                      <label class={page.field}>Source ID<input class={page.input} readonly value={chunk.source_id}/></label>
+                    </div>
                   </article>}</For>
-                  <Pagination cursor={chunkCursor()} next={page().next_cursor} change={setChunkCursor} label="Passage pages"/>
+                  <Pagination cursor={chunkCursor()} next={data().next_cursor} change={setChunkCursor} label="Passage pages"/>
                 </>}</Show>
               </section>
             </Show>
             <Show when={jobId()}>
-              <h3>Indexing status</h3>
-              <p>
-                {job()?.state || 'Loading…'} {job()?.error_code}
-              </p>
-              <button onClick={() => void refreshJob()}>Refresh job</button>
+              <div class={styles.job}>
+                <h3 class={page.h3}>Indexing status</h3>
+                <div class={page.itemHead}>
+                  <Badge tone={job()?.state === 'failed' ? 'danger' : job()?.state === 'succeeded' ? 'sage' : 'clay'} dot>
+                    {job()?.state || 'Loading…'}
+                  </Badge>
+                  <Show when={job()?.error_code}>{code => <span class={page.meta}>{code()}</span>}</Show>
+                  <Button size="sm" variant="ghost" onClick={() => void refreshJob()}>
+                    <RefreshCw aria-hidden="true" />
+                    Refresh job
+                  </Button>
+                </div>
+              </div>
             </Show>
           </section>
-          <section>
-            <h2>Monthly AI budget</h2>
-            <Show when={budget()} fallback={<p>Budget unavailable.</p>}>
-              {(b) => (
-                <dl>
-                  <dt>Month</dt>
-                  <dd>{b().month}</dd>
-                  <dt>Spent</dt>
-                  <dd>${(b().spent_micro_usd / 1e6).toFixed(2)}</dd>
-                  <dt>Reserved</dt>
-                  <dd>${(b().reserved_micro_usd / 1e6).toFixed(2)}</dd>
-                  <dt>Application ceiling</dt>
-                  <dd>${(b().cap_micro_usd / 1e6).toFixed(2)}</dd>
-                </dl>
-              )}
-            </Show>
-            <h2>Feedback</h2>
-            <For each={feedback()?.items} fallback={<p>No feedback loaded.</p>}>
-              {(f) => (
-                <article class="version-row">
-                  <h3>{f.category}</h3>
-                  <p>{f.comment}</p>
-                  <p>{f.status}</p>
-                  <button onClick={() => reportId() === f.id ? void refreshContext() : setReportId(f.id)}>Review report context</button>
-                  <Show when={reportId() === f.id}>
-                    <Show when={context.loading}><p role="status">Loading report context…</p></Show>
-                    <Show when={context.error}><p role="alert">Report context unavailable. Review status has not been changed. {errorText(context.error)}</p></Show>
-                    <Show when={context()}>{c => <section class="reader" aria-label="Report context">
-                      <h4>Reported question</h4><p class="passage">{c().question}</p>
-                      <h4>Reported answer</h4><p>{c().answer.status}</p>
-                      <For each={c().answer.claims}>{claim => <p class="passage">{claim.text}</p>}</For>
-                      <Show when={c().answer.explanation}><p class="notice">{c().answer.explanation}</p></Show>
-                      <h4>Current citations</h4>
-                      <For each={c().answer.evidence} fallback={<p>No citations currently accessible.</p>}>{evidence => <article class="version-row">
-                        <h4>{evidence.title} · {evidence.version_label}</h4>
-                        <p>{evidence.locator.page ? `Page ${evidence.locator.page}` : ''}{evidence.locator.section ? ` · ${evidence.locator.section}` : ''}</p>
-                        <blockquote>{evidence.quote}</blockquote>
-                        <div class="actions">
-                          <a href={`${scoped(props.institution, '/versions/{version_id}/file', { version_id: evidence.version_id })}${evidence.locator.page ? `#page=${evidence.locator.page}` : ''}`} target="_blank" rel="noopener noreferrer">Open cited original</a>
-                          <Show when={safeLink(evidence.original_url)}>{url => <a href={url()} target="_blank" rel="noopener noreferrer">Original website</a>}</Show>
-                        </div>
-                        <label class="stack">Citation ID<input readonly value={evidence.id}/></label>
-                      </article>}</For>
-                    </section>}</Show>
-                  </Show>
-                  <div class="actions">
-                    <For each={['reviewed', 'resolved'] as const}>
-                      {(status) => (
-                        <button
-                          disabled={busy() || reportId() !== f.id || !context() || context.loading || !!context.error}
-                          onClick={() =>
-                            void act(async () => {
-                              await request(
-                                scoped(props.institution, '/feedback/{feedback_id}', {
-                                  feedback_id: f.id,
-                                }),
-                                Schemas.Feedback,
-                                { method: 'PATCH', body: JSON.stringify({ status }) },
-                              );
-                              await refreshFeedback();
-                            })
-                          }
-                        >
-                          Mark {status}
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </article>
-              )}
-            </For>
-          </section>
+          <div class={styles.side}>
+            <section class={cx(page.card, styles.section)} aria-labelledby="admin-budget">
+              <h2 id="admin-budget" class={styles.h2}>Monthly AI budget</h2>
+              <Show when={budget()} fallback={<p class={page.muted}>Budget unavailable.</p>}>
+                {(b) => (
+                  <dl class={page.dl}>
+                    <dt>Month</dt>
+                    <dd>{b().month}</dd>
+                    <dt>Spent</dt>
+                    <dd>${(b().spent_micro_usd / 1e6).toFixed(2)}</dd>
+                    <dt>Reserved</dt>
+                    <dd>${(b().reserved_micro_usd / 1e6).toFixed(2)}</dd>
+                    <dt>Application ceiling</dt>
+                    <dd>${(b().cap_micro_usd / 1e6).toFixed(2)}</dd>
+                  </dl>
+                )}
+              </Show>
+            </section>
+            <section class={cx(page.card, styles.section)} aria-labelledby="admin-feedback">
+              <h2 id="admin-feedback" class={styles.h2}>Feedback</h2>
+              <For each={feedback()?.items} fallback={<p class={page.muted}>No feedback loaded.</p>}>
+                {(f) => (
+                  <article class={page.item}>
+                    <div class={page.itemHead}>
+                      <h3 class={page.h3}>{f.category}</h3>
+                      <Badge tone={f.status === 'open' ? 'clay' : f.status === 'resolved' ? 'sage' : 'neutral'} dot>{f.status}</Badge>
+                    </div>
+                    <Show when={f.comment}><p class={page.passage}>{f.comment}</p></Show>
+                    <div class={page.actions}>
+                      <Button size="sm" variant="ghost" loading={reportId() === f.id && context.loading} onClick={() => reportId() === f.id ? void refreshContext() : setReportId(f.id)}>Review report context</Button>
+                    </div>
+                    <Show when={reportId() === f.id}>
+                      <Show when={context.loading}><p role="status" class={page.small}>Loading report context…</p></Show>
+                      <Show when={context.error}><p role="alert" class={cx(page.notice, page.error)}>Report context unavailable. Review status has not been changed. {errorText(context.error)}</p></Show>
+                      <Show when={context()}>{c => <section class={page.reader} aria-label="Report context" data-reader>
+                        <h4 class={page.h3}>Reported question</h4><p class={cx(page.quote, page.passage)}>{c().question}</p>
+                        <h4 class={page.h3}>Reported answer</h4>
+                        <div><Badge tone={answerPresentation(c().answer.status).tone} dot>{c().answer.status}</Badge></div>
+                        <For each={c().answer.claims}>{claim => <p class={page.passage}>{claim.text}</p>}</For>
+                        <Show when={c().answer.explanation}><p class={page.notice}>{c().answer.explanation}</p></Show>
+                        <h4 class={page.h3}>Current citations</h4>
+                        <For each={c().answer.evidence} fallback={<p class={page.muted}>No citations currently accessible.</p>}>{evidence => <article class={page.item}>
+                          <h4 class={page.h3}>{evidence.title} · {evidence.version_label}</h4>
+                          <p class={page.meta}>{evidence.locator.page ? `Page ${evidence.locator.page}` : ''}{evidence.locator.section ? ` · ${evidence.locator.section}` : ''}</p>
+                          <blockquote class={page.quote}>{evidence.quote}</blockquote>
+                          <div class={page.actions}>
+                            <a class={page.link} href={`${fileUrl(evidence.version_id)}${evidence.locator.page ? `#page=${evidence.locator.page}` : ''}`} target="_blank" rel="noopener noreferrer">Open cited original</a>
+                            <Show when={safeLink(evidence.original_url)}>{url => <a class={page.link} href={url()} target="_blank" rel="noopener noreferrer">Original website</a>}</Show>
+                          </div>
+                          <label class={page.field}>Citation ID<input class={page.input} readonly value={evidence.id}/></label>
+                        </article>}</For>
+                      </section>}</Show>
+                    </Show>
+                    <div class={page.actions}>
+                      <For each={['reviewed', 'resolved'] as const}>
+                        {(status) => (
+                          <Button
+                            size="sm"
+                            disabled={busy() || reportId() !== f.id || !context() || context.loading || !!context.error}
+                            loading={pending() === `${f.id}:${status}`}
+                            onClick={() =>
+                              void act(async () => {
+                                await request(
+                                  scoped(props.institution, '/feedback/{feedback_id}', {
+                                    feedback_id: f.id,
+                                  }),
+                                  Schemas.Feedback,
+                                  { method: 'PATCH', body: JSON.stringify({ status }) },
+                                );
+                                await refreshFeedback();
+                              }, `${f.id}:${status}`)
+                            }
+                          >
+                            Mark {status}
+                          </Button>
+                        )}
+                      </For>
+                    </div>
+                  </article>
+                )}
+              </For>
+              <Pagination cursor={feedbackCursor()} next={feedback()?.next_cursor} change={setFeedbackCursor} label="Feedback pages"/>
+            </section>
+          </div>
         </div>
-        <Pagination cursor={feedbackCursor()} next={feedback()?.next_cursor} change={setFeedbackCursor} label="Feedback pages"/>
-        <details>
+        <details class={cx(page.card, styles.graph)}>
           <summary>Evidence graph administration</summary>
-          <p class="muted">Relations require a readable evidence chunk in this institution. Creating a candidate does not approve evidence or establish coverage.</p>
-          <form class="stack" onSubmit={e => {
-            e.preventDefault(); const data = new FormData(e.currentTarget);
+          <p class={page.small}>Relations require a readable evidence chunk in this institution. Creating a candidate does not approve evidence or establish coverage.</p>
+          <form class={page.form} novalidate onSubmit={e => {
+            e.preventDefault();
             void act(async () => {
-              const body = GraphEntityCreate.parse({ kind: data.get('kind'), label: data.get('label') });
+              const body = GraphEntityCreate.parse({ kind: entityKind(), label: entityLabel() });
               const result = await post(scoped(props.institution, '/graph/entities'), 'GraphEntity', body);
               setEntityId(result.id);
-            });
+            }, 'entity');
           }}>
-            <label>Entity kind<select name="kind"><For each={GraphEntityCreate.shape.kind.options}>{kind => <option value={kind}>{kind}</option>}</For></select></label>
-            <label>Entity label<input name="label" required maxLength={300}/></label>
-            <button disabled={busy()}>Create graph entity</button>
+            <h3 class={page.h3}>New entity</h3>
+            <div class={page.formRow}>
+              <Select label="Entity kind" name="kind" options={entityKinds} value={entityKind()} onChange={setEntityKind} />
+              <TextField label="Entity label" name="label" value={entityLabel()} onChange={setEntityLabel} required />
+            </div>
+            <Button type="submit" class={page.submit} disabled={busy()} loading={pending() === 'entity'} loadingLabel="Creating">Create graph entity</Button>
           </form>
-          <Show when={entityId()}><p>Created entity ID: <code>{entityId()}</code></p></Show>
-          <form class="stack" onSubmit={e => {
-            e.preventDefault(); const data = new FormData(e.currentTarget);
+          <Show when={entityId()}><p class={page.small}>Created entity ID: <code class={page.code}>{entityId()}</code></p></Show>
+          <form class={page.form} novalidate onSubmit={e => {
+            e.preventDefault();
             void act(async () => {
-              const body = GraphEdgeCreate.parse({ from_entity_id: data.get('from'), to_entity_id: data.get('to'), relation: data.get('relation'), evidence_chunk_id: data.get('chunk') });
+              const body = GraphEdgeCreate.parse({ from_entity_id: edgeFrom(), to_entity_id: edgeTo(), relation: edgeRelation(), evidence_chunk_id: edgeChunk() });
               await post(scoped(props.institution, '/graph/edges'), 'GraphEdge', body); await refreshGraph();
-            });
+            }, 'edge');
           }}>
-            <label>From entity ID<input name="from" required/></label>
-            <label>To entity ID<input name="to" required/></label>
-            <label>Relation<input name="relation" maxLength={100} required/></label>
-            <label>Evidence chunk ID<input name="chunk" required/></label>
-            <button disabled={busy()}>Create candidate relation</button>
+            <h3 class={page.h3}>New candidate relation</h3>
+            <div class={page.formRow}>
+              <TextField label="From entity ID" name="from" value={edgeFrom()} onChange={setEdgeFrom} required />
+              <TextField label="To entity ID" name="to" value={edgeTo()} onChange={setEdgeTo} required />
+            </div>
+            <div class={page.formRow}>
+              <TextField label="Relation" name="relation" value={edgeRelation()} onChange={setEdgeRelation} required />
+              <TextField label="Evidence chunk ID" name="chunk" value={edgeChunk()} onChange={setEdgeChunk} required />
+            </div>
+            <Button type="submit" class={page.submit} disabled={busy()} loading={pending() === 'edge'} loadingLabel="Creating">Create candidate relation</Button>
           </form>
-          <Show when={graph.loading}><p role="status">Loading graph relations…</p></Show>
-          <Show when={graph.error}><p role="alert">{errorText(graph.error)}</p></Show>
+          <Show when={graph.loading}><p role="status" class={page.small}>Loading graph relations…</p></Show>
+          <Show when={graph.error}><p role="alert" class={cx(page.notice, page.error)}>{errorText(graph.error)}</p></Show>
           <Show when={graph()}>
-            <For each={graph()?.items} fallback={<p>No graph relations returned for this institution.</p>}>{edge => <article class="version-row">
-              <h3>{edge.relation}</h3><p>{edge.status} · {edge.from_entity_id} → {edge.to_entity_id}</p>
-              <For each={edge.evidence}>{evidence => <a href={`#/sources/${evidence.source_id}`}>{evidence.title} · {evidence.version_label} · {evidence.locator.page ? `Page ${evidence.locator.page}` : evidence.locator.section}</a>}</For>
-              <For each={['approved', 'rejected'] as const}>{status => <button disabled={busy()} onClick={() => void act(async () => {
-                await request(scoped(props.institution, '/graph/edges/{edge_id}', { edge_id: edge.id }), Schemas.GraphEdge, { method: 'PATCH', body: JSON.stringify(GraphEdgeAction.parse({ status })) });
-                await refreshGraph();
-              })}>{status === 'approved' ? 'Approve relation' : 'Reject relation'}</button>}</For>
+            <For each={graph()?.items} fallback={<p class={page.muted}>No graph relations returned for this institution.</p>}>{edge => <article class={page.item}>
+              <div class={page.itemHead}>
+                <h3 class={page.h3}>{edge.relation}</h3>
+                <Badge tone={edge.status === 'approved' ? 'sage' : edge.status === 'rejected' ? 'neutral' : 'clay'} dot>{edge.status}</Badge>
+              </div>
+              <p class={page.meta}>{edge.from_entity_id} to {edge.to_entity_id}</p>
+              <For each={edge.evidence}>{evidence => <a class={page.link} href={`#/sources/${evidence.source_id}`}>{evidence.title} · {evidence.version_label} · {evidence.locator.page ? `Page ${evidence.locator.page}` : evidence.locator.section}</a>}</For>
+              <div class={page.actions}>
+                <For each={['approved', 'rejected'] as const}>{status => <Button size="sm" disabled={busy()} loading={pending() === `${edge.id}:${status}`} onClick={() => void act(async () => {
+                  await request(scoped(props.institution, '/graph/edges/{edge_id}', { edge_id: edge.id }), Schemas.GraphEdge, { method: 'PATCH', body: JSON.stringify(GraphEdgeAction.parse({ status })) });
+                  await refreshGraph();
+                }, `${edge.id}:${status}`)}>{status === 'approved' ? 'Approve relation' : 'Reject relation'}</Button>}</For>
+              </div>
             </article>}</For>
             <Pagination cursor={graphCursor()} next={graph()?.next_cursor} change={setGraphCursor} label="Graph pages"/>
           </Show>
         </details>
         <Show when={sources.loading || budget.loading || feedback.loading}>
-          <div class="skeleton" role="status" aria-label="Loading management data" />
+          <div class={page.loading} role="status" aria-label="Loading management data">
+            <Skeleton height="44px" radius="sm" />
+          </div>
         </Show>
         <Show when={sources.error || versions.error || budget.error || feedback.error || job.error}>
-          <p role="alert" class="error">
+          <p role="alert" class={cx(page.notice, page.error)}>
             {errorText(
               sources.error || versions.error || budget.error || feedback.error || job.error,
             )}
           </p>
         </Show>
-        <p role="status">{message()}</p>
+        <p role="status" class={styles.message}>{message()}</p>
       </Show>
     </>
   );

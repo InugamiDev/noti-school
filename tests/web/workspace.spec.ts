@@ -8,6 +8,8 @@ const source={id:sourceId,institution_id:id,title:'Demo · Quy chế tổng hợ
 const version={id:versionId,institution_id:id,source_id:sourceId,label:'Demo v1',sha256:'a'.repeat(64),status:'archived',indexing:'ready',effective_from:null,effective_until:'2025-01-01T00:00:00Z',created_at:time};
 const evidence={id:citationId,institution_id:id,source_id:sourceId,version_id:versionId,chunk_id:id,title:source.title,version_label:'Demo v1',locator:{page:2,section:'Synthetic section',start_char:0,end_char:40},quote:'Synthetic passage. <img src=x onerror=alert(1)>',original_url:'https://example.test/demo'};
 const answer={id,conversation_id:id,institution_id:id,status:'qualified',language:'vi',claims:[{text:'Demo answer for component testing only. Đây không phải quy định của trường đại học.',evidence_ids:[citationId]}],evidence:[evidence],explanation:'Synthetic fixture · no live provider used.',created_at:time};
+// Kobalte Select: open the labelled trigger, then pick the option by its visible label.
+async function choose(page:Page,label:string,option:string){await page.getByRole('button',{name:label}).click();await page.getByRole('option',{name:option,exact:true}).click();}
 async function setup(page:Page,admin=false){await page.emulateMedia({reducedMotion:'reduce'});await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;const method=route.request().method();let body:unknown;
  if(path.endsWith('/capabilities')){const cap={state:'available',reason:'ready'};body={mode:'mock',answers:cap,indexing:cap,discovery:cap,google:cap,email:cap,identity:cap};}
  else if(path.endsWith('/institutions'))body={items:[{id,slug:'demo',name:'Demo university',coverage:'synthetic_demo'}],next_cursor:null};
@@ -27,7 +29,8 @@ async function setup(page:Page,admin=false){await page.emulateMedia({reducedMoti
  if(body)return route.fulfill({json:body,status:method==='POST'&&path.endsWith('/feedback')?201:200});return route.fulfill({status:503,json:{error:{code:'core_unavailable',message:'Synthetic unavailable',request_id:id,retryable:false}}});});}
 test('answer, citation, archived version, safe text, feedback and followup contracts',async({page})=>{
  await setup(page);await page.goto('/');await page.getByLabel('Your question').fill('Synthetic question');await page.getByRole('button',{name:'Ask',exact:true}).click();await expect(page.getByText('Demo answer for component testing only.',{exact:false})).toBeVisible();
- await page.getByTitle('Open source citation').click();await expect(page.getByText('Expired version · historical citation')).toBeVisible();await expect(page.getByRole('article',{name:'Source citation'})).toBeFocused();await expect(page.getByText('Synthetic passage. <img src=x onerror=alert(1)>',{exact:true})).toBeVisible();expect(await page.locator('.reader img').count()).toBe(0);await page.screenshot({path:new URL('./artifacts/citation.png',import.meta.url).pathname,fullPage:true});
+ await expect(page.getByRole('article',{name:'Answer with limitations'})).toBeVisible();await expect(page.getByText(/verified/i)).toHaveCount(0);
+ await page.getByRole('button',{name:'Citation 1: open source'}).click();await expect(page.getByRole('button',{name:'Citation 1: open source'})).toHaveAttribute('aria-pressed','true');await expect(page.getByText('Expired version · historical citation')).toBeVisible();const reader=page.getByRole('article',{name:'Source citation'});await expect(reader).toBeFocused();await expect(reader.getByText('Synthetic passage. <img src=x onerror=alert(1)>',{exact:true})).toBeVisible();expect(await page.locator('main img').count()).toBe(0);await page.screenshot({path:new URL('./artifacts/citation.png',import.meta.url).pathname,fullPage:true});
  await page.getByRole('button',{name:'Report an issue'}).click();await page.getByLabel('Comment',{exact:true}).fill('Synthetic feedback');await page.getByRole('button',{name:'Send feedback'}).click();await expect(page.getByText('Feedback received. Thank you.')).toBeVisible();
  const next=page.waitForRequest(req=>req.url().endsWith('/api/v1/answers')&&req.method()==='POST');await page.getByLabel('Your question').fill('Synthetic follow-up');await page.getByRole('button',{name:'Ask',exact:true}).click();expect((await next).postDataJSON().conversation_id).toBe(id);
  await page.screenshot({path:new URL('./artifacts/workspace.png',import.meta.url).pathname,fullPage:true});
@@ -42,7 +45,7 @@ test('admin is membership gated; source creation, upload and actions use real en
 test('student cannot see admin controls',async({page})=>{await setup(page);await page.goto('/#/admin');await expect(page.getByText('Sign in with an administrator membership')).toBeVisible();await expect(page.getByRole('button',{name:'Create source'})).toHaveCount(0);});
 test('auth reset callback and invitation header are wired without persisting secrets',async({page})=>{
  await setup(page);await page.goto('/?token=synthetic-reset-token#/auth');await expect(page.locator('form h2')).toHaveText('Reset password');expect(page.url()).not.toContain('token=');await page.getByLabel('New password (when using a reset token)').fill('synthetic-new-password');const reset=page.waitForRequest(r=>r.url().endsWith('/reset-password'));await page.getByRole('button',{name:'Continue',exact:true}).click();expect((await reset).postDataJSON()).toEqual({token:'synthetic-reset-token',newPassword:'synthetic-new-password'});
- await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Name',{exact:true}).fill('Synthetic');await page.getByLabel('Password',{exact:true}).fill('synthetic-password');await page.getByLabel('Invitation token',{exact:true}).fill('synthetic-invite');const signup=page.waitForRequest(r=>r.url().endsWith('/sign-up/email'));await page.locator('form').getByRole('button',{name:'Create account',exact:true}).click();expect((await signup).headers()['x-noti-invitation']).toBe('synthetic-invite');expect(await page.evaluate(()=>JSON.stringify(sessionStorage))).not.toContain('synthetic-password');
+ await page.getByRole('tab',{name:'Create account',exact:true}).click();await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Name',{exact:true}).fill('Synthetic');await page.getByLabel('Password',{exact:true}).fill('synthetic-password');await page.getByLabel('Invitation token',{exact:true}).fill('synthetic-invite');const signup=page.waitForRequest(r=>r.url().endsWith('/sign-up/email'));await page.locator('form').getByRole('button',{name:'Create account',exact:true}).click();expect((await signup).headers()['x-noti-invitation']).toBe('synthetic-invite');expect(await page.evaluate(()=>JSON.stringify(sessionStorage))).not.toContain('synthetic-password');
 });
 test('source pagination sends opaque cursor and keeps authenticated scope',async({page})=>{
  await setup(page);await page.route('**/api/v1/institutions/*/sources*',async route=>{const cursor=new URL(route.request().url()).searchParams.get('cursor');await route.fulfill({json:{items:[{...source,title:cursor?'Demo second page':'Demo first page'}],next_cursor:cursor?null:'opaque_demo_cursor'}});});await page.goto('/#/sources');await expect(page.getByRole('link',{name:/Demo first page/})).toBeVisible();await page.getByRole('button',{name:'Next page'}).click();await expect(page.getByRole('link',{name:/Demo second page/})).toBeVisible();await page.getByRole('button',{name:'First page'}).click();await expect(page.getByRole('link',{name:/Demo first page/})).toBeVisible();
@@ -61,8 +64,8 @@ test('history loads after reload, paginates and surfaces a missing backend',asyn
 test('saved URL fetch submits Vietnamese metadata and never claims indexed evidence',async({page})=>{
  await setup(page,true);
  await page.route('**/sources',route=>route.fulfill({json:{items:[{...source,kind:'url',original_url:'https://edusoftweb.hcmiu.edu.vn/synthetic-only'}],next_cursor:null}}));
- await page.goto('/#/admin');await page.getByLabel('Select source').selectOption(sourceId);
- await page.getByLabel('Version label').fill('Synthetic vi');await page.getByLabel('Document language').selectOption('vi');
+ await page.goto('/#/admin');await choose(page,'Select source',source.title);
+ await page.getByLabel('Version label').fill('Synthetic vi');await choose(page,'Document language','Tiếng Việt');
  const sent=page.waitForRequest(r=>r.url().endsWith('/fetch'));
  await page.getByRole('button',{name:'Fetch saved URL',exact:true}).click();
  const req=await sent;expect(req.postDataJSON()).toEqual({label:'Synthetic vi',language:'vi',effective_from:null,effective_until:null});
@@ -95,7 +98,7 @@ test('transition leaves one composer and disabled identity remains explicit',asy
  await setup(page);await page.emulateMedia({reducedMotion:'no-preference'});
  await page.route('**/api/v1/answers',async route=>{await new Promise(r=>setTimeout(r,800));await route.fulfill({json:answer});});
  await page.goto('/');await page.getByLabel('Your question').fill('Synthetic transition');await page.getByRole('button',{name:'Ask',exact:true}).click();
- await expect(page.locator('#question')).toHaveCount(1);await expect(page.locator('[data-site-page="home"]')).toHaveCount(0);
+ await expect(page.getByLabel('Your question')).toHaveCount(1);await expect(page.locator('[data-site-page="home"]')).toHaveCount(0);
  await page.route('**/capabilities',route=>{const cap={state:'disabled',reason:'not_configured'};return route.fulfill({json:{mode:'disabled',answers:cap,indexing:cap,discovery:cap,google:cap,email:cap,identity:cap}});});
  await page.goto('/#/auth');await expect(page.getByRole('button',{name:'Continue with Google'})).toBeDisabled();await expect(page.getByRole('button',{name:'Request account deletion'})).toBeDisabled();
 });
@@ -103,7 +106,7 @@ test('transition leaves one composer and disabled identity remains explicit',asy
 test('graph administration uses provenance contracts and exposes unavailable writes',async({page})=>{
  await setup(page,true);await page.goto('/#/admin');await page.getByText('Evidence graph administration',{exact:true}).click();
  await expect(page.getByText('No graph relations returned for this institution.')).toBeVisible();
- await page.getByLabel('Entity label').fill('Synthetic office');await page.getByLabel('Entity kind').selectOption('office');
+ await page.getByLabel('Entity label').fill('Synthetic office');await choose(page,'Entity kind','office');
  const sent=page.waitForRequest(r=>r.url().endsWith('/graph/entities'));
  await page.getByRole('button',{name:'Create graph entity'}).click();expect((await sent).postDataJSON()).toEqual({kind:'office',label:'Synthetic office'});
  await expect(page.getByRole('status').filter({hasText:'unavailable'})).toBeVisible();

@@ -1,16 +1,36 @@
-import { createEffect, createSignal, For, Show } from 'solid-js';
+// intent: source library (filterable list with status badges), source reader (versions with approved/superseded/under
+//         review badges) and the citation reader, on the Clay kit; requests and scope checks are unchanged.
+// status: done
+// next: the filter only covers the loaded page; a server-side search would need a new endpoint.
+// confidence: high
+import { createEffect, createSignal, For, Match, Show, Switch } from 'solid-js';
 import { createRemoteResource as createResource } from './resource';
-import { BookOpen, Download, ExternalLink } from 'lucide-solid';
+import { BookOpen, Download, ExternalLink, FileText, Library, SearchX, TriangleAlert } from 'lucide-solid';
 import { get, errorText, safeLink } from './api';
 import { scoped } from './App';
 import Pagination, { pageSuffix } from './Pagination';
+import { Badge, Button, cx, EmptyState, SearchInput, Skeleton } from './ui';
+import {
+  effectiveText,
+  filterSources,
+  indexingText,
+  kindText,
+  locatorText,
+  sourceBadge,
+  versionBadge,
+} from './app/workspace';
+import page from './app/Page.module.scss';
+
+const dateText = (iso: string) => new Date(iso).toLocaleDateString();
+
 export default function Sources(props: {
   institution: string;
   source?: string;
   citation?: string;
 }) {
   const [cursor, setCursor] = createSignal('');
-  const [versionCursor,setVersionCursor]=createSignal('');
+  const [versionCursor, setVersionCursor] = createSignal('');
+  const [query, setQuery] = createSignal('');
   let reader: HTMLElement | undefined;
   const [sources] = createResource(
     () =>
@@ -30,10 +50,11 @@ export default function Sources(props: {
     (key) => get(scoped(key.id, '/sources/{source_id}', { source_id: key.source }), 'Source'),
   );
   const [versions] = createResource(
-    () => source() ? {source:source()!,cursor:versionCursor()} : false,
+    () => (source() ? { source: source()!, cursor: versionCursor() } : false),
     (key) =>
       get(
-        scoped(key.source.institution_id, '/sources/{source_id}/versions', { source_id: key.source.id })+pageSuffix(key.cursor),
+        scoped(key.source.institution_id, '/sources/{source_id}/versions', { source_id: key.source.id }) +
+          pageSuffix(key.cursor),
         'VersionPage',
       ),
   );
@@ -68,138 +89,212 @@ export default function Sources(props: {
     versions.error ||
     version.error ||
     chunk.error;
+  const visible = () => filterSources(sources()?.items ?? [], query());
   return (
-    <section class="sources">
+    <section>
       <Show when={!props.citation}>
-        <h1 tabIndex={-1}>{props.source ? 'Source reader' : 'Source collection'}</h1>
-        <p class="muted">Original documents, with their versions and publication status.</p>
+        <h1 class={page.title} tabIndex={-1}>
+          {props.source ? 'Source reader' : 'Source library'}
+        </h1>
+        <p class={page.lede}>
+          Original documents shared with your account, with their versions and review status.
+        </p>
       </Show>
       <Show when={!props.institution}>
-        <p class="notice">
+        <p class={page.notice}>
+          <Library size={18} aria-hidden="true" />
           The collection is unavailable. Please return when the institution list is available.
         </p>
       </Show>
       <Show when={loading()}>
-        <div class="skeleton" role="status" aria-label="Loading sources" />
+        <div class={page.loading} role="status" aria-label="Loading sources">
+          <Skeleton height="56px" radius="sm" />
+          <Skeleton height="56px" radius="sm" />
+          <Show when={!props.citation}>
+            <Skeleton height="56px" radius="sm" />
+          </Show>
+        </div>
       </Show>
       <Show when={error()}>
-        <div class="notice" role="alert">
-          {errorText(error())} <a href="#/auth">Sign in</a>
+        <div class={cx(page.notice, page.error)} role="alert">
+          <TriangleAlert size={18} aria-hidden="true" />
+          <div class={page.noticeBody}>
+            <p>{errorText(error())}</p>
+            <div class={page.links}>
+              <Button size="sm" href="#/auth">
+                Sign in
+              </Button>
+            </div>
+          </div>
         </div>
       </Show>
       <Show when={sources()}>
         {(data) => (
           <>
-            <For each={data().items} fallback={<p>No sources are available to your account.</p>}>
-              {(s) => (
-                <a class="list-row" href={`#/sources/${s.id}`}>
-                  <BookOpen size={20} />
-                  <span>
-                    {s.title}
-                    <small>
-                      {s.kind.toUpperCase()} ·{' '}
-                      {s.current_version_id ? 'Version available' : 'Awaiting a current version'}
-                    </small>
-                  </span>
-                </a>
-              )}
-            </For>
-            <Show when={data().next_cursor}>
-              <button onClick={() => setCursor(data().next_cursor!)}>Next page</button>
+            <Show when={data().items.length}>
+              <div class={page.toolbar}>
+                <SearchInput
+                  label="Filter sources on this page"
+                  placeholder="Filter by title or format"
+                  value={query()}
+                  onInput={setQuery}
+                />
+              </div>
             </Show>
-            <Show when={cursor()}>
-              <button onClick={() => setCursor('')}>First page</button>
-            </Show>
+            <Switch
+              fallback={
+                <ul class={page.list}>
+                  <For each={visible()}>
+                    {(s) => {
+                      const badge = () => sourceBadge(s);
+                      return (
+                        <li>
+                          <a class={page.row} href={`#/sources/${s.id}`}>
+                            <span class={page.rowIcon} aria-hidden="true">
+                              <BookOpen size={20} />
+                            </span>
+                            <span class={page.rowText}>
+                              {s.title}
+                              <span class={page.meta}>{kindText(s.kind)}</span>
+                            </span>
+                            <span class={page.rowEnd}>
+                              <Badge tone={badge().tone} dot>
+                                {badge().label}
+                              </Badge>
+                            </span>
+                          </a>
+                        </li>
+                      );
+                    }}
+                  </For>
+                </ul>
+              }
+            >
+              <Match when={!data().items.length}>
+                <EmptyState icon={Library} title="No sources yet" body="No sources are available to your account." />
+              </Match>
+              <Match when={!visible().length}>
+                <EmptyState
+                  icon={SearchX}
+                  title="No matching sources"
+                  body="No document on this page matches the filter."
+                  action={
+                    <Button size="sm" onClick={() => setQuery('')}>
+                      Clear filter
+                    </Button>
+                  }
+                />
+              </Match>
+            </Switch>
+            <Pagination
+              cursor={cursor()}
+              next={data().next_cursor}
+              change={(next) => {
+                setQuery('');
+                setCursor(next);
+              }}
+              label="Source pages"
+            />
           </>
         )}
       </Show>
       <Show when={source()}>
         {(s) => (
           <>
-            <h2>{s().title}</h2>
+            <h2 class={page.h2}>{s().title}</h2>
             <Show when={safeLink(s().original_url)}>
               {(url) => (
-                <a href={url()} target="_blank" rel="noopener noreferrer">
-                  Original website <ExternalLink size={16} />
+                <a class={page.link} href={url()} target="_blank" rel="noopener noreferrer">
+                  Original website <ExternalLink size={16} aria-hidden="true" />
                 </a>
               )}
             </Show>
+            <Show when={versions() && !versions()!.items.length}>
+              <EmptyState icon={FileText} title="No versions yet" body="This source has no versions available to your account." />
+            </Show>
             <For each={versions()?.items}>
-              {(v) => (
-                <article class="version-row">
-                  <h3>{v.label}</h3>
-                  <p>
-                    {v.status} · Indexing: {v.indexing}
-                  </p>
-                  <p>
-                    Effective:{' '}
-                    {v.effective_from
-                      ? new Date(v.effective_from).toLocaleDateString()
-                      : 'Not specified'}{' '}
-                    —{' '}
-                    {v.effective_until
-                      ? new Date(v.effective_until).toLocaleDateString()
-                      : 'No end date supplied'}
-                  </p>
-                  <a
-                    href={scoped(props.institution, '/versions/{version_id}/file', {
-                      version_id: v.id,
-                    })}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Download size={16} />
-                    Open original version
-                  </a>
-                </article>
-              )}
+              {(v) => {
+                const badge = () => versionBadge(v, s().current_version_id);
+                return (
+                  <article class={page.item}>
+                    <div class={page.itemHead}>
+                      <h3 class={page.h3}>{v.label}</h3>
+                      <Badge tone={badge().tone} dot>
+                        {badge().label}
+                      </Badge>
+                    </div>
+                    <p class={page.small}>
+                      {indexingText(v.indexing)}. {effectiveText(v.effective_from, v.effective_until, dateText)}
+                    </p>
+                    <a
+                      class={page.link}
+                      href={scoped(props.institution, '/versions/{version_id}/file', {
+                        version_id: v.id,
+                      })}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Download size={16} aria-hidden="true" />
+                      Open original version
+                    </a>
+                  </article>
+                );
+              }}
             </For>
           </>
         )}
       </Show>
-      <Show when={props.source}><Pagination cursor={versionCursor()} next={versions()?.next_cursor} change={setVersionCursor} label="Version pages"/></Show>
+      <Show when={props.source}>
+        <Pagination cursor={versionCursor()} next={versions()?.next_cursor} change={setVersionCursor} label="Version pages" />
+      </Show>
       <Show when={evidence()}>
         {(e) => (
-          <article class="reader" ref={reader} tabIndex={-1} aria-label="Source citation">
-            <h3>{e().title}</h3>
-            <p>
-              {e().version_label} ·{' '}
-              {e().locator.page ? `Page ${e().locator.page}` : e().locator.section}
-            </p>
-            <p class="status">
-              {version()
-                ? `${version()!.status} · ${version()!.indexing}`
-                : 'Checking version status…'}
-            </p>
-            <Show
-              when={
-                version()?.effective_until && Date.parse(version()!.effective_until!) < Date.now()
-              }
-            >
-              <p class="notice">Expired version · historical citation</p>
+          <article class={cx(page.card, page.reader)} ref={reader} tabIndex={-1} aria-label="Source citation" data-reader>
+            <h3 class={page.h3}>{e().title}</h3>
+            <p class={page.meta}>{[e().version_label, locatorText(e().locator)].filter(Boolean).join(' · ')}</p>
+            <div class={page.itemHead}>
+              <Show when={version()} fallback={<span class={page.small}>Checking version status…</span>}>
+                {(v) => {
+                  const badge = () => versionBadge(v(), undefined);
+                  return (
+                    <>
+                      <Badge tone={badge().tone} dot>
+                        {badge().label}
+                      </Badge>
+                      <span class={page.small}>{indexingText(v().indexing)}</span>
+                    </>
+                  );
+                }}
+              </Show>
+            </div>
+            <Show when={version()?.effective_until && Date.parse(version()!.effective_until!) < Date.now()}>
+              <p class={page.notice}>Expired version · historical citation</p>
             </Show>
-            <blockquote>{e().quote}</blockquote>
+            <blockquote class={page.quote}>{e().quote}</blockquote>
             <Show when={chunk()}>
-              <details>
+              <details class={page.details}>
                 <summary>Read source passage</summary>
-                <p class="passage">{chunk()!.text}</p>
+                <p class={page.passage}>{chunk()!.text}</p>
               </details>
             </Show>
-            <a
-              href={`${scoped(props.institution, '/versions/{version_id}/file', { version_id: e().version_id })}${e().locator.page ? `#page=${e().locator.page}` : ''}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Download size={16} />
-              Open original · {e().version_label}
-            </a>
-            <Show when={safeLink(e().original_url)}>
-              {(url) => (
-                <a href={url()} target="_blank" rel="noopener noreferrer">
-                  Original website <ExternalLink size={16} />
-                </a>
-              )}
-            </Show>
+            <div class={page.actions}>
+              <a
+                class={page.link}
+                href={`${scoped(props.institution, '/versions/{version_id}/file', { version_id: e().version_id })}${e().locator.page ? `#page=${e().locator.page}` : ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Download size={16} aria-hidden="true" />
+                Open original · {e().version_label}
+              </a>
+              <Show when={safeLink(e().original_url)}>
+                {(url) => (
+                  <a class={page.link} href={url()} target="_blank" rel="noopener noreferrer">
+                    Original website <ExternalLink size={16} aria-hidden="true" />
+                  </a>
+                )}
+              </Show>
+            </div>
           </article>
         )}
       </Show>

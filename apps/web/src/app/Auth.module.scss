@@ -1,0 +1,76 @@
+// intent: account page arrangement: account actions card, mode tabs, Google sign-in block and the status line.
+// status: done
+// next: field styling comes from ui/TextField; only layout lives here.
+// confidence: high
+@use '../styles/mixins' as *;
+
+.account {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.danger {
+  display: grid;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+
+  > :first-child {
+    justify-self: start;
+    color: var(--danger);
+  }
+}
+
+.panel {
+  margin-top: 28px;
+}
+
+.tabs {
+  display: grid;
+  gap: 8px;
+
+  // Five modes do not fit one pill row on phones; scroll the track instead of wrapping it into a blob.
+  // The extra block padding keeps the 44px trigger hit areas inside the scroll box.
+  [role='tablist'] {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    padding-block: 5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+
+.google {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--faint);
+  font-size: 0.8125rem;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+}
+
+.googleButton {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.message {
+  min-height: 1.6em;
+  margin-top: 16px;
+  font-weight: 600;
+}

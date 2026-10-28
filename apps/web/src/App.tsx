@@ -9,7 +9,6 @@ import {
   untrack,
 } from 'solid-js';
 import { createRemoteResource as createResource, accessScope, setAccessScope } from './resource';
-import { ArrowUp, ArrowUpRight, BookOpen, X, MessageSquare } from 'lucide-solid';
 import {
   AskRequest,
   QUESTION_MAX_CHARACTERS,
@@ -31,6 +30,7 @@ import {
   clearOperations,
   retainOperations,
   requestScope,
+  RequestError,
 } from './api';
 import Sources from './Sources';
 import Auth from './Auth';
@@ -41,9 +41,12 @@ import { siteCommands } from './site/commands';
 import MarketingPages from './site/MarketingPages';
 import { Landing } from './landing/Landing';
 import { coverageText, heroLabel, membershipInstitution, schoolOptions } from './landing/logic';
-import { CommandMenu, looksVietnamese, Toaster, useCommandMenu } from './ui';
+import { CommandMenu, looksVietnamese, PromptInput, Toaster, useCommandMenu } from './ui';
 import './site/site.scss';
-import Pagination, { pageSuffix } from './Pagination';
+import { pageSuffix } from './Pagination';
+import { AnswerView } from './app/AnswerView';
+import { HistoryView } from './app/HistoryView';
+import page from './app/Page.module.scss';
 const institutionPath = '/api/v1/institutions/{institution_id}';
 export const scoped = (institution: string, suffix: string, params: Record<string, string> = {}) =>
   endpoint(`${institutionPath}${suffix}`, { institution_id: institution, ...params });
@@ -198,6 +201,8 @@ export default function App() {
   });
   const [busy, setBusy] = createSignal(false),
     [error, setError] = createSignal(''),
+    // RequestError code of the last ask failure ('cancelled' after Stop), so outages render as the unavailable state.
+    [errorCode, setErrorCode] = createSignal<string>(),
     [answer, setAnswer] = createSignal<AnswerOutput>();
   const [citation, setCitation] = createSignal('');
   const [conversation, setConversation] = createSignal<{ id: string; institution: string }>();
@@ -226,6 +231,10 @@ export default function App() {
   function member() {
     return me()?.memberships.some((m) => m.institution_id === institution());
   }
+  // The workspace names the school of the signed-in membership only; signed-out visitors see no school name.
+  const memberSchool = () =>
+    member() ? institutions()?.items.find((i) => i.id === institution())?.name : undefined;
+  const [deleting, setDeleting] = createSignal(false);
   let draftOwner = 'anonymous';
   let initialized = false;
   let controller: AbortController | undefined;
@@ -295,10 +304,12 @@ export default function App() {
       controller.abort();
       controller = undefined;
       setBusy(false);
-      if (announce)
+      if (announce) {
         setError(
           'Stopped waiting. Processing may continue. Submit the same question to check the same operation.',
         );
+        setErrorCode('cancelled');
+      }
     }
   }
   onCleanup(() => cancel(false));
@@ -306,6 +317,7 @@ export default function App() {
     event?.preventDefault();
     if (busy() || accessScope() === 'initial') return;
     setError('');
+    setErrorCode(undefined);
     setCitation('');
     setFeedback(false);
     if (!institution()) {
@@ -364,8 +376,10 @@ export default function App() {
       setAnswer(result);
       setConversation({ id: result.conversation_id, institution: result.institution_id });
     } catch (e) {
-      if (!active.signal.aborted && owner === accessScope() && controller === active)
+      if (!active.signal.aborted && owner === accessScope() && controller === active) {
         setError(errorText(e));
+        setErrorCode(e instanceof RequestError ? e.code : undefined);
+      }
     } finally {
       if (controller === active) {
         controller = undefined;
@@ -401,52 +415,17 @@ export default function App() {
       return { ...page, items: page.items.map(readAnswer) };
     },
   );
-  const form = () => (
-    <form class="composer" onSubmit={ask}>
-      <label for="question">Your question</label>
-      <textarea
-        id="question"
-        ref={composer}
-        aria-describedby="question-limits"
-        value={draft()}
-        onInput={(e) => updateDraft(e.currentTarget.value)}
-        placeholder={
-          language() === 'vi' ? 'Bạn muốn tìm hiểu điều gì?' : 'What would you like to know?'
-        }
-        required
-      />
-      <span id="question-limits" class="sr-only">
-        Up to {QUESTION_MAX_CHARACTERS} Unicode characters and {QUESTION_MAX_BYTES} UTF-8 bytes.
-        Tabs and line breaks are allowed.
-      </span>
-      <div class="composer-tools">
-        <select
-          aria-label="Answer language"
-          value={language()}
-          onChange={(e) => setLanguage(e.currentTarget.value as 'en' | 'vi')}
-        >
-          <option value="en">English</option>
-          <option value="vi">Tiếng Việt</option>
-        </select>
-        <Show
-          when={busy()}
-          fallback={
-            <button
-              class="primary"
-              type="submit"
-              title="Ask noti.school"
-              disabled={accessScope() === 'initial'}
-            >
-              Ask <ArrowUp size={18} />
-            </button>
-          }
-        >
-          <button type="button" onClick={() => cancel()}>
-            <X size={18} /> Stop waiting
-          </button>
-        </Show>
-      </div>
-    </form>
+  const followUp = () => (
+    <PromptInput
+      value={draft()}
+      onInput={updateDraft}
+      onSubmit={() => void ask()}
+      pending={busy()}
+      language={language()}
+      onLanguage={setLanguage}
+      placeholder={language() === 'vi' ? 'Hỏi tiếp về câu trả lời này' : 'Ask a follow-up about this answer'}
+      textareaRef={(element) => (composer = element)}
+    />
   );
   const commandMenu = useCommandMenu();
   // "/" focuses the question box when the visitor is not typing somewhere else.
@@ -547,141 +526,35 @@ export default function App() {
           {(page) => <MarketingPages route={page} motion={siteMotion()} />}
         </Show>
         <Show when={route() === '/answer'}>
-          <div class="workspace">
-            <div class="answer-column">
-              <a href="#/" class="back">
-                ← New question
-              </a>
-              <h1 id="answer-heading" tabIndex={-1}>
-                Your answer
-              </h1>
-              <p class="muted">
-                {selected()?.name}
-                {demo() ? ' · Demo' : ''}
-              </p>
-              <Show when={busy()}>
-                <div role="status" class="loading">
-                  <span class="skeleton" />
-                  Finding an answer and its sources…
-                </div>
-              </Show>
-              <Show when={error()}>
-                <div class="notice" role="alert">
-                  <p>{error()}</p>
-                  <a href="#/auth">Sign in</a> · <a href="#/sources">Browse sources</a>
-                </div>
-              </Show>
-              <Show when={answer()}>
-                {(a) => (
-                  <>
-                    <p class="answer-status">
-                      {a().status === 'abstained'
-                        ? 'Not enough evidence'
-                        : a().status === 'qualified'
-                          ? 'Answer with limitations'
-                          : 'Answer with sources'}
-                    </p>
-                    <For each={a().claims}>
-                      {(claim) => (
-                        <p class="claim">
-                          {claim.text}
-                          <span class="citation-buttons">
-                            <For each={claim.evidence_ids}>
-                              {(id) => (
-                                <button
-                                  title="Open source citation"
-                                  onClick={() => setCitation(id)}
-                                >
-                                  <BookOpen size={14} />
-                                  {a().evidence.findIndex((e) => e.id === id) + 1}
-                                </button>
-                              )}
-                            </For>
-                          </span>
-                        </p>
-                      )}
-                    </For>
-                    <Show when={a().explanation}>
-                      <p class="notice">{a().explanation}</p>
-                    </Show>
-                    <button onClick={() => setFeedback((v) => !v)}>
-                      <MessageSquare size={16} />
-                      Report an issue
-                    </button>
-                    <Show when={feedback()}>
-                      <form
-                        class="stack"
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          const data = new FormData(e.currentTarget);
-                          const owner = requestScope();
-                          setFeedbackMessage('Sending…');
-                          try {
-                            await post(scoped(institution(), '/feedback'), 'Feedback', {
-                              answer_id: a().id,
-                              category: data.get('category'),
-                              comment: data.get('comment'),
-                            });
-                            if (!owner.aborted) setFeedbackMessage('Feedback received. Thank you.');
-                          } catch (err) {
-                            if (!owner.aborted) setFeedbackMessage(errorText(err));
-                          }
-                        }}
-                      >
-                        <label>
-                          Issue
-                          <select name="category">
-                            <option value="unsupported">Unsupported claim</option>
-                            <option value="incorrect">Incorrect</option>
-                            <option value="outdated">Outdated</option>
-                            <option value="other">Other</option>
-                          </select>
-                        </label>
-                        <label>
-                          Comment
-                          <textarea name="comment" maxLength={2000} />
-                        </label>
-                        <button type="submit">Send feedback</button>
-                        <p role="status">{feedbackMessage()}</p>
-                      </form>
-                    </Show>
-                  </>
-                )}
-              </Show>
-              <h2>Ask a follow-up</h2>
-              {form()}
-            </div>
-            <aside>
-              <h2>Supporting sources</h2>
-              <Show
-                when={answer()?.evidence.length}
-                fallback={<p class="muted">Sources will appear with the answer.</p>}
-              >
-                <For each={answer()?.evidence}>
-                  {(e) => (
-                    <button class="source-citation" onClick={() => setCitation(e.id)}>
-                      <BookOpen size={18} />
-                      <span>
-                        {e.title}
-                        <small>
-                          {e.version_label} ·{' '}
-                          {e.locator.page ? `Page ${e.locator.page}` : e.locator.section}
-                        </small>
-                      </span>
-                    </button>
-                  )}
-                </For>
-              </Show>
+          <AnswerView
+            school={memberSchool()}
+            signedIn={!!me()}
+            demo={demo()}
+            busy={busy()}
+            error={error()}
+            errorCode={errorCode()}
+            answer={answer()}
+            citation={citation()}
+            onCitation={setCitation}
+            onStop={() => cancel()}
+            onRephrase={revealComposer}
+            feedbackOpen={feedback()}
+            onFeedbackToggle={() => setFeedback((v) => !v)}
+            feedbackMessage={feedbackMessage()}
+            onFeedbackMessage={setFeedbackMessage}
+            institution={institution()}
+            composer={followUp()}
+            reader={
               <Show when={citation()}>
                 <Show when={accessScope()} keyed>
                   {(_scope) => <Sources institution={institution()} citation={citation()} />}
                 </Show>
               </Show>
-            </aside>
-          </div>
+            }
+          />
         </Show>
         <Show when={route().startsWith('/sources')}>
-          <div class="page">
+          <div class={page.page}>
             <Show when={accessScope()} keyed>
               {(_scope) => (
                 <Sources institution={institution()} source={route().split('/')[2] || ''} />
@@ -690,7 +563,7 @@ export default function App() {
           </div>
         </Show>
         <Show when={route().startsWith('/auth') ? authCallback() : undefined} keyed>
-          <div class="page">
+          <div class={page.page}>
             <Show when={accessScope()} keyed>
               {(_scope) => (
                 <Auth
@@ -708,7 +581,7 @@ export default function App() {
           </div>
         </Show>
         <Show when={route().startsWith('/admin')}>
-          <div class="page">
+          <div class={page.page}>
             <Show when={accessScope()} keyed>
               {(_scope) => (
                 <Admin
@@ -724,94 +597,59 @@ export default function App() {
           </div>
         </Show>
         <Show when={route().startsWith('/history')}>
-          <div class="page">
-            <h1 tabIndex={-1}>Your conversations</h1>
-            <p class="muted">Saved conversations for this institution. Sign in to read them.</p>
-            <Show when={history.loading}>
-              <p role="status">Loading saved conversations…</p>
-            </Show>
-            <Show when={history.error}>
-              <p role="alert">{errorText(history.error)}</p>
-            </Show>
-            <For
-              each={visibleHistory()?.items}
-              fallback={
-                <Show when={!history.loading && !history.error}>
-                  <p>No saved conversations available.</p>
-                </Show>
-              }
-            >
-              {(row) => (
-                <a
-                  class="list-row"
-                  href={`#/history/${row.id}`}
-                  onClick={() => setInstitution(row.institution_id)}
-                >
-                  Open conversation <ArrowUpRight size={17} />
-                </a>
-              )}
-            </For>
-            <Pagination
-              cursor={listCursor()}
-              next={visibleHistory()?.next_cursor}
-              change={setListCursor}
-              label="History pages"
-            />
-            <Show when={prior.loading}>
-              <p role="status">Loading conversation…</p>
-            </Show>
-            <Show when={prior.error}>
-              <p role="alert">{errorText(prior.error)}</p>
-            </Show>
-            <For each={prior()?.items}>
-              {(a) => (
-                <button
-                  class="list-row"
-                  onClick={() => {
-                    setAnswer(readAnswer(a));
-                    setConversation({ id: a.conversation_id, institution: a.institution_id });
-                    location.hash = '/answer';
-                  }}
-                >
-                  View answer · {new Date(a.created_at).toLocaleDateString()}
-                </button>
-              )}
-            </For>
-            <Show when={prior()}>
-              <Pagination
-                cursor={historyCursor()}
-                next={prior()?.next_cursor}
-                change={setHistoryCursor}
-                label="Conversation pages"
-              />
-              <button
-                onClick={async () => {
-                  if (!confirm('Delete this conversation?')) return;
-                  const owner = requestScope(),
-                    path = route();
-                  try {
-                    await request(
-                      scoped(institution(), '/conversations/{conversation_id}', {
-                        conversation_id: route().split('/')[2]!,
-                      }),
-                      null,
-                      { method: 'DELETE' },
-                    );
-                    if (owner.aborted || path !== route()) return;
-                    await refreshHistory();
-                    if (owner.aborted || path !== route()) return;
-                    location.hash = '/history';
-                  } catch (e) {
-                    if (!owner.aborted && path === route()) setError(errorText(e));
+          <div class={page.page}>
+            <HistoryView
+              signedIn={!!me()}
+              member={!!member()}
+              rows={visibleHistory()?.items}
+              rowsLoading={history.loading}
+              rowsError={history.error ? errorText(history.error) : ''}
+              listCursor={listCursor()}
+              listNext={visibleHistory()?.next_cursor}
+              onListCursor={setListCursor}
+              onOpen={(row) => setInstitution(row.institution_id)}
+              detail={/^\/history\/[^/]+$/.test(route())}
+              answers={prior()?.items}
+              answersLoading={prior.loading}
+              answersError={prior.error ? errorText(prior.error) : ''}
+              answerCursor={historyCursor()}
+              answerNext={prior()?.next_cursor}
+              onAnswerCursor={setHistoryCursor}
+              onView={(a) => {
+                setAnswer(readAnswer(a));
+                setConversation({ id: a.conversation_id, institution: a.institution_id });
+                location.hash = '/answer';
+              }}
+              onDelete={async () => {
+                if (deleting() || !confirm('Delete this conversation?')) return;
+                const owner = requestScope(),
+                  path = route();
+                setDeleting(true);
+                try {
+                  await request(
+                    scoped(institution(), '/conversations/{conversation_id}', {
+                      conversation_id: route().split('/')[2]!,
+                    }),
+                    null,
+                    { method: 'DELETE' },
+                  );
+                  if (owner.aborted || path !== route()) return;
+                  await refreshHistory();
+                  if (owner.aborted || path !== route()) return;
+                  location.hash = '/history';
+                } catch (e) {
+                  if (!owner.aborted && path === route()) {
+                    setError(errorText(e));
+                    setErrorCode(undefined);
                   }
-                }}
-              >
-                Delete conversation
-              </button>
-              <Show when={error()}>
-                <p role="alert">{error()}</p>
-              </Show>
-            </Show>
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+              deleting={deleting()}
+              error={error()}
+              onAsk={focusAsk}
+            />
           </div>
         </Show>
         <Show
@@ -822,9 +660,16 @@ export default function App() {
             )
           }
         >
-          <div class="page">
-            <h1 tabIndex={-1}>Page not found</h1>
-            <a href="#/">Return to your question</a>
+          <div class={page.page}>
+            <h1 class={page.title} tabIndex={-1}>
+              Page not found
+            </h1>
+            <p class={page.lede}>This address does not match a page in noti.school.</p>
+            <p>
+              <a class={page.link} href="#/">
+                Return to your question
+              </a>
+            </p>
           </div>
         </Show>
       </main>

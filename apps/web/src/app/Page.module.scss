@@ -1,0 +1,398 @@
+// intent: shared Clay layout for the workspace pages (sources, history, admin, auth, not found): page frame, headings,
+//         notices, list rows, version rows, reader and the native controls the UI kit does not wrap (file, date, textarea).
+// status: done
+// next: component internals stay in ui/*.module.scss; only page arrangement belongs here.
+// confidence: high
+@use '../styles/mixins' as *;
+
+.page {
+  max-width: var(--max);
+  min-height: 70vh;
+  margin: 0 auto;
+  padding: 32px 16px 80px;
+
+  @include respond-to('sm') {
+    padding: 48px 32px 96px;
+  }
+}
+
+.narrow {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.title {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.lede {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 1.0625rem;
+  max-width: 60ch;
+}
+
+.h2 {
+  margin: 40px 0 16px;
+  font-size: 1.375rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.h3 {
+  font-size: 1.0625rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.card {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  @include clay-elevation(2);
+
+  @include respond-to('sm') {
+    padding: 24px;
+  }
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0 16px;
+
+  > :first-child {
+    flex: 1 1 260px;
+  }
+}
+
+// ---------- notices: info (clay-soft), error/unavailable (danger-soft)
+.notice {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0;
+  padding: 14px 16px;
+  border-radius: var(--r-sm);
+  background: var(--clay-soft);
+  color: var(--ink);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+
+  :global(svg.lucide) {
+    flex: none;
+    margin-top: 3px;
+    color: var(--clay-hover);
+  }
+
+  a {
+    color: var(--clay-hover);
+    font-weight: 600;
+    text-underline-offset: 3px;
+  }
+}
+
+.error {
+  background: var(--danger-soft);
+  color: color-mix(in srgb, var(--danger) 75%, var(--ink));
+
+  :global(svg.lucide) {
+    color: var(--danger);
+  }
+
+  a {
+    color: var(--danger);
+  }
+}
+
+.noticeBody {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+// ---------- lists
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--t-fast);
+
+  &:hover {
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+  }
+
+  &:focus-visible {
+    @include focus-ring;
+    border-radius: var(--r-sm);
+  }
+}
+
+.rowIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--clay-soft);
+  color: var(--clay);
+}
+
+.rowText {
+  display: grid;
+  // Wraps the status badge onto its own line before a long title gets squeezed.
+  flex: 1 1 14rem;
+  gap: 2px;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  color: var(--faint);
+  font: 400 0.75rem/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.rowEnd {
+  flex: none;
+}
+
+.row {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 520px) {
+  .rowEnd {
+    margin-left: 54px;
+  }
+}
+
+// ---------- version rows and reader
+.item {
+  display: grid;
+  gap: 8px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.itemHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.small {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pager {
+  margin-top: 16px;
+}
+
+.reader {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
+    @include focus-ring;
+  }
+}
+
+.quote {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--sunken);
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.passage {
+  white-space: pre-wrap;
+}
+
+.details {
+  summary {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--clay-hover);
+  font-weight: 600;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+
+  :global(svg.lucide) {
+    flex: none;
+  }
+}
+
+// ---------- forms
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.formRow {
+  display: grid;
+  gap: 16px;
+
+  @include respond-to('xs') {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+// Native controls without a UI kit wrapper share the TextField look.
+.input,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: 400 1rem/1.5 var(--font-body);
+  box-shadow: var(--e1);
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+    border-color: var(--clay);
+    box-shadow: var(--ring);
+  }
+
+  &[readonly] {
+    background: var(--sunken);
+    font: 400 0.8125rem/1.5 var(--font-mono);
+  }
+
+  &::file-selector-button {
+    margin-right: 12px;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-full);
+    background: var(--surface);
+    color: var(--ink);
+    font: 600 0.8125rem/1.2 var(--font-body);
+    cursor: pointer;
+  }
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.submit {
+  justify-self: start;
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 16px;
+  margin: 0;
+  font-size: 0.9375rem;
+
+  dt {
+    color: var(--muted);
+  }
+
+  dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    text-align: right;
+  }
+}
+
+.loading {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}

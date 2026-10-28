@@ -42,6 +42,11 @@ async function fixture(page: Page, admin = false, initial: string | null = 'A') 
   });
   return state;
 }
+// Kobalte Select: open the labelled trigger, then pick the option by its visible label.
+async function choose(page: Page, label: string, option: string) {
+  await page.getByRole('button', { name: label }).click();
+  await page.getByRole('option', { name: option, exact: true }).click();
+}
 async function refreshIdentity(page: Page) {
   const me = page.waitForResponse(r => r.url().endsWith('/api/v1/me'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -54,7 +59,7 @@ async function ask(page: Page, question = 'PRIVATE A QUESTION') {
 
 test('R3-01 same tab: detail only on exact route, account switch clears cached history and draft', async ({ page }) => {
   const state = await fixture(page);
-  await page.goto('/'); await ask(page); await expect(page.locator('.claim')).toContainText('PRIVATE A ANSWER');
+  await page.goto('/'); await ask(page); await expect(page.locator('[data-claim]')).toContainText('PRIVATE A ANSWER');
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await page.getByRole('link', { name: 'Open conversation' }).click();
   await expect(page.getByRole('button', { name: /View answer/ })).toBeVisible();
@@ -83,9 +88,9 @@ test('R3-01 delayed history and answer cannot repopulate after account or member
   let finish!: () => void;
   const answerGate = new Promise<void>(resolve => { finish = resolve; });
   await page.route('**/api/v1/answers', async route => { await answerGate; await route.fulfill({ json: answer('STALE DELAYED ANSWER') }).catch(() => {}); });
-  await ask(page, 'B OWNED DRAFT'); await expect(page.getByRole('button', { name: 'Stop waiting' })).toBeVisible();
+  await ask(page, 'B OWNED DRAFT'); await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
   state.member = false; await refreshIdentity(page); finish();
-  await expect(page.getByRole('button', { name: 'Stop waiting' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
   await expect(page.getByText('STALE DELAYED ANSWER')).toHaveCount(0);
   await expect(page.getByLabel('Your question')).toHaveValue('');
 });
@@ -122,7 +127,7 @@ test('R3-03 real 46.5 second response succeeds within frozen 155 second allowanc
   await fixture(page);
   await page.route('**/api/v1/answers', async route => { await new Promise(resolve => setTimeout(resolve, 46500)); await route.fulfill({ json: answer('SLOW SUCCESS') }); });
   await page.goto('/'); await ask(page);
-  await expect(page.locator('.claim')).toContainText('SLOW SUCCESS', { timeout: 55000 });
+  await expect(page.locator('[data-claim]')).toContainText('SLOW SUCCESS', { timeout: 55000 });
 });
 
 test('R3-03 stop, disconnect, conflict and reload reuse key; changed question and owner create new identities', async ({ page }) => {
@@ -136,7 +141,7 @@ test('R3-03 stop, disconnect, conflict and reload reuse key; changed question an
   });
   await page.goto('/'); await ask(page, 'Exact pending question ');
   await expect.poll(() => keys.length).toBe(1);
-  await page.getByRole('button', { name: 'Stop waiting' }).click();
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Processing may continue');
   await page.getByRole('button', { name: 'Ask', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Processing may continue');
@@ -170,7 +175,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   await page.setViewportSize(viewport); const state = await fixture(page, true);
   const requests: string[] = []; page.on('request', req => { if (req.url().includes('/api/')) requests.push(req.url()); });
   await page.goto('/#/admin');
-  await page.getByLabel('Select source').selectOption(sourceId);
+  await choose(page, 'Select source', source.title);
   await page.getByRole('button', { name: 'Review passages' }).click();
   await expect(page.getByText('FIRST EXTRACTED PAGE <script>bad()</script>', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Evidence chunk ID', { exact: true }).first()).toHaveValue(institution);
@@ -183,7 +188,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   await expect(page.getByText('PRIVATE REPORTED QUESTION <script>bad()</script>', { exact: true })).toBeVisible();
   await expect(page.getByText('REPORTED CLAIM', { exact: true })).toBeVisible();
   await expect(page.getByText(evidence.quote, { exact: true })).toBeVisible();
-  expect(await page.locator('.reader script, .reader img').count()).toBe(0);
+  expect(await page.locator('[data-reader] script, [data-reader] img').count()).toBe(0);
   await expect(page.getByRole('button', { name: 'Mark resolved' })).toBeEnabled();
   expect(state.mutations).toEqual([]);
   expect(requests.some(url => url.includes('/conversations/') || url.endsWith('/api/v1/answers'))).toBe(false);
@@ -198,7 +203,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
 
 test('R3-04 R1-04 empty extraction and missing context remain explicit and unresolved', async ({ page }) => {
   const state = await fixture(page, true); state.emptyChunks = true; state.contextFails = true;
-  await page.goto('/#/admin'); await page.getByLabel('Select source').selectOption(sourceId);
+  await page.goto('/#/admin'); await choose(page, 'Select source', source.title);
   await page.getByRole('button', { name: 'Review passages' }).click();
   await expect(page.getByText('No extracted text on this page.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Review report context' }).click();
@@ -215,8 +220,8 @@ test('independent regression: stopped follow-up reload preserves conversation, l
     if (attempts.length === 1) return route.fulfill({ json: answer('FIRST ANSWER') });
     return route.fulfill({ status: 409, json: error('conflict') });
   });
-  await page.goto('/'); await ask(page, 'First question'); await expect(page.locator('.claim')).toContainText('FIRST ANSWER');
-  await page.getByLabel('Answer language').selectOption('vi');
+  await page.goto('/'); await ask(page, 'First question'); await expect(page.locator('[data-claim]')).toContainText('FIRST ANSWER');
+  await page.getByRole('group', { name: 'Answer language' }).getByRole('button', { name: 'Tiếng Việt' }).click();
   await ask(page, 'Câu hỏi tiếp theo\n'); await expect(page.getByRole('alert')).toContainText('already being processed');
   expect(attempts[1]!.body).toMatchObject({ conversation_id: institution, language: 'vi', question: 'Câu hỏi tiếp theo\n' });
   await page.reload(); await expect(page.getByLabel('Your question')).toHaveValue('Câu hỏi tiếp theo\n');
@@ -239,12 +244,12 @@ test('independent regression: obsolete callback cannot overwrite or stop a newer
     await route.fulfill({ json: answer(index === 1 ? 'OBSOLETE' : 'CURRENT OPERATION') });
   });
   await page.goto('/'); await ask(page, 'Old operation'); await expect.poll(() => count).toBe(1);
-  await page.getByRole('button', { name: 'Stop waiting' }).click();
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
   await ask(page, 'New operation'); await expect.poll(() => count).toBe(2);
   first(); await page.waitForTimeout(100);
-  await expect(page.getByRole('button', { name: 'Stop waiting' })).toBeVisible();
-  await expect(page.locator('.claim')).toHaveCount(0);
-  second(); await expect(page.locator('.claim')).toContainText('CURRENT OPERATION');
+  await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+  await expect(page.locator('[data-claim]')).toHaveCount(0);
+  second(); await expect(page.locator('[data-claim]')).toContainText('CURRENT OPERATION');
   await expect(page.getByText('OBSOLETE', { exact: false })).toHaveCount(0);
 });
 

@@ -1,7 +1,10 @@
 import { For, Show } from 'solid-js';
 import { createRemoteResource } from './resource';
 import { get, endpoint } from './api';
-import { BookOpen, ArrowUpRight } from 'lucide-solid';
+import { BookOpen } from 'lucide-solid';
+import { Badge, Skeleton } from './ui';
+import { kindText, sourceBadge } from './app/workspace';
+import page from './app/Page.module.scss';
 export default function CollectionPreview(props: { institution: string }) {
   const [data] = createRemoteResource(
     () => props.institution || false,
@@ -13,30 +16,41 @@ export default function CollectionPreview(props: { institution: string }) {
       ),
   );
   return (
-    <div class="collection-rows">
+    <div>
       <Show when={data.loading}>
-        <div class="skeleton" role="status" aria-label="Loading collection" />
+        <div class={page.loading} role="status" aria-label="Loading collection">
+          <Skeleton height="56px" radius="sm" />
+        </div>
       </Show>
       <Show when={data.error || !props.institution}>
-        <p class="muted">Sign in to check the sources available to your account.</p>
+        <p class={page.muted}>Sign in to check the sources available to your account.</p>
       </Show>
-      <For each={data()?.items}>
-        {(s) => (
-          <a href={`#/sources/${s.id}`} class="list-row">
-            <BookOpen size={20} />
-            <span>
-              {s.title}
-              <small>
-                {s.kind.toUpperCase()} ·{' '}
-                {s.current_version_id ? 'Version available' : 'Awaiting a current version'}
-              </small>
-            </span>
-            <ArrowUpRight size={18} />
-          </a>
-        )}
-      </For>
+      <Show when={data()?.items.length}>
+        <ul class={page.list}>
+          <For each={data()?.items}>
+            {(s) => (
+              <li>
+                <a href={`#/sources/${s.id}`} class={page.row}>
+                  <span class={page.rowIcon} aria-hidden="true">
+                    <BookOpen size={20} />
+                  </span>
+                  <span class={page.rowText}>
+                    {s.title}
+                    <span class={page.meta}>{kindText(s.kind)}</span>
+                  </span>
+                  <span class={page.rowEnd}>
+                    <Badge tone={sourceBadge(s).tone} dot>
+                      {sourceBadge(s).label}
+                    </Badge>
+                  </span>
+                </a>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
       <Show when={data() && !data()?.items.length}>
-        <p class="muted">No documents are available to your account yet.</p>
+        <p class={page.muted}>No documents are available to your account yet.</p>
       </Show>
     </div>
   );

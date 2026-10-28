@@ -1,0 +1,200 @@
+// intent: /answer workspace layout: answer column (status, AnswerCard states, feedback, follow-up composer) and the
+//         supporting sources column (source excerpts and the citation reader).
+// status: done
+// next: AnswerCard, CitationChip and SourceExcerpt internals stay in ui/; only arrangement and status accents live here.
+// confidence: high
+@use '../styles/mixins' as *;
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  max-width: var(--max);
+  min-height: 75vh;
+  margin: 0 auto;
+  padding: 24px 16px 80px;
+
+  @include respond-to('sm') {
+    padding: 40px 32px 96px;
+  }
+
+  @include respond-to('lg') {
+    grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+    gap: 48px;
+  }
+}
+
+.main {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-width: 0;
+}
+
+.back {
+  justify-self: start;
+  margin-left: -14px;
+}
+
+.title {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 1.08;
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.school {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: -8px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+
+  :global(svg.lucide) {
+    flex: none;
+  }
+}
+
+.schoolName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+// Qualified answers carry a clay rule so they never read as a fully supported answer.
+.qualified {
+  border-left: 4px solid var(--clay);
+}
+
+.limitation {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--clay-soft);
+  color: var(--ink);
+  font-size: 0.9375rem;
+  white-space: pre-wrap;
+
+  :global(svg.lucide) {
+    flex: none;
+    margin-top: 3px;
+    color: var(--clay-hover);
+  }
+}
+
+.claim {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+
+  & + & {
+    margin-top: 12px;
+  }
+}
+
+.chips {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  white-space: pre-wrap;
+}
+
+.followUp {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.h2 {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+// ---------- supporting sources
+.aside {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+
+  @include respond-to('lg') {
+    position: sticky;
+    top: 88px;
+    max-height: calc(100vh - 104px);
+    overflow-y: auto;
+    padding: 2px 4px 4px 2px;
+  }
+}
+
+.excerpt {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow-wrap: anywhere;
+  @include clay-elevation(1);
+}
+
+.excerptHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.excerptNumber {
+  color: var(--faint);
+  font: 400 0.75rem/1.4 var(--font-mono);
+}
+
+.excerptText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+// ---------- feedback
+.feedback {
+  display: grid;
+  gap: 16px;
+}
+
+.feedbackStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 1.5em;
+  font-size: 0.9375rem;
+
+  :global(svg.lucide) {
+    flex: none;
+  }
+}
+
+.sent {
+  color: color-mix(in srgb, var(--sage) 65%, var(--ink));
+}
+
+.failed {
+  color: var(--danger);
+}
