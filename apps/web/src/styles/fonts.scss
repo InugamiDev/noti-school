@@ -15,3 +15,36 @@
 // JetBrains Mono 400/500.
 @use '@fontsource/jetbrains-mono/400.css' as mono_400;
 @use '@fontsource/jetbrains-mono/500.css' as mono_500;
+
+// Metric-matched local fallbacks: while a web font loads, text renders in Arial (Liberation Sans on Linux)
+// scaled to the web font's average advance and vertical metrics, so the swap does not reflow lines.
+// Values computed with fontTools from the shipped woff2 files against Arial / Arial Bold (2026-10-28).
+@font-face {
+  font-family: 'Bricolage Fallback';
+  font-weight: 700;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold');
+  size-adjust: 100.75%;
+  ascent-override: 92.31%;
+  descent-override: 26.8%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Hanken Fallback';
+  font-weight: 400;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans');
+  size-adjust: 99.38%;
+  ascent-override: 100.63%;
+  descent-override: 30.49%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Hanken Fallback';
+  font-weight: 600 700;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold');
+  size-adjust: 95.01%;
+  ascent-override: 105.25%;
+  descent-override: 31.89%;
+  line-gap-override: 0%;
+}

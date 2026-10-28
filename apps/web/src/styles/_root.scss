@@ -23,8 +23,8 @@
   --danger: #b42318;
   --danger-soft: #fdebe9;
 
-  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Hanken Grotesk', system-ui, sans-serif;
-  --font-body: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Bricolage Fallback', system-ui, sans-serif;
+  --font-body: 'Hanken Grotesk', 'Hanken Fallback', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   --r-sm: #{$r-sm};
