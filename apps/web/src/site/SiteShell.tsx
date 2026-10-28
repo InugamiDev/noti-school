@@ -1,10 +1,12 @@
 // intent: Clay site shell: dismissible pilot notice, sticky nav with search and account entry, mobile sheet, footer.
 // status: done
 // next: workspace pages (sources, history, admin, auth) are linked from the footer and the command menu, not the top nav.
+//       While identity is unknown the account control is a placeholder of the same box, so nothing flips or reflows.
 // confidence: high
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Menu, Pause, Play, Search, X } from 'lucide-solid';
-import { Button, Kbd, localStore, Sheet } from '../ui';
+import type { SessionState } from '../app/session';
+import { Button, createDelayedLoading, Kbd, localStore, Sheet } from '../ui';
 
 export { isSiteRoute, sitePages, type SiteRoute } from './routes';
 
@@ -55,7 +57,9 @@ function Logo(props: { label?: string }) {
   );
 }
 
-export function SiteHeader(props: { route: string; signedIn: boolean; onSearch: () => void }) {
+export function SiteHeader(props: { route: string; session: SessionState; onSearch: () => void }) {
+  const signedIn = () => props.session === 'signed-in';
+  const placeholder = createDelayedLoading(() => props.session === 'loading');
   const [open, setOpen] = createSignal(false);
   const [stuck, setStuck] = createSignal(false);
   onMount(() => {
@@ -88,15 +92,28 @@ export function SiteHeader(props: { route: string; signedIn: boolean; onSearch: 
           Search
           <Kbd mod>K</Kbd>
         </Button>
-        <Button
-          class="site-nav-account"
-          variant={props.signedIn ? 'secondary' : 'primary'}
-          size="sm"
-          href="#/auth"
-          aria-current={props.route.startsWith('/auth') ? 'page' : undefined}
+        {/* A shown placeholder is held for its minimum time even if identity resolves sooner (no 10 ms flicker). */}
+        <Show
+          when={props.session !== 'loading' && !placeholder()}
+          fallback={
+            <span
+              class="site-nav-account site-nav-account-pending"
+              classList={{ 'site-nav-account-waiting': !placeholder() }}
+              aria-hidden="true"
+              data-skeleton
+            />
+          }
         >
-          {props.signedIn ? 'Account' : 'Sign in'}
-        </Button>
+          <Button
+            class="site-nav-account reveal"
+            variant={signedIn() ? 'secondary' : 'primary'}
+            size="sm"
+            href="#/auth"
+            aria-current={props.route.startsWith('/auth') ? 'page' : undefined}
+          >
+            {signedIn() ? 'Account' : 'Sign in'}
+          </Button>
+        </Show>
         <Button
           class="site-nav-menu"
           variant="ghost"

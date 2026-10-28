@@ -13,7 +13,10 @@ import {
   CitationChip,
   cx,
   EmptyState,
+  LoadingRegion,
   Passage,
+  Skeleton,
+  SkeletonText,
   SourceExcerpt,
 } from '../ui';
 import {
@@ -25,13 +28,16 @@ import {
   isUnavailableCode,
 } from './workspace';
 import { FeedbackForm } from './FeedbackForm';
+import type { SessionState } from './session';
 import page from './Page.module.scss';
 import styles from './Workspace.module.scss';
 
 export interface AnswerViewProps {
   /** School name from the Me membership; undefined when signed out or not a member. */
   school: string | undefined;
-  signedIn: boolean;
+  session: SessionState;
+  /** Identity, the school list or capabilities are still resolving, so the school line is not known yet. */
+  schoolPending: boolean;
   demo: boolean;
   busy: boolean;
   error: string;
@@ -81,10 +87,24 @@ export function AnswerView(props: AnswerViewProps) {
         <h1 id="answer-heading" class={styles.title} tabIndex={-1}>
           Your answer
         </h1>
-        <p class={styles.school}>
+        <LoadingRegion
+          loading={props.schoolPending}
+          label="Loading your school…"
+          innerClass={styles.school}
+          skeleton={
+            <>
+              <SkeletonText class={styles.schoolSkeleton} />
+              <Skeleton class={styles.badgeSkeleton} width="17rem" height="26px" />
+            </>
+          }
+        >
           <Show
             when={props.school}
-            fallback={<span>{props.signedIn ? 'No school membership on this account.' : 'Not signed in.'}</span>}
+            fallback={
+              <span>
+                {props.session === 'signed-in' ? 'No school membership on this account.' : 'Not signed in.'}
+              </span>
+            }
           >
             {(name) => (
               <span class={styles.schoolName}>
@@ -96,7 +116,7 @@ export function AnswerView(props: AnswerViewProps) {
           <Show when={props.demo}>
             <Badge tone="clay">Demo collection, synthetic examples only</Badge>
           </Show>
-        </p>
+        </LoadingRegion>
         <Show when={props.busy}>
           <AnswerCard state="loading" progress="Finding an answer and its sources…" onStop={() => props.onStop()} />
         </Show>
@@ -114,7 +134,7 @@ export function AnswerView(props: AnswerViewProps) {
                 <div class={page.noticeBody}>
                   <p>{props.error}</p>
                   <div class={page.links}>
-                    <Show when={isAccessCode(props.errorCode) || !props.signedIn}>
+                    <Show when={isAccessCode(props.errorCode) || props.session === 'signed-out'}>
                       <Button size="sm" href="#/auth">
                         Sign in
                       </Button>

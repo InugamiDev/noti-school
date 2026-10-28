@@ -1,0 +1,33 @@
+@use '../styles/mixins' as *;
+
+.status {
+  @include visually-hidden;
+}
+
+// Before the delay passes the skeleton already reserves its box, but stays invisible.
+.waiting {
+  visibility: hidden;
+}
+
+// Content arrival: opacity only; no transform or height animation, so nothing reflows.
+:global(.reveal) {
+  animation: reveal 160ms var(--ease) both;
+
+  @include reduced-motion {
+    animation: none;
+  }
+}
+
+:global([data-motion='off'] .reveal) {
+  animation: none;
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

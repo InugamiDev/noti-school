@@ -176,6 +176,21 @@ html[data-motion='off'] {
 
 .site-nav-account {
   margin-left: auto;
+  // Fits both "Sign in" and "Account", so the control keeps one box while identity resolves and after.
+  min-width: 6.25rem;
+}
+
+.site-nav-account-pending {
+  display: inline-block;
+  flex: none;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--sunken);
+}
+
+.site-nav-account-waiting {
+  visibility: hidden;
 }
 
 @include respond-to('lg') {

@@ -2,10 +2,11 @@ import { For, Show } from 'solid-js';
 import { createRemoteResource } from './resource';
 import { get, endpoint } from './api';
 import { BookOpen } from 'lucide-solid';
-import { Badge, Skeleton } from './ui';
+import { Badge, LoadingRegion, SkeletonRow } from './ui';
 import { kindText, sourceBadge } from './app/workspace';
 import page from './app/Page.module.scss';
-export default function CollectionPreview(props: { institution: string }) {
+// Pass `pending` while identity or the school list is unresolved, so a missing institution is not read as signed out.
+export default function CollectionPreview(props: { institution: string; pending?: boolean }) {
   const [data] = createRemoteResource(
     () => props.institution || false,
     (id) =>
@@ -16,12 +17,17 @@ export default function CollectionPreview(props: { institution: string }) {
       ),
   );
   return (
-    <div>
-      <Show when={data.loading}>
-        <div class={page.loading} role="status" aria-label="Loading collection">
-          <Skeleton height="56px" radius="sm" />
-        </div>
-      </Show>
+    <LoadingRegion
+      loading={!!props.pending || data.loading}
+      label="Loading collection…"
+      skeleton={
+        <ul class={page.list}>
+          <li><SkeletonRow pill /></li>
+          <li><SkeletonRow pill titleWidth="42%" /></li>
+          <li><SkeletonRow pill titleWidth="64%" /></li>
+        </ul>
+      }
+    >
       <Show when={data.error || !props.institution}>
         <p class={page.muted}>Sign in to check the sources available to your account.</p>
       </Show>
@@ -52,6 +58,6 @@ export default function CollectionPreview(props: { institution: string }) {
       <Show when={data() && !data()?.items.length}>
         <p class={page.muted}>No documents are available to your account yet.</p>
       </Show>
-    </div>
+    </LoadingRegion>
   );
 }

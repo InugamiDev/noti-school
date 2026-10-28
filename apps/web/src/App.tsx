@@ -2,6 +2,7 @@ import {
   batch,
   createComputed,
   createEffect,
+  createMemo,
   createSignal,
   Show,
   onCleanup,
@@ -45,6 +46,7 @@ import './site/site.scss';
 import { pageSuffix } from './Pagination';
 import { AnswerView } from './app/AnswerView';
 import { HistoryView } from './app/HistoryView';
+import { deriveInstitutions, deriveSession, type InstitutionsState, type SessionState } from './app/session';
 import page from './app/Page.module.scss';
 const institutionPath = '/api/v1/institutions/{institution_id}';
 export const scoped = (institution: string, suffix: string, params: Record<string, string> = {}) =>
@@ -65,6 +67,7 @@ export default function App() {
   const [section, setSection] = createSignal<LandingSection | ''>(parseHash(location.hash).section);
   const hash = () => {
     setAuthCallback(readCallback());
+    setWaitSince(Date.now());
     const next = parseHash(location.hash);
     batch(() => {
       setRoute(next.route);
@@ -87,6 +90,18 @@ export default function App() {
   );
   const [institutions] = createResource(() => get('/api/v1/institutions', 'InstitutionPage'));
   const [me, { refetch: refreshMe, mutate: setMe }] = createResource(() => get('/api/v1/me', 'Me'));
+  // Unknown is not "no": until identity and the school list settle, views render loading, never signed out or unavailable.
+  const session = createMemo<SessionState>(
+    (previous) => deriveSession({ loading: me.loading, present: !!me() }, previous),
+    'loading',
+  );
+  const institutionsState = createMemo<InstitutionsState>(
+    (previous) =>
+      deriveInstitutions({ loading: institutions.loading, present: !!institutions()?.items.length }, previous),
+    'loading',
+  );
+  // When the visitor started waiting on this route, so regions remounted by a scope change keep their skeleton.
+  const [waitSince, setWaitSince] = createSignal(Date.now());
   const revalidate = () => {
     if (document.visibilityState === 'visible') void refreshMe();
   };
@@ -112,6 +127,11 @@ export default function App() {
   });
   const schools = () => schoolOptions(institutions()?.items ?? [], me()?.memberships);
   const demo = () => capabilities()?.mode === 'mock' || selected()?.coverage === 'synthetic_demo';
+  // Workspace data waits for identity, the school list and the access scope derived from both.
+  const workspacePending = () =>
+    session() === 'loading' ||
+    institutionsState() === 'loading' ||
+    (institutionsState() === 'ready' && accessScope() === 'initial');
   createEffect(() => {
     if (institution()) writePreference('institution', institution());
   });
@@ -483,7 +503,7 @@ export default function App() {
         Skip to content
       </a>
       <PilotNotice />
-      <SiteHeader route={route()} signedIn={!!me()} onSearch={() => commandMenu.setOpen(true)} />
+      <SiteHeader route={route()} session={session()} onSearch={() => commandMenu.setOpen(true)} />
       <main id="main" tabIndex={-1}>
         <Show when={route() === '/'}>
           <Landing
@@ -527,7 +547,12 @@ export default function App() {
         <Show when={route() === '/answer'}>
           <AnswerView
             school={memberSchool()}
-            signedIn={!!me()}
+            session={session()}
+            schoolPending={
+              session() === 'loading' ||
+              (session() === 'signed-in' && institutionsState() === 'loading') ||
+              (capabilities.loading && !capabilities())
+            }
             demo={demo()}
             busy={busy()}
             error={error()}
@@ -556,7 +581,13 @@ export default function App() {
           <div class={page.page}>
             <Show when={accessScope()} keyed>
               {(_scope) => (
-                <Sources institution={institution()} source={route().split('/')[2] || ''} />
+                <Sources
+                  institution={institution()}
+                  source={route().split('/')[2] || ''}
+                  pending={workspacePending()}
+                  unavailable={institutionsState() === 'unavailable'}
+                  since={waitSince()}
+                />
               )}
             </Show>
           </div>
@@ -585,6 +616,8 @@ export default function App() {
               {(_scope) => (
                 <Admin
                   institution={institution()}
+                  pending={workspacePending()}
+                  since={waitSince()}
                   allowed={
                     me()?.memberships.some(
                       (m) => m.institution_id === institution() && m.role === 'admin',
@@ -598,7 +631,8 @@ export default function App() {
         <Show when={route().startsWith('/history')}>
           <div class={page.page}>
             <HistoryView
-              signedIn={!!me()}
+              session={session()}
+              pending={workspacePending()}
               member={!!member()}
               rows={visibleHistory()?.items}
               rowsLoading={history.loading}

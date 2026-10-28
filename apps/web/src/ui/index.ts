@@ -19,13 +19,21 @@ export { CitationChip, type CitationChipProps } from './CitationChip';
 export { CommandMenu, useCommandMenu, type CommandMenuProps, type CommandMenuState } from './CommandMenu';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { Kbd, type KbdProps } from './Kbd';
+export { LoadingRegion, type LoadingRegionProps } from './LoadingRegion';
 export { PromptInput, type PromptInputProps } from './PromptInput';
 export { SchoolPicker, type SchoolPickerProps } from './SchoolPicker';
 export { SearchInput, type SearchInputProps } from './SearchInput';
 export { SegmentedToggle, type SegmentedOption, type SegmentedToggleProps } from './SegmentedToggle';
 export { Select, type SelectOption, type SelectProps } from './Select';
 export { Sheet, type SheetProps } from './Sheet';
-export { Skeleton, type SkeletonProps } from './Skeleton';
+export {
+  Skeleton,
+  SkeletonRow,
+  SkeletonText,
+  type SkeletonProps,
+  type SkeletonRowProps,
+  type SkeletonTextProps,
+} from './Skeleton';
 export { Passage, SourceExcerpt, type PassageProps, type SourceExcerptProps } from './SourceExcerpt';
 export { Spinner, type SpinnerProps } from './Spinner';
 export { Tabs, type TabItem, type TabsProps } from './Tabs';
@@ -44,6 +52,12 @@ export {
   type CommandItem,
 } from './lib/command';
 export { cx } from './lib/cx';
+export {
+  createDelayedLoading,
+  createLoadingTimer,
+  type DelayedLoadingOptions,
+  type LoadingTimer,
+} from './lib/loading';
 export { currentPlatform, isCommandShortcut, isMacPlatform, modifierLabel } from './lib/platform';
 export {
   canSubmitPrompt,

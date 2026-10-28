@@ -51,12 +51,24 @@
   align-items: center;
   gap: 8px 12px;
   margin-top: -8px;
+  // The demo badge (26px) sets the line height; reserving it keeps the line steady whether or not the badge shows.
+  min-height: 26px;
   color: var(--muted);
   font-size: 0.9375rem;
 
   :global(svg.lucide) {
     flex: none;
   }
+}
+
+.schoolSkeleton {
+  width: min(12rem, 100%);
+}
+
+// Stands in for the collection badge, so the skeleton wraps onto a second row where the real line does.
+.badgeSkeleton {
+  max-width: 100%;
+  border-radius: var(--r-full);
 }
 
 .schoolName {
