@@ -1,0 +1,80 @@
+.accordion {
+  border-top: 1px solid var(--line);
+}
+
+.item {
+  border-bottom: 1px solid var(--line);
+}
+
+.header {
+  margin: 0;
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 18px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 600 1.0625rem/1.4 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.icon {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  transition: rotate var(--t-med) var(--ease);
+
+  .trigger[data-expanded] & {
+    rotate: 45deg;
+  }
+}
+
+.content {
+  overflow: hidden;
+  animation: collapse var(--t-med) var(--ease);
+
+  &[data-expanded] {
+    animation: expand var(--t-med) var(--ease);
+  }
+}
+
+.body {
+  max-width: 70ch;
+  padding: 0 4px 20px;
+  color: var(--muted);
+
+  a {
+    color: var(--clay);
+    font-weight: 600;
+    text-underline-offset: 3px;
+  }
+}
+
+@keyframes expand {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: var(--kb-accordion-content-height);
+  }
+}
+
+@keyframes collapse {
+  from {
+    height: var(--kb-accordion-content-height);
+  }
+
+  to {
+    height: 0;
+  }
+}

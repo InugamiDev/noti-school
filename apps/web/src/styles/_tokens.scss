@@ -1,0 +1,28 @@
+// intent: Clay design tokens, one source for CSS custom properties plus SCSS-only scales.
+// status: done
+// next: component modules read colours via var(--token); use $bp-* and $r-* only where CSS vars cannot reach (media queries, Sass math).
+// This partial emits no CSS, so modules can @use it (or mixins) without duplicating :root; the custom properties live in _root.scss.
+// confidence: high (values mirror design/clay/reference/clay.css :root)
+@use 'sass:map';
+
+// Breakpoints (px), used through respond-to() in _mixins.scss.
+$breakpoints: (
+  'xs': 520px,
+  'sm': 720px,
+  'md': 860px,
+  'lg': 960px,
+  'xl': 1000px,
+);
+
+// Radius scale, mirrors --r-*.
+$radii: (
+  'sm': 10px,
+  'md': 18px,
+  'lg': 28px,
+  'full': 999px,
+);
+
+$r-sm: map.get($radii, 'sm');
+$r-md: map.get($radii, 'md');
+$r-lg: map.get($radii, 'lg');
+$r-full: map.get($radii, 'full');

@@ -1,0 +1,81 @@
+.btn {
+  --h: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--h);
+  padding: 0 18px;
+  border-radius: var(--r-full);
+  border: 1px solid transparent;
+  font: 600 0.9375rem/1 var(--font-body);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--t-fast),
+    box-shadow var(--t-fast),
+    transform var(--t-fast),
+    border-color var(--t-fast),
+    color var(--t-fast);
+
+  &:active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  &:disabled,
+  &[aria-disabled='true'] {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  :global(svg.lucide) {
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
+}
+
+.primary {
+  background: var(--clay);
+  color: var(--on-clay);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--on-clay) 25%, transparent),
+    0 6px 16px -8px color-mix(in srgb, var(--clay) 70%, transparent);
+
+  &:hover {
+    background: var(--clay-hover);
+  }
+}
+
+.secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: var(--e1);
+
+  &:hover {
+    border-color: var(--line-strong);
+  }
+}
+
+.ghost {
+  background: transparent;
+  color: var(--ink);
+
+  &:hover {
+    background: var(--sunken);
+  }
+}
+
+.sm {
+  --h: 36px;
+  padding: 0 14px;
+  font-size: 0.875rem;
+}
+
+.icon {
+  width: var(--h);
+  padding: 0;
+}

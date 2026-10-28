@@ -1,0 +1,25 @@
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--sunken) 0 40%,
+    color-mix(in srgb, var(--sunken) 35%, var(--surface)) 50%,
+    var(--sunken) 60% 100%
+  );
+  background-size: 300% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.block {
+  border-radius: var(--r-sm);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}

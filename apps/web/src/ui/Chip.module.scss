@@ -1,0 +1,29 @@
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 0.875rem/1 var(--font-body);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
+
+  // Extends the hit area to 44px without changing the visual size.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -5px 0;
+  }
+
+  &:hover {
+    border-color: var(--clay);
+    background: var(--clay-soft);
+  }
+}

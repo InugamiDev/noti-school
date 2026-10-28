@@ -1,0 +1,45 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+
+  :global(svg.lucide) {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.neutral {
+  background: var(--sunken);
+  color: var(--muted);
+}
+
+// Text tones are darkened from the base hue so small labels keep AA contrast on the soft fills.
+.sage {
+  background: var(--sage-soft);
+  color: color-mix(in srgb, var(--sage) 65%, var(--ink));
+}
+
+.clay {
+  background: var(--clay-soft);
+  color: var(--clay-hover);
+}
+
+.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}

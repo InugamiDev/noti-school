@@ -1,71 +1,44 @@
----
-name: noti.school luminous archive
-colors:
-  primary: '#d5ee78'
-  on-primary: '#19200d'
-  background: '#101314'
-  surface: '#191f21'
-  text: '#e7ebea'
-  muted: '#a5b0b2'
-  cyan: '#9bdde7'
-  vermilion: '#ee826d'
-typography:
-  body:
-    fontFamily: 'Aptos, Segoe UI, sans-serif'
-    fontSize: '16px'
-    fontWeight: 400
-    lineHeight: 1.65
-    letterSpacing: '0px'
-  heading:
-    fontFamily: 'Aptos, Segoe UI, sans-serif'
-    fontSize: '40px'
-    fontWeight: 500
-    lineHeight: 1.1
-    letterSpacing: '0px'
-rounded:
-  none: '0px'
-  sm: '5px'
-  md: '8px'
-spacing:
-  sm: '8px'
-  md: '16px'
-  lg: '24px'
-components:
-  primary-button:
-    backgroundColor: '{colors.primary}'
-    textColor: '{colors.on-primary}'
-    rounded: '{rounded.sm}'
-    padding: '{spacing.md}'
----
+# noti.school design system: Clay
 
-## Overview
+The token source of truth is [clay/DESIGN.md](clay/DESIGN.md); owner decisions are in [clay/CONTEXT.md](clay/CONTEXT.md). The working static mockup is `clay/reference/`. This file describes how the system is built in `apps/web`.
 
-An open archive corridor frames a stable question composer. The explicitly requested dark theme is the only theme. System fonts avoid another external fetch and cover Vietnamese.
+## Look
 
-## Colors
+Clean, minimal, tactile light theme. Warm off-white page, white surfaces, slate ink, one clay accent (`--clay`) for primary actions and citations, sage for supported states. Light theme only for now (`color-scheme: light`). Pill buttons, chips and badges are by design. No gradients, glass or glow on surfaces; depth comes from the slate-tinted elevations `--e1`, `--e2`, `--e3`.
 
-Neutral platinum on charcoal. Chartreuse is reserved for the primary action, cyan for evidence links, vermilion for unavailable states. Status always includes words.
+## Tokens
 
-## Typography
+Defined once in `src/styles/_tokens.scss` and emitted on `:root`:
 
-Fixed sizes at breakpoints: archive hero 58/100/112px with compact-height reductions, marketing page titles 34/40/52/64px, section headings 29/38px, body 16px, question 16/18px. No viewport-scaled text or negative tracking. Long source titles wrap.
+- Colour: `--page --surface --sunken --ink --muted --faint --line --line-strong --clay --clay-hover --clay-soft --on-clay --sage --sage-soft --mark --danger --danger-soft`
+- Type: `--font-display` (Bricolage Grotesque), `--font-body` (Hanken Grotesk), `--font-mono` (JetBrains Mono)
+- Radius: `--r-sm --r-md --r-lg --r-full` (also SCSS `$r-*` and `$radii`)
+- Elevation and focus: `--e1 --e2 --e3 --ring`
+- Motion and layout: `--ease --t-fast --t-med --max`
+- SCSS only: `$breakpoints` (520, 720, 860, 960, 1000px as `xs sm md lg xl`)
 
-## Layout
+Components read tokens through `var(--token)`. Do not hard-code colours that have a token.
 
-Header is 72px on desktop and 64px with mobile disclosure. Sources, History and account entry remain directly visible. A centered 680px composer opens onto the next answer/evidence section. Marketing bands use a 1160px content measure with evidence tools, editorial rows, audience splits, manual process selection and native FAQs. Answer/source splits collapse to vertical readers on phones. Admin keeps compact forms and rows. The minimum supported width is 320px.
+## Sass architecture
 
-## Elevation & Depth
+- `src/styles/global.scss` forwards `_tokens`, `_mixins`, `_base`, `fonts`; it is imported once from `src/main.tsx`.
+- `_mixins.scss`: `focus-ring`, `visually-hidden`, `reduced-motion`, `respond-to($bp)` (min-width), `clay-elevation(1|2|3)`.
+- `_base.scss`: reset, body, headings, `::selection`, `.skip` link, `.sr-only`, reduced-motion floor.
+- Each component owns a `Component.module.scss` next to its `.tsx`, with `@use` of the mixins by relative path. Typings for `*.module.scss` come from `src/vite-env.d.ts`.
+- The legacy `src/style.css` still loads after the global styles until later tasks remove it.
 
-Only the direct Three.js archive supplies spatial depth. Forms use solid surfaces and simple borders.
+## Behaviour primitives
 
-## Shapes
+Interactive widgets (dialog, popover, select, toggle group, tabs, tooltip, accordion, command menu) use headless `@kobalte/core` primitives styled with the module SCSS. Toasts use `solid-sonner`. Icons come from `lucide-solid` and supplement visible labels. The hero scene is the only Three.js use, lazily imported.
 
-Maximum radius 8px. Documents and shelves are rectangular.
+## Fonts
 
-## Components
+Self-hosted through npm packages imported in `src/styles/fonts.scss`; no runtime CDN or Google Fonts link. Bricolage Grotesque is the variable package (wght axis, covers 500 and 700); Hanken Grotesk 400/500/600/700; JetBrains Mono 400/500. The Latin, Latin Extended and Vietnamese subsets ship, so Vietnamese diacritics render in the intended face.
 
-Native labels, inputs, selects and buttons. Lucide icons supplement visible labels. Motion control has a title and accessible name; the footer shares its pause preference across routes. Bounded section reveals and evidence transitions stop for pause, reduced motion and hidden pages. Without IntersectionObserver the archive bitmap and page content remain visible and still. Loading regions include visible status. The synthetic product example is an isolated framed tool, not a simulated live answer.
+## Accessibility
 
-## Do's and Don'ts
+WCAG 2.2 AA contrast, visible focus (`focus-ring`), 44px targets for primary controls, full keyboard operation, `prefers-reduced-motion` respected through the `reduced-motion` mixin and the base floor. Status is never colour alone.
 
-Do preserve drafts and give accurate failure recovery. Do not fabricate sources, metrics, affiliation, authentication, or policy answers.
+## Do's and don'ts
+
+Do keep example content labelled "Sample handbook, not HCMIU policy" and write copy for every university ("your school"). Do not invent regulations, deadlines, offices, partners or affiliation. No em or en dashes in user-facing copy.

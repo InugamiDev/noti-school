@@ -1,0 +1,135 @@
+@use '../styles/mixins' as *;
+
+.form,
+.field {
+  display: block;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--e2);
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
+
+  &:focus-within {
+    border-color: var(--clay);
+    box-shadow:
+      var(--e2),
+      var(--ring);
+  }
+}
+
+.textarea {
+  display: block;
+  width: 100%;
+  min-height: 76px;
+  max-height: 220px;
+  padding: 16px 16px 8px;
+  overflow-y: auto;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  field-sizing: content;
+
+  &::placeholder {
+    color: var(--faint);
+  }
+
+  // The group shows focus via :focus-within; avoid a second ring on the textarea itself.
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 10px 12px;
+}
+
+.hint {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.count {
+  color: var(--faint);
+  font: 500 0.72rem/1 var(--font-mono);
+}
+
+.over {
+  color: var(--danger);
+}
+
+.send {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--clay);
+  color: var(--on-clay);
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    transform var(--t-fast),
+    opacity var(--t-fast);
+
+  // 44px hit area around the 40px visual.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+  }
+
+  &:hover {
+    background: var(--clay-hover);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@include respond-to('xs') {
+  .hint {
+    display: inline-flex;
+  }
+
+  .hint ~ .send,
+  .hint ~ .count {
+    margin-left: 0;
+  }
+}

@@ -1,0 +1,36 @@
+.cite {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  margin: 0 2px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--clay-soft);
+  color: var(--clay);
+  font: 600 0.72rem/1 var(--font-mono);
+  vertical-align: 1px;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    transform var(--t-fast);
+
+  // Larger hit area for an inline control without shifting the text line.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -6px -2px;
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+
+  &[aria-pressed='true'] {
+    background: var(--clay);
+    color: var(--on-clay);
+  }
+}

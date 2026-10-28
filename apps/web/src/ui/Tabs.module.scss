@@ -1,0 +1,44 @@
+.list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-full);
+  background: var(--sunken);
+}
+
+.trigger {
+  position: relative;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--muted);
+  font: 600 0.875rem/1 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    box-shadow var(--t-fast);
+
+  // 44px hit area around the 34px visual.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -5px 0;
+  }
+
+  &[data-selected] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow:
+      var(--e1),
+      0 1px 3px color-mix(in srgb, var(--ink) 12%, transparent);
+  }
+}
+
+.panel {
+  padding-top: 16px;
+}

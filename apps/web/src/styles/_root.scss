@@ -1,0 +1,46 @@
+// intent: emit the Clay custom properties once, from global.scss only.
+// status: done
+// next: none
+// confidence: high
+@use 'tokens' as *;
+
+:root {
+  --page: #f4f5f2;
+  --surface: #ffffff;
+  --sunken: #eceee9;
+  --ink: #1e2529;
+  --muted: #56616a;
+  --faint: #636e75;
+  --line: #dfe2dc;
+  --line-strong: #c9cec6;
+  --clay: #a8431f;
+  --clay-hover: #8f3818;
+  --clay-soft: #f6e6dc;
+  --on-clay: #ffffff;
+  --sage: #5f7d6e;
+  --sage-soft: #e3ebe5;
+  --mark: #f6d9b8;
+  --danger: #b42318;
+  --danger-soft: #fdebe9;
+
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Hanken Grotesk', system-ui, sans-serif;
+  --font-body: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --r-sm: #{$r-sm};
+  --r-md: #{$r-md};
+  --r-lg: #{$r-lg};
+  --r-full: #{$r-full};
+
+  // Clay elevation: slate-tinted, soft, with a top highlight.
+  --e1: 0 1px 2px rgba(30, 37, 41, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --e2: 0 1px 2px rgba(30, 37, 41, 0.05), 0 12px 28px -16px rgba(30, 37, 41, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --e3: 0 2px 4px rgba(30, 37, 41, 0.05), 0 30px 60px -28px rgba(30, 37, 41, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--clay) 28%, transparent);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 140ms;
+  --t-med: 260ms;
+  --max: 1200px;
+  color-scheme: light;
+}

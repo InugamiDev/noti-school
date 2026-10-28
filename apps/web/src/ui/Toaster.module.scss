@@ -1,0 +1,22 @@
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: var(--width);
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--ink);
+  color: var(--surface);
+  font: 400 0.9rem/1.4 var(--font-body);
+  box-shadow: var(--e3);
+
+  :global([data-icon]) {
+    display: inline-flex;
+    flex: none;
+    color: var(--sage-soft);
+  }
+}
+
+.error :global([data-icon]) {
+  color: var(--danger-soft);
+}

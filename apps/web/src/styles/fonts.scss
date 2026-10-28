@@ -1,0 +1,17 @@
+// intent: self-hosted fonts, no runtime CDN. Per-subset files keep Vietnamese glyphs available.
+// status: done
+// next: add a weight here only when a component actually uses it.
+// confidence: high
+
+// Bricolage Grotesque variable (wght axis covers 500 and 700, includes the vietnamese subset).
+@use '@fontsource-variable/bricolage-grotesque/wght.css' as bricolage;
+
+// Hanken Grotesk 400/500/600/700 (latin, latin-ext, vietnamese subsets).
+@use '@fontsource/hanken-grotesk/400.css' as hanken_400;
+@use '@fontsource/hanken-grotesk/500.css' as hanken_500;
+@use '@fontsource/hanken-grotesk/600.css' as hanken_600;
+@use '@fontsource/hanken-grotesk/700.css' as hanken_700;
+
+// JetBrains Mono 400/500.
+@use '@fontsource/jetbrains-mono/400.css' as mono_400;
+@use '@fontsource/jetbrains-mono/500.css' as mono_500;

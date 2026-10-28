@@ -1,0 +1,56 @@
+@use '../styles/mixins' as *;
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-full);
+  background: var(--sunken);
+}
+
+.item {
+  position: relative;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--muted);
+  font: 600 0.8125rem/1 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    box-shadow var(--t-fast);
+
+  // Extends the hit area to 44px without changing the visual size.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -7px -1px;
+  }
+
+  &[data-pressed] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow:
+      var(--e1),
+      0 1px 3px color-mix(in srgb, var(--ink) 12%, transparent);
+  }
+}
+
+// Mobile first: short labels below the xs breakpoint, full labels from it.
+.long {
+  display: none;
+}
+
+@include respond-to('xs') {
+  .long {
+    display: inline;
+  }
+
+  .short {
+    display: none;
+  }
+}

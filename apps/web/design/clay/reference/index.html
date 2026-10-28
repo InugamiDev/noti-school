@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>noti.school Clay</title>
+<meta name="description" content="Ask about your university's rules in English or Vietnamese. Answers come only from your school's approved documents, with the page they came from.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="clay.css">
+<style>
+/* ---------- page layout (landing only) ---------- */
+.pilot { background: var(--ink); color: #e9ecea; font-size: .875rem; }
+.pilot .wrap { display: flex; align-items: center; gap: 12px; min-height: 42px; }
+.pilot a { color: #fff; font-weight: 600; text-underline-offset: 3px; }
+.pilot .btn { margin-left: auto; color: #e9ecea; --h: 32px; }
+.pilot .btn:hover { background: rgba(255,255,255,.08); }
+.pilot[hidden] { display: none; }
+
+.nav { position: sticky; top: 0; z-index: 40; background: color-mix(in srgb, var(--page) 86%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid transparent; transition: border-color var(--t-med), box-shadow var(--t-med); }
+.nav.stuck { border-bottom-color: var(--line); box-shadow: 0 8px 24px -20px rgba(30,37,41,.35); }
+.nav .wrap { display: flex; align-items: center; gap: 8px; height: 68px; }
+.logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font: 700 1.125rem/1 var(--font-display); letter-spacing: -.02em; margin-right: 16px; }
+.logo-mark { width: 26px; height: 26px; border-radius: 9px; background: var(--clay); box-shadow: inset 0 -3px 0 rgba(0,0,0,.18), inset 0 2px 0 rgba(255,255,255,.3); position: relative; }
+.logo-mark::after { content: ""; position: absolute; left: 7px; right: 7px; top: 9px; height: 3px; border-radius: 2px; background: #fff; box-shadow: 0 6px 0 rgba(255,255,255,.7); }
+.nav-links { display: flex; gap: 2px; }
+.nav-links a { padding: 8px 12px; border-radius: var(--r-full); text-decoration: none; font-weight: 500; font-size: .9375rem; color: var(--muted); }
+.nav-links a:hover { color: var(--ink); background: var(--sunken); }
+.nav-search { margin-left: auto; width: 230px; justify-content: flex-start; color: var(--muted); font-weight: 500; }
+.nav-search .kbd { margin-left: auto; }
+.nav-menu { display: none; }
+@media (max-width: 960px) {
+  .nav-links, .nav-search { display: none; }
+  .nav-menu { display: inline-flex; }
+  .nav .btn-primary { margin-left: auto; }
+}
+.sheet { position: fixed; inset: 0; z-index: 80; display: none; }
+.sheet.open { display: block; }
+.sheet-bg { position: absolute; inset: 0; background: rgba(30,37,41,.3); }
+.sheet-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(340px, 88vw); background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 4px; box-shadow: var(--e3); animation: slide var(--t-med) var(--ease); }
+@keyframes slide { from { transform: translateX(24px); opacity: 0; } }
+.sheet-panel a:not(.btn) { padding: 12px; border-radius: var(--r-sm); text-decoration: none; font-weight: 600; font-size: 1.0625rem; }
+.sheet-panel a:not(.btn):hover { background: var(--sunken); }
+
+/* hero */
+.hero { padding: 56px 0 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 56px; align-items: center; }
+.hero h1 { font-size: clamp(2.5rem, 5.4vw, 4.25rem); line-height: 1.02; letter-spacing: -.035em; }
+.hero-sub { margin: 18px 0 28px; font-size: 1.125rem; color: var(--muted); max-width: 46ch; }
+.try { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.try > span { font-size: .8125rem; color: var(--muted); margin-right: 2px; }
+.proof { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 28px; font-size: .875rem; color: var(--muted); }
+.proof span { display: inline-flex; align-items: center; gap: 8px; }
+.proof .lucide { width: 16px; height: 16px; color: var(--sage); }
+
+/* school scope picker inside the prompt bar (Kobalte Popover + Listbox) */
+.scope-wrap { position: relative; }
+.scope-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px 0 8px; border: 1px solid var(--line); border-radius: var(--r-full); background: var(--surface); font: 600 .8125rem/1 var(--font-body); color: var(--ink); cursor: pointer; transition: border-color var(--t-fast); }
+.scope-btn:hover { border-color: var(--line-strong); }
+.scope-btn .lucide { width: 16px; height: 16px; color: var(--clay); }
+.scope-btn .chev { color: var(--faint); width: 14px; height: 14px; }
+.scope-pop { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 30; width: 300px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--e3); animation: pop var(--t-med) var(--ease); }
+.scope-pop[hidden] { display: none; }
+.scope-pop .input-wrap .input { height: 40px; }
+.scope-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.scope-opt { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--r-sm); cursor: pointer; font-size: .9rem; }
+.scope-opt[aria-selected="true"], .scope-opt:hover, .scope-opt.kb { background: var(--sunken); }
+.scope-opt .badge { margin-left: auto; height: 22px; font-size: .72rem; }
+.scope-opt small { display: block; color: var(--muted); font-size: .78rem; }
+.scope-sep { height: 1px; background: var(--line); margin: 6px 4px; }
+.seg .short { display: none; }
+@media (max-width: 520px) { .seg .long { display: none; } .seg .short { display: inline; } .scope-pop { width: min(300px, calc(100vw - 48px)); } }
+
+.stage { position: relative; }
+.stage-3d { position: relative; aspect-ratio: 16 / 11; border-radius: var(--r-lg); overflow: hidden;
+  background: radial-gradient(120% 90% at 70% 10%, #fbfbf9 0%, #eef0eb 55%, #e6e9e3 100%); border: 1px solid var(--line); box-shadow: var(--e2); }
+.stage-3d canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 700ms var(--ease); }
+.stage-3d.ready canvas { opacity: 1; }
+.stage-3d .fallback { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: .875rem; }
+.stage-3d.ready .fallback { display: none; }
+.stage-cap { position: absolute; left: 14px; top: 14px; z-index: 2; display: flex; gap: 6px; flex-wrap: wrap; }
+.stage-cap .badge { background: rgba(255,255,255,.8); backdrop-filter: blur(6px); }
+.stage .answer-card { position: relative; z-index: 3; margin: -64px 24px 0; }
+.answer-alt[hidden], .answer-main[hidden] { display: none; }
+.answer-alt .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--clay-soft); color: var(--clay); margin-bottom: 12px; }
+.answer-alt h3 { font-size: 1.05rem; margin-bottom: 4px; }
+.answer-alt p { color: var(--muted); font-size: .9375rem; margin-bottom: 14px; }
+@media (max-width: 1000px) {
+  .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+  .stage .answer-card { margin: -48px 12px 0; }
+}
+
+/* sections */
+section.block { padding: 112px 0 0; }
+.sec-title { font-size: clamp(1.875rem, 3.4vw, 2.75rem); line-height: 1.08; max-width: 22ch; }
+.sec-lede { margin-top: 14px; color: var(--muted); font-size: 1.0625rem; max-width: 56ch; }
+
+/* scope section */
+.scope-sec { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+.rules { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 18px; }
+.rules li { display: flex; gap: 14px; }
+.rules .ri { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--sage-soft); color: #3c5a4b; }
+.rules b { display: block; font-size: 1.0625rem; }
+.rules span { color: var(--muted); }
+.account { padding: 24px; }
+.acct-head { display: flex; align-items: center; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--clay-soft); color: var(--clay); font: 700 1rem/1 var(--font-display); }
+.acct-head .t { font-weight: 600; }
+.acct-head .s { font-size: .85rem; color: var(--muted); }
+.acct-head .badge { margin-left: auto; }
+.acct-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: .9375rem; }
+.acct-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.acct-row .lucide { color: var(--muted); }
+.acct-row .v { margin-left: auto; text-align: right; font-weight: 600; }
+.acct-row.locked { color: var(--muted); }
+.acct-row.locked .v { font-weight: 500; display: inline-flex; gap: 6px; align-items: center; }
+@media (max-width: 900px) { .scope-sec { grid-template-columns: 1fr; gap: 32px; } }
+
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
+.step { padding: 24px; }
+.step-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--clay-soft); color: var(--clay); margin-bottom: 18px; box-shadow: inset 0 -2px 0 rgba(168,67,31,.12); }
+.step h3 { font-size: 1.25rem; margin-bottom: 8px; }
+.step p { color: var(--muted); }
+.step .n { font: 500 .75rem/1 var(--font-mono); color: var(--faint); float: right; }
+@media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+
+/* roles */
+.roles { margin-top: 32px; }
+.role-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.role-panel .card { padding: 24px; }
+.feat { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.feat li { display: flex; gap: 12px; }
+.feat .lucide { color: var(--clay); margin-top: 3px; }
+.feat b { display: block; }
+.feat span { color: var(--muted); font-size: .9375rem; }
+.mini { background: var(--page); border-radius: var(--r-sm); padding: 16px; display: grid; gap: 10px; font-size: .9rem; }
+.mini-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.mini-row .badge { margin-left: auto; height: 22px; font-size: .72rem; }
+.mini-row .lucide { color: var(--muted); width: 16px; height: 16px; }
+.mini-h { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+@media (max-width: 860px) { .role-panel { grid-template-columns: 1fr; } .roles [role="tablist"] { display: flex; overflow-x: auto; max-width: 100%; } }
+
+.honest { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 48px; align-items: center; }
+.noanswer { padding: 24px; }
+.noanswer .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--sunken); color: var(--muted); }
+.noanswer h3 { font-size: 1.125rem; margin: 14px 0 6px; }
+.noanswer ul { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.noanswer li { display: flex; gap: 10px; align-items: flex-start; font-size: .9375rem; }
+.noanswer li .lucide { margin-top: 3px; color: var(--sage); width: 16px; height: 16px; }
+.noanswer .actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+@media (max-width: 860px) { .honest { grid-template-columns: 1fr; } }
+
+.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
+.bento .card { padding: 24px; overflow: hidden; }
+.bento h3 { font-size: 1.25rem; margin-bottom: 6px; }
+.bento p { color: var(--muted); }
+.b1 { grid-column: span 4; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: end; }
+.b2 { grid-column: span 2; }
+.b3 { grid-column: span 3; }
+.b4 { grid-column: span 3; }
+.photo { aspect-ratio: 4 / 3; border-radius: var(--r-sm); background: repeating-linear-gradient(135deg, #e6e9e3 0 10px, #dde1da 10px 20px); position: relative; }
+.photo span { position: absolute; left: 10px; top: 10px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+.lang { display: flex; gap: 12px; align-items: baseline; margin-top: 18px; font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3vw, 2.25rem); letter-spacing: -.02em; }
+.lang span:last-child { color: var(--faint); }
+.course { margin-top: 16px; display: grid; gap: 8px; }
+.course div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--page); font-size: .875rem; }
+.course div span:last-child { font-family: var(--font-mono); color: var(--muted); font-size: .78rem; }
+@media (max-width: 900px) { .bento { grid-template-columns: 1fr; } .b1, .b2, .b3, .b4 { grid-column: auto; } .b1 { grid-template-columns: 1fr; } }
+
+/* join */
+.join { padding: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; background: var(--ink); color: #eef0ee; border: 0; }
+.join .sec-lede { color: #b8c0c4; }
+.join ol { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 18px; counter-reset: j; }
+.join ol li { display: flex; gap: 14px; counter-increment: j; }
+.join ol li::before { content: counter(j); flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.08); color: #f0b8a0; font: 600 .85rem/1 var(--font-mono); }
+.join ol b { display: block; color: #fff; }
+.join ol span { color: #b8c0c4; font-size: .9375rem; }
+.join form { background: var(--surface); color: var(--ink); border-radius: var(--r-md); padding: 24px; display: grid; gap: 14px; box-shadow: var(--e3); }
+.join form h3 { font-size: 1.15rem; }
+.join select.input { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 19px, calc(100% - 15px) 19px; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
+.join .err { color: var(--danger); font-size: .8rem; }
+.join .err[hidden] { display: none; }
+@media (max-width: 860px) { .join { grid-template-columns: 1fr; padding: 28px; } }
+
+.faq-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
+.faq-head .input-wrap { width: min(340px, 100%); }
+.faq-empty { padding: 24px 4px; color: var(--muted); }
+
+footer { margin-top: 112px; padding: 40px 0 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; }
+footer nav { display: flex; gap: 20px; margin-left: auto; flex-wrap: wrap; }
+footer a { text-decoration: none; }
+footer a:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="pilot" id="pilot"><div class="wrap">
+  <span>Now piloting at HCMIU. Other universities can request access. <a href="#join">Request your university</a></span>
+  <button class="btn btn-ghost btn-icon" type="button" id="pilot-close" aria-label="Dismiss notice"><i data-lucide="x"></i></button>
+</div></div>
+
+<header class="nav" id="nav"><div class="wrap">
+  <a class="logo" href="#"><span class="logo-mark" aria-hidden="true"></span>noti.school</a>
+  <nav class="nav-links" aria-label="Main">
+    <a href="#how">How it works</a><a href="#roles">Who it's for</a><a href="#join">For universities</a><a href="#faq">Help</a>
+  </nav>
+  <button class="btn btn-secondary btn-sm nav-search" type="button" data-open-cmdk><i data-lucide="search"></i>Search<span class="kbd" data-mod>⌘K</span></button>
+  <a class="btn btn-primary btn-sm" href="#">Sign in</a>
+  <button class="btn btn-ghost btn-icon nav-menu" type="button" id="menu-open" aria-label="Open menu" aria-expanded="false" aria-controls="sheet"><i data-lucide="menu"></i></button>
+</div></header>
+
+<div class="sheet" id="sheet" aria-hidden="true">
+  <div class="sheet-bg" data-close-sheet></div>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Menu">
+    <button class="btn btn-ghost btn-icon" type="button" data-close-sheet aria-label="Close menu" style="align-self:flex-end"><i data-lucide="x"></i></button>
+    <a href="#how" data-close-sheet>How it works</a><a href="#roles" data-close-sheet>Who it's for</a><a href="#join" data-close-sheet>For universities</a><a href="#faq" data-close-sheet>Help</a>
+    <button class="btn btn-secondary" type="button" data-open-cmdk data-close-sheet style="margin-top:12px"><i data-lucide="search"></i>Search</button>
+  </div>
+</div>
+
+<main id="main">
+<section class="hero"><div class="wrap hero-grid">
+  <div>
+    <h1>University answers you can check.</h1>
+    <p class="hero-sub">Ask about your university's rules in English or Vietnamese. Answers use only your school's approved documents and show the page they came from.</p>
+
+    <form id="ask" novalidate>
+      <label class="sr-only" for="q">Your question</label>
+      <div class="prompt">
+        <textarea id="q" rows="2" maxlength="500" placeholder="Ask about a deadline, form or rule"></textarea>
+        <div class="prompt-bar">
+          <div class="scope-wrap">
+            <button class="scope-btn" type="button" id="scope-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="scope-pop" data-tip="Answers come only from this school"><i data-lucide="school"></i><span id="scope-label">HCMIU</span><i data-lucide="chevrons-up-down" class="chev"></i></button>
+            <div class="scope-pop" id="scope-pop" role="dialog" aria-label="Choose your university" hidden>
+              <div class="input-wrap"><i data-lucide="search"></i><input class="input" id="scope-q" type="text" placeholder="Find your university" aria-controls="scope-list" autocomplete="off"></div>
+              <ul class="scope-list" id="scope-list" role="listbox" aria-label="Universities">
+                <li class="scope-opt" role="option" data-scope="hcmiu" data-name="HCMIU" data-search="hcmiu international university vnu hcm" aria-selected="true"><i data-lucide="school"></i><div>HCMIU<small>International University, VNU-HCM</small></div><span class="badge badge-sage">Pilot</span></li>
+                <li class="scope-sep" role="presentation"></li>
+                <li class="scope-opt" role="option" data-scope="next" data-name="Your university" data-search="*" aria-selected="false"><i data-lucide="plus"></i><div>My university isn't listed<small>Request it and we'll contact your school</small></div></li>
+              </ul>
+            </div>
+          </div>
+          <div class="seg" role="group" aria-label="Answer language">
+            <button type="button" aria-pressed="true" data-lang="en"><span class="long">English</span><span class="short">EN</span></button>
+            <button type="button" aria-pressed="false" data-lang="vi"><span class="long">Tiếng Việt</span><span class="short">VI</span></button>
+          </div>
+          <span class="hint"><span class="kbd">Enter</span> to ask</span>
+          <button class="prompt-send" type="submit" aria-label="Ask" data-tip="Ask"><i data-lucide="arrow-up"></i></button>
+        </div>
+      </div>
+    </form>
+    <div class="try"><span>Try</span>
+      <button class="chip" type="button" data-fill="How do I register for courses?">How do I register for courses?</button>
+      <button class="chip" type="button" data-fill="Khi nào hạn rút môn học?">Khi nào hạn rút môn học?</button>
+    </div>
+    <div class="proof">
+      <span><i data-lucide="book-open-check"></i>Cites page and section</span>
+      <span><i data-lucide="lock"></i>Your school's sources only</span>
+      <span><i data-lucide="circle-help"></i>Says when it doesn't know</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-3d" id="stage3d" role="img" aria-label="Clay illustration: one bookstack per university on a shared base. Your school is in colour with an open page and a citation pin; another school is locked; an empty slot waits for the next university.">
+      <div class="stage-cap"><span class="badge"><i data-lucide="mouse-pointer-2" style="width:14px;height:14px"></i>Click a citation or change school</span></div>
+      <div class="fallback">Handbook illustration</div>
+    </div>
+    <article class="card answer answer-card" aria-label="Example answer" aria-live="polite">
+      <div class="answer-main" id="answer-main">
+        <div class="answer-head"><span class="badge badge-clay">Sample handbook, not HCMIU policy</span></div>
+        <p class="answer-text">You can withdraw from a course until the end of week 10<button class="cite" type="button" data-cite="a" aria-pressed="true" aria-label="Citation 1">1</button>. Later withdrawals need the dean's approval<button class="cite" type="button" data-cite="b" aria-pressed="false" aria-label="Citation 2">2</button>.</p>
+        <div class="source">
+          <div class="source-meta"><i data-lucide="file-text" style="width:14px;height:14px"></i><span>Sample Student Handbook, 2025 ed. · p. 31 · sec. 4.2</span>
+            <button class="btn btn-ghost btn-icon btn-sm" type="button" id="copy-cite" aria-label="Copy citation" data-tip="Copy citation"><i data-lucide="copy"></i></button></div>
+          <p>Students may withdraw from a course <mark data-mark="a" class="on">until the end of the tenth week</mark> of the semester. <mark data-mark="b">After this point, a withdrawal requires approval from the dean.</mark></p>
+        </div>
+      </div>
+      <div class="answer-alt" id="answer-alt" hidden>
+        <div class="ico"><i data-lucide="school"></i></div>
+        <h3>Your university isn't set up yet</h3>
+        <p>Answers only come from documents your school has approved, so there's nothing to answer from yet. Request it and we'll contact your school.</p>
+        <a class="btn btn-primary btn-sm" href="#join"><i data-lucide="send"></i>Request your university</a>
+      </div>
+    </article>
+  </div>
+</div></section>
+
+<section class="block" id="scope"><div class="wrap scope-sec">
+  <div class="reveal">
+    <h2 class="sec-title">Every school gets its own sources</h2>
+    <p class="sec-lede">noti.school works for any university, but each account belongs to one school. That keeps answers accurate and each school's documents private.</p>
+    <ul class="rules">
+      <li><span class="ri"><i data-lucide="user-round-check"></i></span><div><b>One account, one school</b><span>Your invitation decides which university you ask about.</span></div></li>
+      <li><span class="ri"><i data-lucide="shield-check"></i></span><div><b>Only that school's approved documents</b><span>An answer never mixes rules from another university.</span></div></li>
+      <li><span class="ri"><i data-lucide="lock"></i></span><div><b>Schools can't see each other</b><span>Documents, questions and feedback stay inside each university.</span></div></li>
+    </ul>
+  </div>
+  <article class="card account reveal" aria-label="Example account scope">
+    <div class="acct-head"><span class="avatar" aria-hidden="true">LN</span><div><div class="t">Example student</div><div class="s">Signed in with an invitation</div></div><span class="badge badge-sage"><span class="dot"></span>Verified</span></div>
+    <div class="acct-row"><i data-lucide="school"></i>University<span class="v">HCMIU</span></div>
+    <div class="acct-row"><i data-lucide="library"></i>Sources you can ask about<span class="v">HCMIU, approved only</span></div>
+    <div class="acct-row"><i data-lucide="languages"></i>Answer language<span class="v">English or Tiếng Việt</span></div>
+    <div class="acct-row locked"><i data-lucide="building-2"></i>Other universities<span class="v"><i data-lucide="lock" style="width:14px;height:14px"></i>Not searchable</span></div>
+  </article>
+</div></section>
+
+<section class="block" id="how"><div class="wrap">
+  <h2 class="sec-title reveal">How an answer gets made</h2>
+  <p class="sec-lede reveal">Three steps, and you can check each one.</p>
+  <div class="steps">
+    <article class="card step reveal"><span class="n">01</span><div class="step-icon"><i data-lucide="search"></i></div><h3>Find the passages</h3><p>Your question is matched against your school's approved documents, in either language.</p></article>
+    <article class="card step reveal"><span class="n">02</span><div class="step-icon"><i data-lucide="pen-line"></i></div><h3>Write only what they support</h3><p>The answer is limited to what those passages say. Claims without support are removed.</p></article>
+    <article class="card step reveal"><span class="n">03</span><div class="step-icon"><i data-lucide="bookmark"></i></div><h3>Show you where</h3><p>Each claim links to the document, edition, page and section, so you can read it yourself.</p></article>
+  </div>
+</div></section>
+
+<section class="block" id="roles"><div class="wrap">
+  <h2 class="sec-title reveal">Built for everyone at a university</h2>
+  <p class="sec-lede reveal">Students ask. Staff check what students are told. Each school's source team decides what counts as evidence.</p>
+  <div class="tabs roles reveal">
+    <div role="tablist" aria-label="Roles">
+      <button role="tab" id="rt1" aria-controls="rp1" aria-selected="true">Students</button>
+      <button role="tab" id="rt2" aria-controls="rp2" aria-selected="false" tabindex="-1">Advisors and staff</button>
+      <button role="tab" id="rt3" aria-controls="rp3" aria-selected="false" tabindex="-1">Source teams</button>
+    </div>
+    <div role="tabpanel" id="rp1" aria-labelledby="rt1">
+      <div class="role-panel">
+        <div class="card"><ul class="feat">
+          <li><i data-lucide="message-square"></i><div><b>Ask in your own words</b><span>English or Tiếng Việt, any time, without waiting for office hours.</span></div></li>
+          <li><i data-lucide="book-open-check"></i><div><b>Check before you act</b><span>Open the cited page before you submit a form or miss a deadline.</span></div></li>
+          <li><i data-lucide="history"></i><div><b>Find past answers</b><span>Your question history keeps the sources it used.</span></div></li>
+        </ul></div>
+        <div class="card"><div class="mini"><span class="mini-h">Your history</span>
+          <div class="mini-row"><i data-lucide="message-square"></i>Course withdrawal deadline<span class="badge badge-sage">2 sources</span></div>
+          <div class="mini-row"><i data-lucide="message-square"></i>Đăng ký học phần<span class="badge badge-sage">1 source</span></div>
+          <div class="mini-row"><i data-lucide="message-square"></i>Dorm pet policy<span class="badge">No answer</span></div>
+        </div></div>
+      </div>
+    </div>
+    <div role="tabpanel" id="rp2" aria-labelledby="rt2" hidden>
+      <div class="role-panel">
+        <div class="card"><ul class="feat">
+          <li><i data-lucide="file-search"></i><div><b>See exactly what a student saw</b><span>Answers carry their citations, so you can confirm the same page.</span></div></li>
+          <li><i data-lucide="flag"></i><div><b>Spot outdated rules</b><span>Reports point to the claim and the passage, not a vague complaint.</span></div></li>
+          <li><i data-lucide="clock"></i><div><b>Fewer repeat questions</b><span>Routine questions get answered from the handbook you already wrote.</span></div></li>
+        </ul></div>
+        <div class="card"><div class="mini"><span class="mini-h">Reported answers</span>
+          <div class="mini-row"><i data-lucide="flag"></i>Cites the 2023 edition<span class="badge badge-clay">Review</span></div>
+          <div class="mini-row"><i data-lucide="flag"></i>Missing form link<span class="badge">Open</span></div>
+        </div></div>
+      </div>
+    </div>
+    <div role="tabpanel" id="rp3" aria-labelledby="rt3" hidden>
+      <div class="role-panel">
+        <div class="card"><ul class="feat">
+          <li><i data-lucide="upload"></i><div><b>Upload and approve</b><span>Nothing becomes evidence until your team publishes it.</span></div></li>
+          <li><i data-lucide="layers"></i><div><b>Keep editions straight</b><span>Superseded versions are labelled, never silently replaced.</span></div></li>
+          <li><i data-lucide="chart-no-axes-column"></i><div><b>See the gaps</b><span>Unanswered questions show which documents are missing.</span></div></li>
+        </ul></div>
+        <div class="card"><div class="mini"><span class="mini-h">Your school's library</span>
+          <div class="mini-row"><i data-lucide="book-open"></i>Student Handbook, 2025<span class="badge badge-sage">Approved</span></div>
+          <div class="mini-row"><i data-lucide="book-open"></i>Student Handbook, 2023<span class="badge">Superseded</span></div>
+          <div class="mini-row"><i data-lucide="file-text"></i>Withdrawal form guide<span class="badge badge-clay">In review</span></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap honest">
+  <div class="reveal">
+    <h2 class="sec-title">If the documents don't say, it won't guess.</h2>
+    <p class="sec-lede">A missing answer is safer than a made-up rule. You get a clear limit and a next step instead.</p>
+  </div>
+  <article class="card noanswer reveal" aria-label="Example of a no-answer result">
+    <div class="ico"><i data-lucide="file-question"></i></div>
+    <h3>No supported answer</h3>
+    <p class="muted">Your school's approved sources don't cover dormitory pet rules.</p>
+    <ul>
+      <li><i data-lucide="check"></i>Search the source library for a related document</li>
+      <li><i data-lucide="check"></i>Rephrase with a course code or form name</li>
+      <li><i data-lucide="check"></i>Confirm with the responsible university office</li>
+    </ul>
+    <div class="actions"><button class="btn btn-secondary btn-sm" type="button"><i data-lucide="library"></i>Open sources</button><button class="btn btn-ghost btn-sm" type="button" data-focus-ask><i data-lucide="rotate-ccw"></i>Ask again</button></div>
+  </article>
+</div></section>
+
+<section class="block" id="reads"><div class="wrap">
+  <h2 class="sec-title reveal">What it reads</h2>
+  <p class="sec-lede reveal">Only documents your university has reviewed and approved. Nothing from the open web, nothing from other schools.</p>
+  <div class="bento">
+    <article class="card b1 reveal">
+      <div><h3>Handbooks and regulations</h3><p>Student handbooks, academic regulations and their dated editions. Older versions stay labelled.</p></div>
+      <div class="photo" role="img" aria-label="Photo slot for a real handbook or library photo"><span class="badge">Photo needed: real handbook, 1200 × 900</span></div>
+    </article>
+    <article class="card b2 reveal"><h3>Forms and procedures</h3><p>Steps for common requests.</p>
+      <div class="tags"><span class="badge">Withdrawal</span><span class="badge">Transcript</span><span class="badge">Leave of absence</span><span class="badge">Appeal</span></div></article>
+    <article class="card b3 reveal"><h3>Course information</h3><p>Prerequisites, credits and schedules where published.</p>
+      <div class="course"><div><span>Calculus 1</span><span>sample · 4 credits</span></div><div><span>Physics 2</span><span>sample · needs Physics 1</span></div></div></article>
+    <article class="card b4 reveal"><h3>Ask in either language</h3><p>Ask in one language and read the answer in the other. Sources keep their original text.</p>
+      <div class="lang"><span>Tiếng Việt</span><span>English</span></div></article>
+  </div>
+</div></section>
+
+<section class="block" id="join"><div class="wrap">
+  <div class="card join reveal">
+    <div>
+      <h2 class="sec-title" style="color:#fff">Bring noti.school to your university</h2>
+      <p class="sec-lede">Any university can join. Your school keeps control of its documents from the first upload.</p>
+      <ol>
+        <li><div><b>Request access</b><span>Tell us your university and your role. A student request is welcome too.</span></div></li>
+        <li><div><b>Approve your sources</b><span>Your source team uploads and publishes the documents that count as evidence.</span></div></li>
+        <li><div><b>Invite your students</b><span>Accounts are tied to your school from the first sign-in.</span></div></li>
+      </ol>
+    </div>
+    <form id="join-form" novalidate>
+      <h3>Request your university</h3>
+      <div class="field"><label class="label" for="j-uni">University</label><input class="input" id="j-uni" autocomplete="organization" placeholder="University name"><span class="err" id="j-uni-err" hidden>Enter your university's name.</span></div>
+      <div class="field"><label class="label" for="j-role">I am a</label>
+        <select class="input" id="j-role"><option>Student</option><option>Advisor or staff</option><option>Source or IT team</option><option>University leadership</option></select></div>
+      <div class="field"><label class="label" for="j-email">Email</label><input class="input" id="j-email" type="email" autocomplete="email" placeholder="you@example.edu"><span class="err" id="j-email-err" hidden>Enter a valid email so we can reply.</span></div>
+      <button class="btn btn-primary" type="submit"><i data-lucide="send"></i>Send request</button>
+      <span class="hint">We only use this to reply about your request.</span>
+    </form>
+  </div>
+</div></section>
+
+<section class="block" id="faq"><div class="wrap">
+  <div class="faq-head reveal">
+    <h2 class="sec-title">Questions</h2>
+    <div class="input-wrap"><i data-lucide="search"></i><input class="input" id="faq-filter" type="search" placeholder="Filter questions" aria-label="Filter questions"></div>
+  </div>
+  <div class="acc" id="faq-list">
+    <details><summary>Which universities can use noti.school?<i data-lucide="plus"></i></summary><div class="acc-body">Any university can request access. HCMIU is the first pilot. Each school is set up separately: its source team approves documents before students can ask about them. <a href="#join">Request your university</a>.</div></details>
+    <details><summary>Can I see another university's documents?<i data-lucide="plus"></i></summary><div class="acc-body">No. Your account belongs to one school, and answers only use that school's approved documents. Documents, questions and feedback stay inside each university.</div></details>
+    <details><summary>Can I ask in Vietnamese?<i data-lucide="plus"></i></summary><div class="acc-body">Yes. Choose Tiếng Việt in the question box. English is also available. Answer quality in both languages is still being evaluated against approved sources.</div></details>
+    <details><summary>Does it have all of my university's documents?<i data-lucide="plus"></i></summary><div class="acc-body">Not necessarily. Coverage depends on what your school has approved. Check the source library and each document's edition before relying on an answer.</div></details>
+    <details><summary>What if there is no supported answer?<i data-lucide="plus"></i></summary><div class="acc-body">Keep your question specific and check the source library. Missing or conflicting evidence produces a limitation, not a guessed rule. Contact the relevant university office for a decision.</div></details>
+    <details><summary>Is this an official university service?<i data-lucide="plus"></i></summary><div class="acc-body">No. noti.school is an independent project in development and claims no official affiliation with any university. Confirm important decisions with the original source and the responsible office.</div></details>
+    <details><summary>Can I report an incorrect answer?<i data-lucide="plus"></i></summary><div class="acc-body">Use the feedback action on an answer and point to the claim and passage. Don't include student IDs or other personal information.</div></details>
+    <p class="faq-empty" id="faq-empty" hidden>No questions match. <a href="#" data-focus-ask>Ask it instead</a>.</p>
+  </div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <a class="logo" href="#"><span class="logo-mark" aria-hidden="true"></span>noti.school</a>
+  <span>Independent project. Not affiliated with any university.</span>
+  <nav aria-label="Footer"><a href="#">About</a><a href="#">Privacy</a><a href="#faq">Help</a><a href="components.html">Components</a></nav>
+</div></footer>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<dialog class="cmdk" id="cmdk" aria-label="Command menu">
+  <div class="cmdk-search"><i data-lucide="search"></i><input id="cmdk-input" type="text" placeholder="Search pages, questions and actions" aria-controls="cmdk-list" aria-autocomplete="list" role="combobox" aria-expanded="true"><span class="kbd">Esc</span></div>
+  <ul class="cmdk-list" id="cmdk-list" role="listbox"></ul>
+  <div class="cmdk-foot"><span><span class="kbd">↑</span><span class="kbd">↓</span>move</span><span><span class="kbd">Enter</span>select</span><span><span class="kbd">Esc</span>close</span></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/lucide@1.48.0/dist/umd/lucide.min.js"></script>
+<script src="ui.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"}}</script>
+<script type="module" src="hero3d.js"></script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+.trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 36px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 0.8125rem/1 var(--font-body);
+  cursor: pointer;
+  transition: border-color var(--t-fast);
+
+  // 44px hit area around the 36px visual.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+  }
+
+  &:hover {
+    border-color: var(--line-strong);
+  }
+}
+
+.school {
+  flex: none;
+  color: var(--clay);
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  color: var(--faint);
+}
+
+.pop {
+  z-index: 50;
+  width: min(300px, calc(100vw - 48px));
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--e3);
+  transform-origin: var(--kb-popover-content-transform-origin);
+  animation: pop var(--t-med) var(--ease);
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.search input {
+  height: 40px;
+}
+
+.list {
+  max-height: 300px;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px;
+  border-radius: var(--r-sm);
+  font-size: 0.9rem;
+  cursor: pointer;
+
+  &[data-active] {
+    background: var(--sunken);
+  }
+
+  // Selected is marked separately from the keyboard-active highlight.
+  &[aria-selected='true'] {
+    box-shadow: inset 3px 0 0 var(--clay);
+    font-weight: 600;
+  }
+
+  small {
+    display: block;
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+}
+
+.text {
+  min-width: 0;
+}
+
+.badge {
+  height: 22px;
+  margin-left: auto;
+  font-size: 0.72rem;
+}
+
+.empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--line);
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}

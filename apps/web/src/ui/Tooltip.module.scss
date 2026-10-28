@@ -1,0 +1,18 @@
+.tip {
+  z-index: 60;
+  max-width: 260px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--surface);
+  font: 500 0.75rem/1.2 var(--font-body);
+  transform-origin: var(--kb-tooltip-content-transform-origin);
+  animation: tip-in var(--t-fast) var(--ease);
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}

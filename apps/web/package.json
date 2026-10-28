@@ -1,6 +1,37 @@
 {
-  "name": "@noti/web", "version": "0.1.0", "private": true, "type": "module",
-  "scripts": { "dev": "vite --host 127.0.0.1", "build": "tsc --noEmit && vite build", "typecheck": "tsc --noEmit", "test": "tsx --test ../../tests/web/unit.test.ts tests/*.test.ts", "test:e2e": "playwright test", "assets:optimize": "node scripts/optimize-asset.mjs" },
-  "dependencies": { "@noti/contracts": "workspace:*", "solid-js": "catalog:", "zod": "catalog:", "three": "0.186.1", "lucide-solid": "1.48.0" },
-  "devDependencies": { "vite": "catalog:", "vite-plugin-solid": "catalog:", "typescript": "catalog:", "@types/three": "0.186.0", "@types/node": "24.13.6", "@playwright/test": "1.63.0", "sharp": "0.35.4", "tsx": "4.23.15" }
+  "name": "@noti/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test ../../tests/web/unit.test.ts tests/*.test.ts",
+    "test:e2e": "playwright test",
+    "assets:optimize": "node scripts/optimize-asset.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "5.3.0",
+    "@fontsource/hanken-grotesk": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@kobalte/core": "0.13.14",
+    "@noti/contracts": "workspace:*",
+    "lucide-solid": "1.48.0",
+    "solid-js": "catalog:",
+    "solid-sonner": "0.3.3",
+    "three": "0.186.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.13.6",
+    "@types/three": "0.186.0",
+    "sass-embedded": "1.106.1",
+    "sharp": "0.35.4",
+    "tsx": "4.23.15",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:"
+  }
 }
