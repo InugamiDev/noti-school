@@ -6,6 +6,8 @@ export function Band(props: {
   motion: boolean;
   class?: string;
   id?: string;
+  /** Id of the section heading, so the section is a named landmark region. */
+  labelledby?: string;
 }) {
   let element!: HTMLElement;
   let revealed = false;
@@ -25,10 +27,10 @@ export function Band(props: {
             revealed = true;
             animation = element.animate(
               [
-                { opacity: 0.55, transform: 'translateY(12px)' },
+                { opacity: 0.55, transform: 'translateY(14px)' },
                 { opacity: 1, transform: 'translateY(0)' },
               ],
-              { duration: 420, easing: 'ease-out' },
+              { duration: 520, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' },
             );
           } else if (!entry.isIntersecting && animation) {
             animation.cancel();
@@ -49,6 +51,7 @@ export function Band(props: {
         element = node;
       }}
       id={props.id}
+      aria-labelledby={props.labelledby}
       class={`site-band ${props.class || ''}`}
     >
       {props.children}

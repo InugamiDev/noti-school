@@ -1,5 +1,6 @@
 import { createSignal, For, Show } from 'solid-js';
-import { ArrowUpRight, BookOpen, Check, FileText } from 'lucide-solid';
+import { FileText } from 'lucide-solid';
+import { Badge, Button } from '../ui';
 
 const examples = [
   {
@@ -17,7 +18,7 @@ const examples = [
     question: 'Which version of the sample form should I use?',
     answer:
       'Use version B of the Practice request form in this fictional collection. Version A is archived and is kept only for reference.',
-    title: 'Practice request form — version note',
+    title: 'Practice request form, version note',
     locator: 'Section 2 · Version history',
     version: 'Example version B',
     passage:
@@ -35,15 +36,14 @@ export default function ProductExample() {
   return (
     <div class="site-example" data-testid="product-example">
       <div class="site-example-label">
-        <span>
-          <BookOpen size={17} /> Illustrative example
-        </span>
-        <span>Synthetic collection · not university guidance</span>
+        <Badge tone="clay">Illustrative example</Badge>
+        <span>Synthetic collection, not university guidance</span>
       </div>
       <div class="site-example-questions" role="group" aria-label="Example questions">
         <For each={examples}>
           {(item, index) => (
             <button
+              type="button"
               aria-pressed={selected() === index()}
               onClick={() => {
                 setSelected(index());
@@ -51,21 +51,19 @@ export default function ProductExample() {
               }}
             >
               {item.question}
-              <ArrowUpRight size={16} />
             </button>
           )}
         </For>
       </div>
       <div class="site-evidence-grid">
-        <section class="site-example-answer" aria-label="Example answer" aria-live="polite">
-          <span class="site-label">Answer</span>
+        <section class="site-card site-example-answer" aria-label="Example answer" aria-live="polite">
           <Show when={example()} keyed>
             {(item) => (
-              <div class="site-fade">
+              <div>
                 <h3>{item.question}</h3>
                 <p>{item.answer}</p>
-                <button
-                  class="site-citation"
+                <Button
+                  size="sm"
                   aria-label="View example source"
                   aria-expanded={sourceOpen()}
                   onClick={() => {
@@ -76,13 +74,10 @@ export default function ProductExample() {
                     });
                   }}
                 >
-                  <FileText size={17} />
-                  <span>
-                    View example source<small>{item.title}</small>
-                  </span>
-                  <ArrowUpRight size={16} />
-                </button>
-                <p class="site-fine">{item.limit}</p>
+                  <FileText aria-hidden="true" />
+                  View example source
+                </Button>
+                <p class="site-meta">{item.limit}</p>
               </div>
             )}
           </Show>
@@ -92,7 +87,7 @@ export default function ProductExample() {
             source = node;
           }}
           tabIndex={-1}
-          class="site-example-source"
+          class="site-card site-example-source"
           role="region"
           aria-label="Example source"
         >
@@ -100,25 +95,23 @@ export default function ProductExample() {
             when={sourceOpen()}
             fallback={
               <div class="site-source-prompt">
-                <FileText size={28} />
+                <span class="site-icon-tile" aria-hidden="true">
+                  <FileText size={20} />
+                </span>
                 <h3>Read the evidence.</h3>
                 <p>Select “View example source” to inspect the exact passage behind this answer.</p>
-                <span class="site-fine">No live answer request is made.</span>
+                <p class="site-meta">No live answer request is made.</p>
               </div>
             }
           >
-            <div class="site-fade">
-              <span class="site-label">
-                <Check size={15} /> Synthetic source passage
-              </span>
+            <div>
+              <Badge tone="sage">Synthetic source passage</Badge>
               <h3>{example().title}</h3>
-              <p class="site-source-locator">
-                {example().version}
-                <br />
-                {example().locator}
+              <p class="site-locator">
+                {example().version} · {example().locator}
               </p>
               <blockquote>{example().passage}</blockquote>
-              <p class="site-fine">Written only for this illustration. Not an HCMIU document.</p>
+              <p class="site-meta">Written only for this illustration. Not an HCMIU document.</p>
             </div>
           </Show>
         </div>

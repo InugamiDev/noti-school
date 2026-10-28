@@ -6,6 +6,7 @@ import {
   hrefFor,
   institutionName,
   exampleEvidence,
+  landingSections,
   visit,
   screenshot,
   assertGeometry,
@@ -14,7 +15,7 @@ import {
   type MarketingRoute,
 } from "./marketing-fixtures";
 
-// intent: enforce the frozen website brief; status: authored; next: run against integrated SITE source.
+// intent: enforce the website brief on the Clay site; status: updated for the Clay landing; next: combined candidate run.
 test.describe.configure({ mode: "default" });
 test.use({ reducedMotion: "reduce", serviceWorkers: "block" });
 
@@ -34,7 +35,7 @@ const responsibilities: Record<MarketingRoute, RegExp> = {
 };
 
 const expectedHeadings: Record<MarketingRoute, string> = {
-  home: "noti.school",
+  home: "University answers you can check.",
   product: "Find the answer. Keep the evidence.",
   students: "University life has enough open tabs.",
   universities: "Reconnect with your students.",
@@ -86,20 +87,18 @@ for (const viewport of [
           rect!.y + rect!.height,
           "Composer must be usable in the first viewport",
         ).toBeLessThan(viewport.height);
-        const hero = page.locator(".hero");
-        const heroRect = await hero.boundingBox();
-        expect(heroRect).not.toBeNull();
-        expect(
-          heroRect!.y + heroRect!.height,
-          "The next section must begin in the first viewport",
-        ).toBeLessThan(viewport.height);
+        // The 3D stage paints a static illustration first; the answer card overlaps its base.
+        await expect(page.getByRole("img", { name: /Clay illustration/ })).toBeVisible();
+        await expect(page.getByRole("article", { name: "Example answer" })).toContainText(
+          "Sample handbook, not HCMIU policy",
+        );
       } else if (viewport.name === "desktop") {
         const header = page.getByRole("banner");
         const rect = await header.boundingBox();
         expect(rect).not.toBeNull();
         expect(rect!.height, "Desktop navigation must fit below 80px").toBeLessThan(80);
         const centers = await header
-          .locator(".site-desktop > a, .site-desktop > div > button, .site-workspace > a")
+          .locator('nav[aria-label="Main"] a, .site-nav-search, .site-nav-account, .site-logo')
           .evaluateAll((elements) =>
             elements.map((element) => {
               const box = element.getBoundingClientRect();
@@ -161,6 +160,7 @@ test("all website links resolve to known routes or real in-page targets", async 
     "#/history",
     "#/auth",
     "#/admin",
+    ...landingSections.map((section) => `#${section}`),
   ]);
   for (const route of marketingRoutes) {
     await visit(page, route);
@@ -178,7 +178,7 @@ test("all website links resolve to known routes or real in-page targets", async 
       const href = link.href!;
       expect(href, `${route}: ${link.text}`).not.toBe("#");
       expect(href).not.toMatch(/^javascript:/i);
-      if (href.startsWith("#/"))
+      if (href.startsWith("#/") || known.has(href))
         expect(known.has(href), `${route}: dangling route ${href}`).toBe(true);
       else if (href.startsWith("#")) {
         expect(
@@ -240,65 +240,208 @@ test("workspace routes remain reachable and unknown routes offer recovery", asyn
   await expect(page.getByRole("textbox", { name: "Your question", exact: true })).toBeVisible();
 });
 
-test("mobile navigation opens by keyboard, closes with Escape, outside and route selection", async ({
+test("mobile menu sheet opens by keyboard, traps focus, closes with Escape and on route selection", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await visit(page, "home");
-  const open = page.getByRole("button", { name: "Open navigation", exact: true });
+  const open = page.getByRole("button", { name: "Open menu", exact: true });
   await expect(open).toHaveAttribute("aria-expanded", "false");
-  const controlled = await open.getAttribute("aria-controls");
-  expect(controlled, "Menu toggle must identify its controlled region").toBeTruthy();
+  await expect(page.locator('nav[aria-label="Main"]')).toBeHidden();
   await tabTo(page, open, true);
   await page.keyboard.press("Enter");
-  const close = page.getByRole("button", { name: "Close navigation", exact: true });
-  await expect(close).toHaveAttribute("aria-expanded", "true");
-  const menu = page.locator(`[id="${controlled}"]`);
-  await expect(menu).toBeVisible();
+  const sheet = page.getByRole("dialog", { name: "Menu" });
+  await expect(sheet).toBeVisible();
+  // The modal hides the page behind it from the accessibility tree, so read the trigger state directly.
+  await expect(page.locator(".site-nav-menu")).toHaveAttribute("aria-expanded", "true");
+  // Measure the panel at rest, after its (reduced) entry animation has finished.
+  await sheet.evaluate((element) =>
+    Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+  );
   await assertGeometry(page);
   await screenshot(page, testInfo, "mobile-navigation-open");
-  const product = menu.getByRole("link", { name: "Product", exact: true });
-  await tabTo(page, product);
+  const universities = sheet.getByRole("link", { name: "For universities", exact: true });
+  await tabTo(page, universities);
+  await expect(sheet).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(open).toHaveAttribute("aria-expanded", "false");
+  await expect(sheet).toHaveCount(0);
   await expect(open).toBeFocused();
-  await expect(product).not.toBeVisible();
   await page.keyboard.press("Enter");
-  await close.click();
-  await expect(open).toHaveAttribute("aria-expanded", "false");
+  await sheet.getByRole("button", { name: "Close menu", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(open).toBeFocused();
   await open.click();
-  await page.getByRole("contentinfo").getByRole("heading", { name: "Trust", exact: true }).click();
-  await expect(open).toHaveAttribute("aria-expanded", "false");
+  await sheet.getByRole("link", { name: "Who it’s for", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Built for everyone at a university" })).toBeFocused();
+  await expect(page).toHaveURL(/#roles$/);
   await open.click();
-  await tabTo(page, product);
+  await tabTo(page, sheet.getByRole("link", { name: "For universities", exact: true }));
   await page.keyboard.press("Enter");
-  await expect(page.locator('[data-site-page="product"]')).toBeVisible();
-  await expect(open).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator('[data-site-page="universities"]')).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
   await screenshot(page, testInfo, "mobile-navigation-closed");
 });
 
-test("desktop Resources disclosure supports keyboard entry, Escape and route focus", async ({
+test("landing anchors open the landing section from any page and from a reload", async ({ page }) => {
+  await visit(page, "help");
+  await page.getByRole("banner").getByRole("link", { name: "How it works", exact: true }).click();
+  await expect(page.locator('[data-site-page="home"]')).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How an answer gets made" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "How an answer gets made" })).toBeInViewport();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "How an answer gets made" })).toBeInViewport();
+  await page.getByRole("complementary", { name: "Pilot notice" }).getByRole("link").click();
+  await expect(page.getByRole("heading", { name: "Bring noti.school to your university" })).toBeFocused();
+});
+
+test("pilot notice is dismissible and stays dismissed", async ({ page }) => {
+  await visit(page, "home");
+  const notice = page.getByRole("complementary", { name: "Pilot notice" });
+  await expect(notice).toContainText("Now piloting at HCMIU. Other universities can request access.");
+  await notice.getByRole("button", { name: "Dismiss notice" }).click();
+  await expect(notice).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Pilot notice" })).toHaveCount(0);
+});
+
+test("command menu opens with Ctrl+K and the search button, runs commands and asks unmatched text", async ({
   page,
+  marketingAudit,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await visit(page, "home");
-  const resources = page.getByRole("button", { name: "Resources", exact: true });
-  await tabTo(page, resources, true);
+  await visit(page, "product");
+  const menu = page.getByRole("dialog", { name: "Command menu" });
+  await page.keyboard.press("Control+k");
+  await expect(menu).toBeVisible();
+  const input = menu.getByRole("combobox", { name: "Search commands" });
+  await expect(input).toBeFocused();
+  await input.fill("help");
+  await expect(menu.getByRole("option").first()).toHaveText("Help");
   await page.keyboard.press("Enter");
-  await expect(resources).toHaveAttribute("aria-expanded", "true");
-  const menu = page.locator("#site-resources");
-  const help = menu.getByRole("link", { name: "Help", exact: true });
-  await page.keyboard.press("Tab");
-  await expect(help).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(resources).toBeFocused();
   await expect(menu).toHaveCount(0);
-  await page.keyboard.press("Enter");
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Enter");
   await expect(page.locator('[data-site-page="help"]')).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+  const search = page.getByRole("button", { name: /^Search/ });
+  await search.click();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Control+k");
+  await menu.getByRole("combobox").fill("tieng viet");
+  await expect(menu.getByRole("option")).toHaveText(["Switch answer language to Tiếng Việt"]);
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Control+k");
+  await menu.getByRole("combobox").fill("Thủ tục bảo lưu ở đâu zz-synthetic");
+  await expect(menu).toContainText("No results. Press Enter to ask it as a question.");
+  await page.keyboard.press("Enter");
+  const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
+  await expect(prompt).toHaveValue("Thủ tục bảo lưu ở đâu zz-synthetic");
+  await expect(prompt).toBeFocused();
+  await expect(
+    page.getByRole("group", { name: "Answer language" }).getByRole("button", { name: "Tiếng Việt" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(marketingAudit.api.filter((request) => request.method !== "GET")).toEqual([]);
+});
+
+test("slash focuses the question when not typing; typing elsewhere keeps the slash", async ({ page }) => {
+  await visit(page, "home");
+  const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
+  await page.locator("body").press("/");
+  await expect(prompt).toBeFocused();
+  await expect(prompt).toHaveValue("");
+  const filter = page.getByRole("searchbox", { name: "Filter questions" });
+  await filter.fill("a/b");
+  await filter.press("/");
+  await expect(filter).toHaveValue("a/b/");
+  await expect(filter).toBeFocused();
+});
+
+test("school picker shows the listed pilot, previews an unlisted university and keeps the draft", async ({
+  page,
+  marketingAudit,
+}) => {
+  await visit(page, "home");
+  const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
+  await prompt.fill("Synthetic draft kept across scope changes");
+  const picker = page.getByRole("button", { name: /^School: .* Change school$/ });
+  await expect(picker).toContainText(institutionName);
+  await picker.click();
+  const options = page.getByRole("listbox", { name: "Universities" }).getByRole("option");
+  await expect(options).toHaveCount(2);
+  await expect(options.first()).toContainText(institutionName);
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(picker).toContainText("Your university");
+  await expect(page.getByRole("article", { name: "Your university" })).toContainText("isn't set up yet");
+  await expect(page.getByRole("article", { name: "Example answer" })).toHaveCount(0);
+  await expect(page.getByText("Your university is not set up yet. You can request it below.")).toBeVisible();
+  await page.reload();
+  await expect(picker).toContainText("Your university");
+  await picker.click();
+  await page.getByRole("option", { name: new RegExp(institutionName) }).click();
+  await expect(page.getByRole("article", { name: "Example answer" })).toBeVisible();
+  await expect(prompt).toHaveValue("Synthetic draft kept across scope changes");
+  expect(marketingAudit.api.filter((request) => request.method !== "GET")).toEqual([]);
+});
+
+test("hero citation chips move the highlighted passage and copy confirms with a toast", async ({ page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await visit(page, "home");
+  const card = page.getByRole("article", { name: "Example answer" });
+  const first = card.getByRole("button", { name: "Citation 1" });
+  const second = card.getByRole("button", { name: "Citation 2" });
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  await expect(card.locator('mark[data-passage="a"]')).toHaveAttribute("data-active", "");
+  await second.focus();
+  await page.keyboard.press("Enter");
+  await expect(second).toHaveAttribute("aria-pressed", "true");
+  await expect(first).toHaveAttribute("aria-pressed", "false");
+  await expect(card.locator('mark[data-passage="b"]')).toHaveAttribute("data-active", "");
+  await expect(card.locator('mark[data-passage="a"]')).not.toHaveAttribute("data-active", "");
+  await card.getByRole("button", { name: "Copy citation" }).click();
+  await expect(page.getByText("Citation copied")).toBeVisible();
+});
+
+test("request form validates inline and never pretends to send", async ({ page, marketingAudit }, testInfo) => {
+  await visit(page, "home");
+  const form = page.getByRole("form", { name: "Request your university" });
+  await form.scrollIntoViewIfNeeded();
+  const before = marketingAudit.api.length;
+  await form.getByRole("button", { name: "Send request" }).click();
+  const university = form.getByRole("textbox", { name: "University" });
+  await expect(university).toHaveAttribute("aria-invalid", "true");
+  await expect(university).toBeFocused();
+  await expect(form).toContainText("Enter your university's name.");
+  await university.fill("Synthetic University");
+  await form.getByRole("textbox", { name: "Email" }).fill("not-an-email");
+  await form.getByRole("button", { name: "Send request" }).click();
+  await expect(form.getByRole("textbox", { name: "Email" })).toBeFocused();
+  await expect(form.getByRole("textbox", { name: "Email" })).toHaveAttribute("aria-invalid", "true");
+  await form.getByRole("textbox", { name: "Email" }).fill("someone@example.edu");
+  await form.getByRole("button", { name: "Send request" }).click();
+  await expect(form.getByRole("status")).toContainText("This request was not sent");
+  await expect(form.getByRole("status").getByRole("link", { name: "contact page" })).toHaveAttribute("href", "#/contact");
+  await expect(page.getByText("Not sent. There is no request service yet.")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(/request (?:was )?sent|we.ll be in touch|thanks for your request/i);
+  expect(marketingAudit.api.slice(before), "The request form must not call any endpoint").toEqual([]);
+  await assertGeometry(page);
+  await screenshot(page, testInfo, "home-request-not-sent");
+});
+
+test("role tabs move with arrow keys and pair features with a preview", async ({ page }) => {
+  await visit(page, "home");
+  const tabs = page.getByRole("tablist", { name: "Roles" });
+  const students = tabs.getByRole("tab", { name: "Students" });
+  await students.focus();
+  await page.keyboard.press("ArrowRight");
+  const staff = tabs.getByRole("tab", { name: "Advisors and staff" });
+  await expect(staff).toBeFocused();
+  await expect(staff).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel")).toContainText("Reported answers");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tabpanel")).toContainText("Nothing becomes evidence until your team publishes it.");
 });
 
 test("home preserves a bilingual prompt through marketing navigation and reload", async ({
@@ -307,7 +450,9 @@ test("home preserves a bilingual prompt through marketing navigation and reload"
 }) => {
   await visit(page, "home");
   const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
-  await expect(page.getByRole("combobox", { name: /institution/i })).toContainText(institutionName);
+  await expect(page.getByRole("button", { name: /^School: .* Change school$/ })).toContainText(
+    institutionName,
+  );
   const draft = "Where are approved documents? Tôi cần kiểm tra phiên bản và nguồn.";
   await prompt.fill(draft);
   await page.getByRole("contentinfo").locator('a[href="#/students"]').click();
@@ -319,26 +464,44 @@ test("home preserves a bilingual prompt through marketing navigation and reload"
   expect(marketingAudit.api.filter((request) => request.method !== "GET")).toEqual([]);
 });
 
-test("home FAQ disclosures open and close with keyboard without submitting a question", async ({
+test("home FAQ items open and close with keyboard without submitting a question", async ({
   page,
   marketingAudit,
 }) => {
   const surface = await visit(page, "home");
-  const disclosures = surface.locator("details").filter({ has: page.locator("summary") });
-  expect(await disclosures.count()).toBeGreaterThanOrEqual(5);
-  expect(await disclosures.count()).toBeLessThanOrEqual(6);
-  for (const disclosure of await disclosures.all()) {
-    const summary = disclosure.locator("summary");
-    await summary.focus();
+  const faq = surface.locator("#faq");
+  const triggers = faq.locator("button[aria-expanded]");
+  expect(await triggers.count()).toBeGreaterThanOrEqual(5);
+  expect(await triggers.count()).toBeLessThanOrEqual(8);
+  await expect(triggers.first()).toHaveText("Which universities can use noti.school?");
+  await expect(triggers.nth(1)).toHaveText("Can I see another university's documents?");
+  for (const trigger of await triggers.all()) {
+    await trigger.focus();
     await page.keyboard.press("Enter");
-    await expect(disclosure).toHaveAttribute("open", "");
-    expect(
-      (await disclosure.innerText()).replace(await summary.innerText(), "").trim().length,
-    ).toBeGreaterThan(30);
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const region = faq.locator(`[id="${await trigger.getAttribute("aria-controls")}"]`);
+    expect((await region.innerText()).trim().length).toBeGreaterThan(30);
     await page.keyboard.press("Space");
-    await expect(disclosure).not.toHaveAttribute("open", "");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
   }
   expect(marketingAudit.api.filter((request) => request.method !== "GET")).toEqual([]);
+});
+
+test("home FAQ filter ignores Vietnamese diacritics and offers to ask unmatched text", async ({ page }) => {
+  const surface = await visit(page, "home");
+  const faq = surface.locator("#faq");
+  const filter = faq.getByRole("searchbox", { name: "Filter questions" });
+  await filter.fill("TIENG VIET");
+  await expect(faq.locator("button[aria-expanded]")).toHaveCount(1);
+  await expect(faq.locator("button[aria-expanded]")).toHaveText("Can I ask in Vietnamese?");
+  await expect(faq.locator("button[aria-expanded]")).toHaveAttribute("aria-expanded", "true");
+  await filter.fill("học phí zz-synthetic");
+  await expect(faq.locator("button[aria-expanded]")).toHaveCount(0);
+  await expect(faq.getByRole("status")).toContainText("No questions match.");
+  await faq.getByRole("button", { name: "Ask it instead" }).click();
+  const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
+  await expect(prompt).toHaveValue("học phí zz-synthetic");
+  await expect(prompt).toBeFocused();
 });
 
 test("Help filters real FAQ answers by search and category, with empty-state recovery", async ({
@@ -346,33 +509,33 @@ test("Help filters real FAQ answers by search and category, with empty-state rec
 }) => {
   const surface = await visit(page, "help");
   const search = surface.getByRole("searchbox", { name: "Search help", exact: true });
-  const details = surface.locator("details");
-  await expect(details).toHaveCount(10);
+  const items = surface.locator(".site-help-list button[aria-expanded]");
+  await expect(items).toHaveCount(12);
   await search.fill("VIETNAMESE");
-  await expect(details).toHaveCount(1);
-  await expect(details.locator("summary")).toHaveText("Can I ask in Vietnamese?");
-  await details.locator("summary").click();
-  await expect(details.locator("p")).toBeVisible();
-  await expect(details.locator("p")).toContainText(
-    "Bilingual answer quality still needs evaluation",
-  );
-  await expect(details.getByRole("link")).toHaveAttribute("href", "#/");
+  await expect(items).toHaveCount(1);
+  await expect(items).toHaveText("Can I ask in Vietnamese?");
+  await items.click();
+  const region = surface.locator(`[id="${await items.getAttribute("aria-controls")}"]`);
+  await expect(region).toContainText("Bilingual answer quality still needs evaluation");
+  await expect(region.getByRole("link")).toHaveAttribute("href", "#/");
+  await search.fill("tiếng việt");
+  await expect(items).toHaveCount(1);
   await search.fill("");
   const categories = surface.getByRole("group", { name: "Help categories" });
   for (const [category, count] of [
     ["Answers", 3],
-    ["Sources", 3],
+    ["Sources", 4],
     ["Accounts", 2],
-    ["Pilot", 2],
+    ["Pilot", 3],
   ] as const) {
     const button = categories.getByRole("button", { name: category, exact: true });
     await button.click();
     await expect(button).toHaveAttribute("aria-pressed", "true");
-    await expect(details).toHaveCount(count);
+    await expect(items).toHaveCount(count);
     await expect(surface.getByRole("status")).toContainText(`${count} answers found`);
   }
   await search.fill("zz-synthetic-no-matching-help-921");
-  await expect(details).toHaveCount(0);
+  await expect(items).toHaveCount(0);
   await expect(surface.getByRole("heading", { name: "No matching help articles." })).toBeVisible();
   await expect(surface.getByRole("status")).toContainText("0 answers found");
   await surface.getByRole("button", { name: "Clear filters", exact: true }).click();
@@ -381,14 +544,14 @@ test("Help filters real FAQ answers by search and category, with empty-state rec
     "aria-pressed",
     "true",
   );
-  await expect(details).toHaveCount(10);
+  await expect(items).toHaveCount(12);
   await assertGeometry(page);
 });
 
 test("approval workflow changes substantive preview through all four keyboard-selectable stages", async ({
   page,
 }) => {
-  await visit(page, "home");
+  await visit(page, "universities");
   const stages = page.getByRole("group", { name: "Document approval stages" });
   const preview = page.locator("#workflow-preview");
   const headings = new Set<string>();
@@ -412,7 +575,7 @@ test("approval workflow changes substantive preview through all four keyboard-se
   expect(headings.size).toBe(4);
 });
 
-for (const route of ["home", "product"] as const) {
+for (const route of ["product"] as const) {
   test(`${route}: example choices change the answer and exact evidence without a network call`, async ({
     page,
     marketingAudit,
@@ -426,9 +589,6 @@ for (const route of ["home", "product"] as const) {
     expect(await questions.getByRole("button").count()).toBeGreaterThanOrEqual(2);
     const answer = demo.getByRole("region", { name: "Example answer", exact: true });
     const source = demo.getByRole("region", { name: "Example source", exact: true });
-    const draft = "Synthetic draft — giữ nguyên câu hỏi của tôi.";
-    if (route === "home")
-      await page.getByRole("textbox", { name: "Your question", exact: true }).fill(draft);
     const before = marketingAudit.api.length;
     for (const [index, evidence] of exampleEvidence.entries()) {
       const choice = questions.getByRole("button", { name: evidence.question, exact: true });
@@ -461,10 +621,6 @@ for (const route of ["home", "product"] as const) {
       marketingAudit.api.filter((request) => /answers|jev|openai|typesafe/i.test(request.path)),
     ).toEqual([]);
     expect(marketingAudit.external).toEqual([]);
-    if (route === "home")
-      await expect(page.getByRole("textbox", { name: "Your question", exact: true })).toHaveValue(
-        draft,
-      );
   });
 }
 
@@ -478,6 +634,7 @@ test("reduced motion keeps all new reveals and example transitions visible and s
     await band.scrollIntoViewIfNeeded();
     await assertStillVisible(band);
   }
+  await visit(page, "product");
   const demo = page.getByTestId("product-example");
   await demo.getByRole("button", { name: exampleEvidence[1].question, exact: true }).click();
   await demo.getByRole("button", { name: "View example source", exact: true }).click();
@@ -503,8 +660,10 @@ test("one pause preference stops new marketing reveals and transitions across ro
   await demo.getByRole("button", { name: exampleEvidence[1].question, exact: true }).click();
   await demo.getByRole("button", { name: "View example source", exact: true }).click();
   await assertStillVisible(demo);
-  await page.getByRole("contentinfo").locator('a[href="#/"]').click();
-  await expect(page.getByRole("button", { name: "Resume animation", exact: true })).toBeVisible();
+  await page.getByRole("contentinfo").locator('a[href="#/"]').first().click();
+  await expect(page.locator('[data-site-page="home"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Resume site motion", exact: true })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "off");
 });
 
 for (const preference of ["reduced", "paused"] as const) {
@@ -516,12 +675,10 @@ for (const preference of ["reduced", "paused"] as const) {
     await visit(page, "product");
     if (preference === "paused")
       await page.getByRole("button", { name: "Pause site motion", exact: true }).click();
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
-    await assertStillVisible(
-      page.getByRole("navigation", { name: "Site navigation", exact: true }),
-    );
+    await page.getByRole("button", { name: "Open menu", exact: true }).click();
+    await assertStillVisible(page.getByRole("dialog", { name: "Menu" }));
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("button", { name: "Open navigation", exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Open menu", exact: true })).toBeFocused();
   });
 }
 
@@ -645,18 +802,18 @@ test("contact preparation and public link remain usable without the Clipboard AP
   });
   const surface = await visit(page, "contact");
   const before = marketingAudit.api.length;
-  const topic = surface.getByRole("combobox", {
-    name: "What would you like to discuss?",
-    exact: true,
-  });
+  const topic = surface.getByRole("button", { name: /What would you like to discuss\?/ });
   const guidance = surface.locator(".site-contact-guidance");
-  await expect(guidance).toContainText("Describe your role");
-  await topic.selectOption("Institutional documents");
-  await expect(guidance).toContainText("who owns them");
-  await topic.selectOption("Incorrect answer");
-  await expect(guidance).toContainText("questionable claim");
-  await topic.selectOption("Account or privacy concern");
-  await expect(guidance).toContainText("private contact method");
+  await expect(guidance).toContainText("describe your role");
+  for (const [option, text] of [
+    ["Institutional documents", "who owns them"],
+    ["Incorrect answer", "questionable claim"],
+    ["Account or privacy concern", "private contact method"],
+  ] as const) {
+    await topic.click();
+    await page.getByRole("option", { name: option, exact: true }).click();
+    await expect(guidance).toContainText(text);
+  }
   await expect(surface).toContainText("Nothing is sent.");
   const profile = surface.getByRole("link", { name: "Open GitHub profile", exact: true });
   await expect(profile).toBeVisible();

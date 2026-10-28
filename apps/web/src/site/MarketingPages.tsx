@@ -1,5 +1,6 @@
 import { For, Match, Switch, type JSX } from 'solid-js';
-import { ArrowUpRight, BookOpen, Languages } from 'lucide-solid';
+import { BookOpen, Languages } from 'lucide-solid';
+import { Badge, Button } from '../ui';
 import { Band } from './Band';
 import { Closing, DocumentRows, Workflow } from './Sections';
 import ProductExample from './ProductExample';
@@ -20,12 +21,12 @@ const introductions = {
   '/universities': [
     'For universities',
     'Reconnect with your students.',
-    'Help students find the knowledge your institution already maintains, while keeping source ownership and review in human hands.',
+    'Any university can join. Help students find the knowledge your school already maintains, while source ownership and review stay in your hands.',
   ],
   '/pricing': [
     'Pricing',
     'Start with a conversation, not a checkout.',
-    'The current pilot is limited and invitation-bound. Public prices and paid plans have not been set.',
+    'The current pilot is limited and invitation-bound, with HCMIU as the first school. Public prices and paid plans have not been set.',
   ],
   '/about': [
     'About',
@@ -40,7 +41,7 @@ const introductions = {
   '/contact': [
     'Contact',
     'Let’s make the question clearer.',
-    'Discuss pilot access, institutional documents or a concern with the person building noti.school.',
+    'Discuss access for your university, institutional documents or a concern with the person building noti.school.',
   ],
   '/security': [
     'Security',
@@ -66,7 +67,7 @@ const introductions = {
 
 function TextSection(props: { title: string; children: JSX.Element }) {
   return (
-    <section class="site-reading-section">
+    <section class="site-card site-reading-section">
       <h2>{props.title}</h2>
       <div>{props.children}</div>
     </section>
@@ -78,11 +79,11 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
   const intro = () => introductions[props.route];
   return (
     <article
-      class={`site-content site-page site-page-${props.route.slice(1)}`}
+      class={`site-page site-page-${props.route.slice(1)}`}
       data-site-page={props.route.slice(1)}
     >
-      <div class="site-page-heading">
-        <span class="site-label">{intro()[0]}</span>
+      <div class="site-wrap site-page-heading">
+        <Badge>{intro()[0]}</Badge>
         <h1 tabIndex={-1}>{intro()[1]}</h1>
         <p>{intro()[2]}</p>
       </div>
@@ -94,8 +95,9 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
           <Band motion={props.motion} class="site-reading">
             <TextSection title="From question to context">
               <p>
-                Choose your institution and ask in English or Vietnamese. An answer can point to the
-                relevant document passage instead of leaving you to search a whole collection.
+                Your account belongs to your school, and you ask in English or Vietnamese. An answer can
+                point to the relevant passage in your school's approved documents instead of leaving
+                you to search a whole collection.
               </p>
               <p>
                 Open the citation to see the original version and page or section. Read the
@@ -115,12 +117,12 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
             </TextSection>
             <TextSection title="Keep the conversation grounded">
               <p>
-                Follow-up questions retain the selected institution. History helps you return to
+                Follow-up questions stay with your school. History helps you return to
                 prior conversations, and answer feedback lets you identify a specific claim that
                 needs review.
               </p>
-              <a class="site-inline-link" href="#/">
-                Ask your own question <ArrowUpRight size={17} />
+              <a class="site-link" href="#/">
+                Ask your own question
               </a>
             </TextSection>
           </Band>
@@ -128,7 +130,6 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
             <div class="site-section-heading">
               <h2>
                 One collection.
-                <br />
                 Several ways in.
               </h2>
               <p>
@@ -142,22 +143,23 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
         <Match when={props.route === '/students'}>
           <Band motion={props.motion} class="site-student-guide">
             <div>
-              <Languages size={28} />
+              <span class="site-icon-tile" aria-hidden="true">
+                <Languages size={22} />
+              </span>
               <h2>
                 Ask in the language
-                <br />
                 you think in.
               </h2>
               <p>
-                Choose English or Tiếng Việt in the composer. Include the course, procedure or
+                Choose English or Tiếng Việt in the question box. Include the course, procedure or
                 document you mean. A focused question is easier to check against a source.
               </p>
-              <a class="primary" href="#/">
-                Ask a question <ArrowUpRight size={17} />
-              </a>
+              <Button variant="primary" href="#/">
+                Ask a question
+              </Button>
             </div>
             <div class="site-question-notes">
-              <span class="site-label">Questions to start with</span>
+              <h3>Questions to start with</h3>
               <p>“Where can I find the student handbook?”</p>
               <p>“Which document explains this procedure?”</p>
               <p lang="vi">“Tôi có thể tìm quy chế học vụ ở đâu?”</p>
@@ -167,7 +169,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
           <Band motion={props.motion} class="site-reading">
             <TextSection title="Before you act on an answer">
               <ol>
-                <li>Check that the institution matches your question.</li>
+                <li>Check that the school shown is your own university.</li>
                 <li>Open the cited passage and read its context.</li>
                 <li>Check the document version and any effective date.</li>
                 <li>
@@ -181,8 +183,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 review, or the question may be outside the collection. An unsupported answer is not
                 a substitute for an official decision.
               </p>
-              <a class="site-inline-link" href="#/sources">
-                Browse available documents <ArrowUpRight size={17} />
+              <a class="site-link" href="#/sources">
+                Browse available documents
               </a>
             </TextSection>
             <TextSection title="Keep personal records out of the question">
@@ -191,8 +193,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 passwords or private correspondence. The pilot is not a channel for processing
                 personal student cases.
               </p>
-              <a class="site-inline-link" href="#/privacy">
-                Read the pilot privacy notice <ArrowUpRight size={17} />
+              <a class="site-link" href="#/privacy">
+                Read the pilot privacy notice
               </a>
             </TextSection>
           </Band>
@@ -202,11 +204,11 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
             <div class="site-section-heading">
               <h2>
                 Your documents.
-                <br />A deliberate path to answers.
+                 A deliberate path to answers.
               </h2>
               <p>
-                Bring a defined collection and a human approval owner. Start with a useful,
-                reviewable slice of university information.
+                Each university brings its own collection and a human approval owner. Start with a
+                useful, reviewable slice of your school's information.
               </p>
             </div>
             <Workflow />
@@ -221,7 +223,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
             </TextSection>
             <TextSection title="Keep approval separate from upload">
               <p>
-                Proposing a URL or uploading a file does not make it answer evidence. Review the
+                Proposing a URL or uploading a file does not make it answer evidence. Your school's
+                source team reviews the
                 extracted text, document version and source status before publication. Restricted
                 material requires an explicit access decision.
               </p>
@@ -235,33 +238,34 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 Feedback can identify confusing explanations and gaps in a collection. Use those
                 reports to improve the source material, not to automate academic decisions.
               </p>
-              <a class="site-inline-link" href="#/security">
-                Review the security boundaries <ArrowUpRight size={17} />
+              <a class="site-link" href="#/security">
+                Review the security boundaries
               </a>
             </TextSection>
           </Band>
           <Band motion={props.motion} class="site-pilot-band">
             <h2>
               Bring a collection.
-              <br />
               Start a conversation.
             </h2>
             <p>
-              No university partnership or deployment is implied by this website. Contact the owner
-              to discuss source permission, review responsibilities and pilot access.
+              No university partnership or deployment is implied by this website. Request your
+              university, then contact the owner to discuss source permission, review
+              responsibilities and access.
             </p>
-            <a class="primary" href="#/contact">
-              Discuss a pilot <ArrowUpRight size={18} />
-            </a>
+            <div class="site-actions">
+              <Button variant="primary" href="#/contact">
+                Discuss a pilot
+              </Button>
+              <Button href="#join">Request your university</Button>
+            </div>
           </Band>
         </Match>
         <Match when={props.route === '/pricing'}>
           <Band motion={props.motion} class="site-access">
             <div>
-              <span class="site-label">Current access model</span>
-              <h2>
+                            <h2>
                 A limited pilot,
-                <br />
                 with a defined scope.
               </h2>
               <p>
@@ -280,7 +284,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
               <div>
                 <dt>Institutional participation</dt>
                 <dd>
-                  Discuss document scope, approval ownership and evaluation with the project owner.
+                  Any university can request access. Discuss document scope, approval ownership and
+                  evaluation with the project owner.
                 </dd>
               </div>
               <div>
@@ -296,8 +301,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 Use the account page to sign in. If a required service is unavailable, the page will
                 explain what can be used.
               </p>
-              <a class="site-inline-link" href="#/auth">
-                Sign in to your account <ArrowUpRight size={18} />
+              <a class="site-link" href="#/auth">
+                Sign in to your account
               </a>
             </div>
             <div>
@@ -306,18 +311,20 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 Tell us what information you want students to find and who can approve the sources.
                 Start with scope before discussing access.
               </p>
-              <a class="primary" href="#/contact">
-                Contact about access <ArrowUpRight size={18} />
-              </a>
+              <Button variant="primary" href="#/contact">
+                Contact about access
+              </Button>
             </div>
           </Band>
         </Match>
         <Match when={props.route === '/about'}>
           <Band motion={props.motion} class="site-about-statement">
-            <BookOpen size={30} />
+            <span class="site-icon-tile" aria-hidden="true">
+              <BookOpen size={22} />
+            </span>
             <h2>
               Less distance between
-              <br />a question and its source.
+               a question and its source.
             </h2>
             <p>
               University information is often spread across handbooks, procedures and course
@@ -331,15 +338,16 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 noti.school is built by the project owner, InugamiDev. It is in development and
                 claims no official university affiliation, partnership or endorsement.
               </p>
-              <a class="site-inline-link" href="https://github.com/InugamiDev">
-                Visit the owner’s public profile <ArrowUpRight size={17} />
+              <a class="site-link" href="https://github.com/InugamiDev">
+                Visit the owner’s public profile
               </a>
             </TextSection>
             <TextSection title="A focused starting point">
               <p>
-                The first pilot targets HCMIU and English/Vietnamese questions. Approved source
-                coverage, human evaluation and operational readiness still need to be established
-                before a wider release.
+                noti.school is built for any university, one school per account. The first pilot is
+                HCMIU, with English and Vietnamese questions. Approved source coverage, human
+                evaluation and operational readiness still need to be established before other
+                universities join.
               </p>
             </TextSection>
             <TextSection title="What we want to learn">
@@ -348,8 +356,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 limits? Can a document owner correct information without losing its version history?
                 These are questions for evaluation, not results claimed here.
               </p>
-              <a class="site-inline-link" href="#/product">
-                Explore the product <ArrowUpRight size={17} />
+              <a class="site-link" href="#/product">
+                Explore the product
               </a>
             </TextSection>
           </Band>
@@ -368,8 +376,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
           <Band motion={props.motion} class="site-reading">
             <TextSection title="Evidence has an owner and a version">
               <p>
-                The product is designed to use approved sources within the selected institution and
-                permitted visibility. Citations identify original document versions and passage
+                The product is designed to use only the approved sources of your own university and
+                their permitted visibility. Schools cannot search each other's documents. Citations identify original document versions and passage
                 locations. Source text is treated as material to read, not instructions that can
                 change account permissions.
               </p>
@@ -401,15 +409,17 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 Contact the owner to arrange an appropriate private channel. Do not post
                 credentials, private documents or exploitable account details in public.
               </p>
-              <a class="site-inline-link" href="#/contact">
-                Contact about a concern <ArrowUpRight size={17} />
+              <a class="site-link" href="#/contact">
+                Contact about a concern
               </a>
             </TextSection>
           </Band>
         </Match>
         <Match when={props.route === '/privacy'}>
           <Band motion={props.motion} class="site-reading">
-            <p class="site-draft-notice">Draft pilot notice · subject to release review</p>
+            <p class="site-draft-notice">
+              <Badge tone="clay">Draft pilot notice, subject to release review</Badge>
+            </p>
             <TextSection title="Information used by the pilot">
               <p>
                 Account details and institution membership support sign-in and access. Questions,
@@ -451,8 +461,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 for a private channel before sharing identifying details. This draft does not
                 promise a retention period or deletion deadline.
               </p>
-              <a class="site-inline-link" href="#/contact">
-                Contact about privacy <ArrowUpRight size={17} />
+              <a class="site-link" href="#/contact">
+                Contact about privacy
               </a>
             </TextSection>
             <TextSection title="This website’s example">
@@ -466,7 +476,9 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
         </Match>
         <Match when={props.route === '/terms'}>
           <Band motion={props.motion} class="site-reading">
-            <p class="site-draft-notice">Draft pilot material · pending public-release review</p>
+            <p class="site-draft-notice">
+              <Badge tone="clay">Draft pilot material, pending public-release review</Badge>
+            </p>
             <TextSection title="Purpose and status">
               <p>
                 noti.school is an independent university information assistant in development. Pilot
@@ -505,15 +517,15 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 availability, answer accuracy or public price is promised here. If a service is
                 unavailable, use the original source or contact the responsible office.
               </p>
-              <a class="site-inline-link" href="#/contact">
-                Ask about these pilot notes <ArrowUpRight size={17} />
+              <a class="site-link" href="#/contact">
+                Ask about these pilot notes
               </a>
             </TextSection>
           </Band>
         </Match>
         <Match when={props.route === '/changelog'}>
           <Band motion={props.motion} class="site-changelog">
-            <span class="site-label">Current pilot · undated</span>
+            <Badge>Current pilot, undated</Badge>
             <For
               each={[
                 [
@@ -526,11 +538,11 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 ],
                 [
                   'Product website and example',
-                  'Product, student and institutional guides sit alongside pilot access, help and trust notices. A synthetic interactive example lets visitors inspect matching answer and source text.',
+                  'The site now speaks to every university, with HCMIU as the first pilot. Product, student and university guides sit alongside a request form, help and trust notices. A synthetic example lets visitors inspect matching answer and source text.',
                 ],
                 [
-                  'Accessible archive motion',
-                  'The archive supports pause, system reduced motion and a bitmap fallback. Lightweight page reveals and evidence transitions follow the same motion preference.',
+                  'Clay hero illustration',
+                  'One lazily loaded 3D scene shows a bookstack per school. It pauses off screen, renders still frames under reduced motion and falls back to a static illustration without WebGL. Page reveals follow the same motion preference.',
                 ],
               ]}
             >
@@ -548,8 +560,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 answer quality and public-release readiness. Known application issues remain; this
                 website update does not clear them.
               </p>
-              <a class="site-inline-link" href="#/product">
-                Explore the current product <ArrowUpRight size={17} />
+              <a class="site-link" href="#/product">
+                Explore the current product
               </a>
             </div>
           </Band>

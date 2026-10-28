@@ -64,7 +64,7 @@ test('R3-01 same tab: detail only on exact route, account switch clears cached h
   await expect(page.getByRole('link', { name: 'Open conversation' })).toHaveCount(0);
   await page.evaluate(() => { location.hash = '/history/11111111-1111-4111-8111-111111111111'; });
   await expect(page.getByRole('button', { name: /View answer/ })).toHaveCount(0);
-  await page.locator('.wordmark').click();
+  await page.getByRole('link', { name: 'noti.school home' }).click();
   await expect(page.getByLabel('Your question')).toHaveValue('');
   await expect(page.getByText('PRIVATE SOURCE A', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify(sessionStorage))).not.toContain('PRIVATE A');
@@ -79,7 +79,7 @@ test('R3-01 delayed history and answer cannot repopulate after account or member
   await expect(page.getByText('Loading conversation…')).toBeVisible();
   state.user = 'B'; await refreshIdentity(page); release();
   await expect(page.getByRole('button', { name: /View answer/ })).toHaveCount(0);
-  await page.locator('.wordmark').click();
+  await page.getByRole('link', { name: 'noti.school home' }).click();
   let finish!: () => void;
   const answerGate = new Promise<void>(resolve => { finish = resolve; });
   await page.route('**/api/v1/answers', async route => { await answerGate; await route.fulfill({ json: answer('STALE DELAYED ANSWER') }).catch(() => {}); });
@@ -97,7 +97,7 @@ for (const action of ['sign-out', 'delete-user']) test(`R2-04 ${action} clears o
   await page.getByRole('button', { name: action === 'sign-out' ? 'Sign out' : 'Confirm account deletion', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to noti.school' })).toBeVisible();
   await expect(page.getByText('Sign in to the account before confirming deletion.', { exact: false })).toHaveCount(0);
-  await page.locator('.wordmark').click(); await expect(page.getByLabel('Your question')).toHaveValue('');
+  await page.getByRole('link', { name: 'noti.school home' }).click(); await expect(page.getByLabel('Your question')).toHaveValue('');
   await page.reload(); await expect(page.getByLabel('Your question')).toHaveValue('');
   expect(await page.evaluate(() => JSON.stringify(sessionStorage))).not.toContain('PRIVATE LOGOUT TEXT');
 });
@@ -107,11 +107,13 @@ test('R2-04 intentional anonymous first-login draft survives, subsequent account
   await expect(page.getByRole('link', { name: 'Sign in', exact: true }).first()).toBeVisible();
   await page.getByLabel('Your question').fill('ANONYMOUS FIRST DRAFT');
   await page.getByRole('link', { name: 'Sign in', exact: true }).first().click();
+  // The account form remounts when the access scope settles; fill it only after identity requests finish.
+  await page.waitForLoadState('networkidle');
   await page.getByLabel('Email', { exact: true }).fill('synthetic@example.test');
   await page.getByLabel('Password', { exact: true }).fill('synthetic-password');
   await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
-  await page.locator('.wordmark').click(); await expect(page.getByLabel('Your question')).toHaveValue('ANONYMOUS FIRST DRAFT');
+  await page.getByRole('link', { name: 'noti.school home' }).click(); await expect(page.getByLabel('Your question')).toHaveValue('ANONYMOUS FIRST DRAFT');
   state.user = 'C'; await refreshIdentity(page); await expect(page.getByLabel('Your question')).toHaveValue('');
 });
 
@@ -157,8 +159,8 @@ test('R3-05 Unicode scalar limits, meaningful control rejection, truthful system
   await fixture(page); let calls = 0;
   await page.route('**/api/v1/answers', async route => { calls++; await route.fulfill({ json: answer('UNICODE ACCEPTED') }); });
   await page.goto('/');
-  const pause = page.getByRole('button', { name: 'Pause animation' });
-  await expect(pause).toBeDisabled(); await expect(pause).toHaveAccessibleDescription(/system.*reduced-motion/);
+  const motion = page.getByRole('contentinfo').getByRole('button', { name: 'System reduced motion' });
+  await expect(motion).toBeDisabled(); await expect(page.locator('html')).toHaveAttribute('data-motion', 'off');
   await ask(page, 'a'.repeat(4001)); await expect(page.getByRole('alert')).toContainText('Unicode'); expect(calls).toBe(0);
   await ask(page, 'bad\u0001control'); await expect(page.getByRole('alert')).toContainText('control characters'); expect(calls).toBe(0);
   await ask(page, '😀'.repeat(4000)); await expect(page.getByText('UNICODE ACCEPTED')).toBeVisible(); expect(calls).toBe(1);

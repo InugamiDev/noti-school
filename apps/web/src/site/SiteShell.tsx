@@ -1,245 +1,178 @@
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
-import { ArrowUpRight, ChevronDown, Menu, Pause, Play, X } from 'lucide-solid';
+// intent: Clay site shell: dismissible pilot notice, sticky nav with search and account entry, mobile sheet, footer.
+// status: done
+// next: workspace pages (sources, history, admin, auth) are linked from the footer and the command menu, not the top nav.
+// confidence: high
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { Menu, Pause, Play, Search, X } from 'lucide-solid';
+import { Button, Kbd, localStore, Sheet } from '../ui';
 
-export const sitePages = {
-  '/': [
-    'Answers with sources',
-    'Your university questions, answered with sources. An independent pilot for students and university staff.',
-  ],
-  '/product': [
-    'Product',
-    'Follow a question from answer to source passage, document version and feedback.',
-  ],
-  '/students': [
-    'For students',
-    'Find university information, check its source and know when to ask for help.',
-  ],
-  '/universities': [
-    'For universities',
-    'Explore a considered approach to source approval, document updates and student feedback.',
-  ],
-  '/pricing': [
-    'Pricing and pilot access',
-    'Pilot access is limited. Public pricing and paid plans have not been announced.',
-  ],
-  '/about': [
-    'About noti.school',
-    'An independent project making university information easier to find and inspect.',
-  ],
-  '/help': [
-    'Help',
-    'Practical help with questions, sources, account access and unavailable answers.',
-  ],
-  '/contact': [
-    'Contact',
-    'Contact the project owner about pilot access, source issues or product questions.',
-  ],
-  '/security': [
-    'Security',
-    'Understand source approval, account boundaries and current verification limits.',
-  ],
-  '/privacy': [
-    'Pilot privacy notice',
-    'Read the draft notice on account data, questions, source passages and external processing.',
-  ],
-  '/terms': [
-    'Pilot terms draft',
-    'Understand the limits of an independent university information assistant.',
-  ],
-  '/changelog': [
-    'Changelog',
-    'What is included in the current pilot and what remains under evaluation.',
-  ],
-} as const;
+export { isSiteRoute, sitePages, type SiteRoute } from './routes';
 
-export type SiteRoute = keyof typeof sitePages;
-export function isSiteRoute(route: string): route is SiteRoute {
-  return Object.hasOwn(sitePages, route);
+const PILOT_DISMISSED = 'pilot-dismissed';
+
+const navLinks = [
+  ['How it works', '#how'],
+  ['Who it’s for', '#roles'],
+  ['For universities', '#/universities'],
+  ['Help', '#/help'],
+] as const;
+
+const current = (route: string, href: string) => (href === `#${route}` ? 'page' : undefined);
+
+export function PilotNotice() {
+  const [hidden, setHidden] = createSignal(localStore.get(PILOT_DISMISSED) === '1');
+  return (
+    <Show when={!hidden()}>
+      <aside class="site-pilot" aria-label="Pilot notice">
+        <div class="site-wrap site-pilot-row">
+          <p>
+            Now piloting at HCMIU. Other universities can request access.{' '}
+            <a href="#join">Request your university</a>
+          </p>
+          <button
+            class="site-pilot-close"
+            type="button"
+            aria-label="Dismiss notice"
+            onClick={() => {
+              setHidden(true);
+              localStore.set(PILOT_DISMISSED, '1');
+            }}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </aside>
+    </Show>
+  );
 }
 
-const productLinks = [
-  ['Product', '/product'],
-  ['Students', '/students'],
-  ['Universities', '/universities'],
-  ['Pricing', '/pricing'],
-] as const;
-const resourceLinks = [
-  ['Help', '/help'],
-  ['About', '/about'],
-  ['Changelog', '/changelog'],
-  ['Security', '/security'],
-  ['Contact', '/contact'],
-] as const;
+function Logo(props: { label?: string }) {
+  return (
+    <a class="site-logo" href="#/" aria-label={props.label}>
+      <span class="site-logo-mark" aria-hidden="true" />
+      noti.school
+    </a>
+  );
+}
 
-// intent: preserve direct workspace entry while expanding product navigation; status: implemented.
-export function SiteHeader(props: { route: string; signedIn: boolean }) {
+export function SiteHeader(props: { route: string; signedIn: boolean; onSearch: () => void }) {
   const [open, setOpen] = createSignal(false);
-  const [resources, setResources] = createSignal(false);
-  let header!: HTMLElement;
-  let toggle!: HTMLButtonElement;
-  let resourceToggle!: HTMLButtonElement;
-  const close = () => {
-    setOpen(false);
-    setResources(false);
-  };
-  createEffect(() => {
-    void props.route;
-    close();
-  });
-  const outside = (event: PointerEvent) => {
-    if (event.target instanceof Node && !header.contains(event.target)) close();
-  };
-  const escape = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return;
-    if (open()) {
-      close();
-      toggle.focus();
-    } else if (resources()) {
-      close();
-      resourceToggle.focus();
-    }
-  };
-  document.addEventListener('pointerdown', outside);
-  document.addEventListener('keydown', escape);
-  const desktop = matchMedia('(min-width: 1100px)');
-  desktop.addEventListener('change', close);
-  onCleanup(() => {
-    document.removeEventListener('pointerdown', outside);
-    document.removeEventListener('keydown', escape);
-    desktop.removeEventListener('change', close);
+  const [stuck, setStuck] = createSignal(false);
+  onMount(() => {
+    const onScroll = () => setStuck(window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    onCleanup(() => window.removeEventListener('scroll', onScroll));
   });
   return (
-    <header
-      class="site-header"
-      ref={(node) => {
-        header = node;
-      }}
-      onFocusOut={(event) => {
-        if (event.relatedTarget instanceof Node && !header.contains(event.relatedTarget)) close();
-      }}
-    >
-      <a class="wordmark" href="#/" aria-label="noti.school home">
-        noti<span class="brand-dot">.</span>
-      </a>
-      <nav class="site-desktop" aria-label="Product navigation">
-        <For each={productLinks}>
-          {([label, path]) => (
-            <a href={`#${path}`} aria-current={props.route === path ? 'page' : undefined}>
-              {label}
-            </a>
-          )}
-        </For>
-        <div class="site-resources">
-          <button
-            ref={(node) => {
-              resourceToggle = node;
-            }}
-            aria-expanded={resources()}
-            aria-controls="site-resources"
-            onClick={() => setResources((v) => !v)}
-          >
-            Resources <ChevronDown size={14} />
-          </button>
-          <Show when={resources()}>
-            <div class="site-resource-menu" id="site-resources">
-              <For each={resourceLinks}>
-                {([label, path]) => (
-                  <a href={`#${path}`} onClick={close}>
-                    {label}
-                  </a>
-                )}
-              </For>
-            </div>
-          </Show>
-        </div>
-      </nav>
-      <nav class="site-workspace" aria-label="Main navigation">
-        <a href="#/sources" aria-current={props.route.startsWith('/sources') ? 'page' : undefined}>
-          Sources
-        </a>
-        <a href="#/history" aria-current={props.route.startsWith('/history') ? 'page' : undefined}>
-          History
-        </a>
-        <a
-          class="site-account"
+    <header class="site-nav" classList={{ 'site-nav-stuck': stuck() }}>
+      <div class="site-wrap site-nav-row">
+        <Logo label="noti.school home" />
+        <nav class="site-nav-links" aria-label="Main">
+          <For each={navLinks}>
+            {([label, href]) => (
+              <a href={href} aria-current={current(props.route, href)}>
+                {label}
+              </a>
+            )}
+          </For>
+        </nav>
+        <Button
+          class="site-nav-search"
+          variant="secondary"
+          size="sm"
+          aria-keyshortcuts="Control+K Meta+K"
+          onClick={() => props.onSearch()}
+        >
+          <Search aria-hidden="true" />
+          Search
+          <Kbd mod>K</Kbd>
+        </Button>
+        <Button
+          class="site-nav-account"
+          variant={props.signedIn ? 'secondary' : 'primary'}
+          size="sm"
           href="#/auth"
           aria-current={props.route.startsWith('/auth') ? 'page' : undefined}
         >
           {props.signedIn ? 'Account' : 'Sign in'}
-        </a>
-        <button
-          class="site-menu-toggle"
-          ref={(node) => {
-            toggle = node;
-          }}
-          aria-label={open() ? 'Close navigation' : 'Open navigation'}
+        </Button>
+        <Button
+          class="site-nav-menu"
+          variant="ghost"
+          size="sm"
+          iconOnly
+          aria-label="Open menu"
           aria-expanded={open()}
-          aria-controls="site-mobile-navigation"
-          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="dialog"
+          onClick={() => setOpen(true)}
         >
-          {open() ? <X size={20} /> : <Menu size={20} />}
-        </button>
-      </nav>
-      <Show when={open()}>
-        <nav id="site-mobile-navigation" class="site-mobile" aria-label="Site navigation">
-          <div>
-            <span>Explore</span>
-            <For each={productLinks}>
-              {([label, path]) => (
-                <a
-                  href={`#${path}`}
-                  onClick={close}
-                  aria-current={props.route === path ? 'page' : undefined}
-                >
-                  {label}
-                </a>
-              )}
-            </For>
-          </div>
-          <div>
-            <span>Resources</span>
-            <For each={resourceLinks}>
-              {([label, path]) => (
-                <a
-                  href={`#${path}`}
-                  onClick={close}
-                  aria-current={props.route === path ? 'page' : undefined}
-                >
-                  {label}
-                </a>
-              )}
-            </For>
-          </div>
+          <Menu aria-hidden="true" />
+        </Button>
+      </div>
+      <Sheet open={open()} onOpenChange={setOpen} title="Menu">
+        <nav class="site-sheet-links" aria-label="Menu">
+          <For each={navLinks}>
+            {([label, href]) => (
+              <a href={href} aria-current={current(props.route, href)} onClick={() => setOpen(false)}>
+                {label}
+              </a>
+            )}
+          </For>
+          <a href="#join" onClick={() => setOpen(false)}>
+            Request your university
+          </a>
         </nav>
-      </Show>
+        <Button
+          class="site-sheet-search"
+          variant="secondary"
+          onClick={() => {
+            setOpen(false);
+            props.onSearch();
+          }}
+        >
+          <Search aria-hidden="true" />
+          Search
+        </Button>
+      </Sheet>
     </header>
   );
 }
 
 const footerGroups = [
-  { title: 'Product', links: productLinks },
   {
-    title: 'Resources',
+    title: 'Product',
     links: [
-      ['Browse sources', '/sources'],
-      ['Help', '/help'],
-      ['Changelog', '/changelog'],
+      ['Product', '#/product'],
+      ['Students', '#/students'],
+      ['Universities', '#/universities'],
+      ['Pricing', '#/pricing'],
+    ],
+  },
+  {
+    title: 'Workspace',
+    links: [
+      ['Ask a question', '#/'],
+      ['Sources', '#/sources'],
+      ['History', '#/history'],
+      ['Source administration', '#/admin'],
     ],
   },
   {
     title: 'Project',
     links: [
-      ['About', '/about'],
-      ['Contact', '/contact'],
-      ['GitHub', 'https://github.com/InugamiDev'],
+      ['About', '#/about'],
+      ['Help', '#/help'],
+      ['Changelog', '#/changelog'],
+      ['Contact', '#/contact'],
     ],
   },
   {
     title: 'Trust',
     links: [
-      ['Security', '/security'],
-      ['Privacy', '/privacy'],
-      ['Terms', '/terms'],
+      ['Security', '#/security'],
+      ['Privacy', '#/privacy'],
+      ['Terms', '#/terms'],
     ],
   },
 ] as const;
@@ -247,50 +180,34 @@ const footerGroups = [
 export function SiteFooter(props: { paused: boolean; reduced: boolean; toggle: () => void }) {
   return (
     <footer class="site-footer">
-      <div class="site-footer-top">
-        <div class="site-footer-intro">
-          <a class="site-footer-brand" href="#/">
-            noti.school
-          </a>
-          <p>
-            University questions.
-            <br />A source you can return to.
-          </p>
-          <p class="site-fine">
-            Independent HCMIU pilot.
-            <br />
-            No official affiliation claimed.
-          </p>
+      <div class="site-wrap">
+        <div class="site-footer-top">
+          <Logo />
+          <p>Independent project. Not affiliated with any university.</p>
         </div>
-        <For each={footerGroups}>
-          {(group) => (
-            <nav aria-label={`${group.title} footer`}>
-              <h2>{group.title}</h2>
-              <For each={group.links}>
-                {([label, path]) => (
-                  <a href={path.startsWith('https:') ? path : `#${path}`}>
-                    {label}
-                    {path.startsWith('https:') && <ArrowUpRight size={14} />}
-                  </a>
-                )}
-              </For>
-            </nav>
-          )}
-        </For>
-      </div>
-      <div class="site-footer-bottom">
-        <a href="#/admin">
-          For institutions <ArrowUpRight size={16} />
-        </a>
-        <a href="#/contact">Pilot enquiries</a>
-        <button disabled={props.reduced} aria-pressed={props.paused} onClick={props.toggle}>
-          {props.paused || props.reduced ? <Play size={14} /> : <Pause size={14} />}
-          {props.reduced
-            ? 'System reduced motion'
-            : props.paused
-              ? 'Resume site motion'
-              : 'Pause site motion'}
-        </button>
+        <div class="site-footer-groups">
+          <For each={footerGroups}>
+            {group => (
+              <nav aria-label={`${group.title} links`}>
+                <h2>{group.title}</h2>
+                <For each={group.links}>{([label, href]) => <a href={href}>{label}</a>}</For>
+              </nav>
+            )}
+          </For>
+        </div>
+        <div class="site-footer-bottom">
+          <p>Confirm important decisions with the original document and your university office.</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={props.reduced}
+            aria-pressed={props.paused}
+            onClick={() => props.toggle()}
+          >
+            {props.paused || props.reduced ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+            {props.reduced ? 'System reduced motion' : props.paused ? 'Resume site motion' : 'Pause site motion'}
+          </Button>
+        </div>
       </div>
     </footer>
   );

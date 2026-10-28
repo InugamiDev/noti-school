@@ -1,136 +1,146 @@
-import { createMemo, createSignal, For, Show } from 'solid-js';
-import { ArrowUpRight, Search } from 'lucide-solid';
-import { questions } from './Sections';
+import { createMemo, createSignal, For, Match, Switch } from 'solid-js';
+import { SearchX } from 'lucide-solid';
+import { Accordion, Button, EmptyState, matchesQuery, SearchInput, Select } from '../ui';
+import { faqCategories, questions, type FaqCategory } from './faq';
 
 export function Help() {
   const [query, setQuery] = createSignal('');
-  const [category, setCategory] = createSignal('All');
-  const results = createMemo(() => {
-    const term = query().trim().toLocaleLowerCase();
-    return questions.filter(
+  const [category, setCategory] = createSignal<FaqCategory | 'All'>('All');
+  const results = createMemo(() =>
+    questions.filter(
       (item) =>
         (category() === 'All' || item.category === category()) &&
-        `${item.question} ${item.answer}`.toLocaleLowerCase().includes(term),
-    );
-  });
+        matchesQuery(query(), item.question, item.answer),
+    ),
+  );
   return (
     <div class="site-help">
       <div class="site-help-tools">
-        <label for="help-search">Search help</label>
-        <div class="site-search">
-          <Search size={18} />
-          <input
-            id="help-search"
-            type="search"
-            value={query()}
-            onInput={(e) => setQuery(e.currentTarget.value)}
-            placeholder="Try sources, Vietnamese or sign in"
-          />
-        </div>
-        <div class="site-help-categories" role="group" aria-label="Help categories">
-          <For each={['All', 'Answers', 'Sources', 'Accounts', 'Pilot']}>
+        <SearchInput
+          class="site-help-search"
+          label="Search help"
+          placeholder="Try sources, Vietnamese or sign in"
+          value={query()}
+          onInput={setQuery}
+        />
+        <div class="site-chips" role="group" aria-label="Help categories">
+          <For each={['All', ...faqCategories] as const}>
             {(item) => (
-              <button aria-pressed={category() === item} onClick={() => setCategory(item)}>
+              <button type="button" aria-pressed={category() === item} onClick={() => setCategory(item)}>
                 {item}
               </button>
             )}
           </For>
         </div>
       </div>
-      <p role="status" class="site-fine">
+      <p role="status" class="site-meta">
         {results().length} {results().length === 1 ? 'answer' : 'answers'} found
       </p>
-      <div class="site-faq">
-        <For each={results()}>
-          {(item) => (
-            <details>
-              <summary>{item.question}</summary>
+      <Accordion
+        class="site-help-list"
+        items={results().map((item) => ({
+          value: item.id,
+          title: item.question,
+          content: (
+            <>
               <p>{item.answer}</p>
-              <a class="site-inline-link" href={item.href}>
-                {item.action} <ArrowUpRight size={16} />
+              <a class="site-link" href={item.href}>
+                {item.action}
               </a>
-            </details>
-          )}
-        </For>
-      </div>
-      <Show when={!results().length}>
-        <div class="site-empty">
-          <h2>No matching help articles.</h2>
-          <p>Try a broader phrase or another category. You can also contact the project owner.</p>
-          <button
-            onClick={() => {
-              setQuery('');
-              setCategory('All');
-            }}
-          >
-            Clear filters
-          </button>
-          <a class="site-inline-link" href="#/contact">
-            Contact the owner <ArrowUpRight size={16} />
-          </a>
-        </div>
-      </Show>
+            </>
+          ),
+        }))}
+      />
+      {!results().length && (
+        <EmptyState
+          icon={SearchX}
+          title="No matching help articles."
+          body="Try a broader phrase or another category. You can also contact the project owner."
+          action={
+            <>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setQuery('');
+                  setCategory('All');
+                }}
+              >
+                Clear filters
+              </Button>
+              <Button size="sm" variant="ghost" href="#/contact">
+                Contact the owner
+              </Button>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }
 
+const topics = [
+  'Access for your university',
+  'Institutional documents',
+  'Incorrect answer',
+  'Account or privacy concern',
+] as const;
+
 export function Contact() {
-  const [topic, setTopic] = createSignal('Pilot access');
+  const [topic, setTopic] = createSignal<string>(topics[0]);
   return (
     <div class="site-contact-grid">
-      <div>
+      <div class="site-card">
         <h2>Reach the project owner.</h2>
         <p>
           The public contact destination is InugamiDev’s GitHub profile. Use the contact options
           available there. There is no message submission form on this page.
         </p>
-        <a class="primary" href="https://github.com/InugamiDev">
-          Open GitHub profile <ArrowUpRight size={18} />
-        </a>
-        <p class="site-fine">
+        <div class="site-actions">
+          <Button variant="primary" href="https://github.com/InugamiDev">
+            Open GitHub profile
+          </Button>
+        </div>
+        <p class="site-meta">
           A response time is not guaranteed. Do not post sensitive information in public.
         </p>
       </div>
-      <div class="site-contact-prep">
-        <label for="contact-topic">What would you like to discuss?</label>
-        <select
-          id="contact-topic"
+      <div class="site-card site-contact-prep">
+        <Select
+          label="What would you like to discuss?"
+          options={topics.map((value) => ({ value, label: value }))}
           value={topic()}
-          onChange={(e) => setTopic(e.currentTarget.value)}
-        >
-          <option>Pilot access</option>
-          <option>Institutional documents</option>
-          <option>Incorrect answer</option>
-          <option>Account or privacy concern</option>
-        </select>
+          onChange={setTopic}
+        />
         <div aria-live="polite" class="site-contact-guidance">
           <h3>Useful details to prepare</h3>
-          <Show when={topic() === 'Pilot access'}>
-            <p>
-              Describe your role, what you want to learn from the pilot and whether you need student
-              or institutional access.
-            </p>
-          </Show>
-          <Show when={topic() === 'Institutional documents'}>
-            <p>
-              Describe the document types, who owns them and who can review updates. Start with
-              public document titles, not private attachments.
-            </p>
-          </Show>
-          <Show when={topic() === 'Incorrect answer'}>
-            <p>
-              Identify the question topic, questionable claim and source title or version. Leave out
-              private conversation text and personal records.
-            </p>
-          </Show>
-          <Show when={topic() === 'Account or privacy concern'}>
-            <p>
-              Ask for a suitable private contact method first. Never post passwords, session links,
-              tokens or student records.
-            </p>
-          </Show>
+          <Switch>
+            <Match when={topic() === 'Access for your university'}>
+              <p>
+                Name your university and describe your role, what you want students to find and who
+                at your school could approve the documents.
+              </p>
+            </Match>
+            <Match when={topic() === 'Institutional documents'}>
+              <p>
+                Describe the document types, who owns them and who can review updates. Start with
+                public document titles, not private attachments.
+              </p>
+            </Match>
+            <Match when={topic() === 'Incorrect answer'}>
+              <p>
+                Identify the question topic, questionable claim and source title or version. Leave out
+                private conversation text and personal records.
+              </p>
+            </Match>
+            <Match when={topic() === 'Account or privacy concern'}>
+              <p>
+                Ask for a suitable private contact method first. Never post passwords, session links,
+                tokens or student records.
+              </p>
+            </Match>
+          </Switch>
         </div>
-        <p class="site-fine">This selection stays on this page. Nothing is sent.</p>
+        <p class="site-meta">This selection stays on this page. Nothing is sent.</p>
       </div>
     </div>
   );

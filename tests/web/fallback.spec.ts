@@ -1,7 +1,9 @@
 import { test, expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs';
-import { createHash } from 'node:crypto';
 
+// intent: the Clay hero degrades to its static illustration without WebGL, on context loss and on import failure,
+//         and never delays or duplicates the question request.
 const id = '11111111-1111-4111-8111-111111111111';
+const stage = (page: Page) => page.getByRole('img', { name: /Clay illustration/ });
 async function fixture(page: Page, disable = true) {
   if (disable) await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
@@ -21,167 +23,90 @@ async function fixture(page: Page, disable = true) {
       message: 'Synthetic unavailable fixture', request_id: id, retryable: false, capability: 'answers' } } });
   });
 }
-const transform = (page: Page) => page.locator('.archive img').evaluate(el => getComputedStyle(el).transform);
-async function pixels(page: Page, name: string) {
-  const style = await page.addStyleTag({ content: '.hero-content,.motion-control,.archive-shade{visibility:hidden!important}' });
-  const shot = await page.locator('.archive').screenshot({ animations: 'allow', path: new URL(`./artifacts/fallback-${name}.png`, import.meta.url).pathname });
-  await style.evaluate(el => el.remove());
-  return createHash('sha256').update(shot).digest('hex');
-}
-async function frozen(page: Page, name: string) {
-  await page.waitForTimeout(100);
-  const a = await pixels(page, `${name}-a`);
-  await page.waitForTimeout(220);
-  expect(await pixels(page, `${name}-b`)).toBe(a);
-}
 
 for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
-  test(`fallback pixels move and freeze; bounded coverage ${size.width}`, async ({ page }) => {
+  test(`without WebGL the static illustration stays and the composer works at ${size.width}`, async ({ page }) => {
     await page.setViewportSize(size); await fixture(page); await page.goto('/');
-    await expect(page.locator('.archive')).toHaveClass(/fallback/);
-    const first = await pixels(page, `${size.width}-entry`);
-    await page.waitForTimeout(350);
-    expect(await pixels(page, `${size.width}-moving`)).not.toBe(first);
-    await page.getByRole('button', { name: 'Pause animation' }).click();
-    await frozen(page, `${size.width}-paused`);
-    await page.getByRole('button', { name: 'Resume animation' }).click();
-    await page.waitForTimeout(2400);
-    const ambient = await pixels(page, `${size.width}-ambient-a`);
-    await page.waitForTimeout(350);
-    expect(await pixels(page, `${size.width}-ambient-b`)).not.toBe(ambient);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await frozen(page, `${size.width}-reduced`);
-    // Inspect every extreme of the actual effect, without product instrumentation.
-    expect(await page.locator('.archive img').evaluate(el => {
-      const animation = el.getAnimations()[0]!; animation.pause();
-      const duration = Number(animation.effect!.getTiming().duration);
-      return [0, duration / 2, duration].every(time => {
-        animation.currentTime = time;
-        const image = el.getBoundingClientRect(), host = el.parentElement!.getBoundingClientRect();
-        return image.left <= host.left && image.right >= host.right && image.top <= host.top && image.bottom >= host.bottom;
-      });
-    })).toBe(true);
+    await stage(page).scrollIntoViewIfNeeded();
+    await expect(stage(page).getByText('Handbook illustration')).toBeVisible();
+    await page.waitForTimeout(1500);
+    await expect(stage(page).locator('canvas')).toHaveCount(0);
+    await expect(stage(page).getByText('Handbook illustration')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Your question', exact: true })).toBeVisible();
+    await page.screenshot({ path: new URL(`./artifacts/fallback-${size.width}.png`, import.meta.url).pathname });
   });
 }
 
-test('initial reduced motion creates no animation; visibility, intersection and disposal release resources', async ({ page }) => {
-  await page.addInitScript(() => {
-    const add = EventTarget.prototype.addEventListener, remove = EventTarget.prototype.removeEventListener;
-    EventTarget.prototype.addEventListener = function(...args: Parameters<typeof add>) {
-      if ((this === document && args[0] === 'visibilitychange') || (this instanceof MediaQueryList && args[0] === 'change')) performance.mark('test-listener-add');
-      return add.apply(this, args);
-    };
-    EventTarget.prototype.removeEventListener = function(...args: Parameters<typeof remove>) {
-      if ((this === document && args[0] === 'visibilitychange') || (this instanceof MediaQueryList && args[0] === 'change')) performance.mark('test-listener-remove');
-      return remove.apply(this, args);
-    };
-    const observer = window.IntersectionObserver;
-    window.IntersectionObserver = class extends observer {
-      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
-        super((entries, instance) => {
-          // Screenshots scroll into view; retain the real offscreen observation during capture only.
-          if (!performance.getEntriesByName('test-offscreen-capture').length) callback(entries, instance);
-        }, options);
-        performance.mark('test-observer-add');
-      }
-      disconnect() { performance.mark('test-observer-remove'); super.disconnect(); }
-    };
-  });
-  // App-level listeners outlive Archive. Measure them before its lazy module can mount.
-  let release!: () => void;
-  let importing = false;
-  const gate = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/assets/scene-*.js', async route => { importing = true; await gate; await route.continue(); });
-  const balance = () => page.evaluate(() => ({
-    listeners: performance.getEntriesByName('test-listener-add').length - performance.getEntriesByName('test-listener-remove').length,
-    observers: performance.getEntriesByName('test-observer-add').length - performance.getEntriesByName('test-observer-remove').length,
-  }));
-  await fixture(page); await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto('/');
-  await expect.poll(() => importing).toBe(true);
-  const baseline = await balance();
-  expect(baseline.observers).toBe(0);
-  release();
-  await expect(page.locator('.archive')).toHaveClass(/fallback/);
-  expect(await page.locator('.archive img').evaluate(el => el.getAnimations().length)).toBe(0);
-  await frozen(page, 'initial-reduced');
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await expect.poll(() => page.locator('.archive img').evaluate(el => el.getAnimations()[0]?.playState)).toBe('running');
-  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')); });
-  await frozen(page, 'hidden');
-  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')); });
-  await page.setViewportSize({ width: 1440, height: 400 });
-  await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
-  await expect.poll(() => page.locator('.archive img').evaluate(el => el.getAnimations()[0]?.playState)).toBe('paused');
-  // Locator screenshots scroll into view; use effect time/transform while truly offscreen.
-  const offscreen = await transform(page); await page.waitForTimeout(250); expect(await transform(page)).toBe(offscreen);
-  await page.evaluate(() => performance.mark('test-offscreen-capture'));
-  await frozen(page, 'offscreen');
-  await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
-  await page.waitForTimeout(100);
-  await page.evaluate(() => performance.clearMarks('test-offscreen-capture'));
-  await page.evaluate(() => scrollTo(0, 0));
-  await expect.poll(() => page.locator('.archive img').evaluate(el => el.getAnimations()[0]?.playState)).toBe('running');
-  const image = await page.locator('.archive img').elementHandle();
-  const animation = await image!.evaluateHandle(el => el.getAnimations()[0]!);
-  await page.getByRole('link', { name: 'For institutions' }).click();
-  await expect(page.locator('.archive')).toHaveCount(0);
-  expect(await animation.evaluate(a => ({ state: a.playState, finish: a.onfinish, time: a.currentTime }))).toEqual({ state: 'idle', finish: null, time: null });
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  expect(await image!.evaluate(el => el.getAnimations().length)).toBe(0);
-  expect(await balance()).toEqual(baseline);
-});
-
-test('submit during a failing lazy import keeps one immediate request and pending zoom', async ({ page }) => {
-  await fixture(page, false);
-  let release!: () => void;
-  const gate = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/assets/scene-*.js', async route => { await gate; await route.abort(); });
-  let calls = 0;
-  page.on('request', request => { if (request.url().endsWith('/api/v1/answers')) calls++; });
-  await page.goto('/'); await page.getByLabel('Your question').fill('Synthetic early submit');
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
-  await expect.poll(() => calls).toBe(1);
-  release();
-  await expect(page.locator('.archive')).toHaveClass(/fallback/);
-  await expect.poll(() => page.locator('.archive img').evaluate(el => el.getAnimations()[0]?.effect?.getTiming().duration)).toBe(600);
-  await expect(page.locator('.archive')).toHaveCount(0); expect(calls).toBe(1);
-});
-
-test('fallback submit dispatches immediately once; return home does not replay zoom', async ({ page }) => {
+test('fallback submit dispatches immediately once and returning home does not resend', async ({ page }) => {
   await fixture(page);
   await page.addInitScript(() => {
     document.addEventListener('submit', () => performance.mark('test-submit'), true);
     const fetch = window.fetch;
-    window.fetch = function(input, init) {
+    window.fetch = function (input, init) {
       if (String(input).endsWith('/api/v1/answers')) performance.mark('test-request');
       return fetch.call(this, input, init);
     };
   });
   let calls = 0;
   page.on('request', request => { if (request.url().endsWith('/api/v1/answers')) calls++; });
-  await page.goto('/'); await expect(page.locator('.archive')).toHaveClass(/fallback/);
+  await page.goto('/');
   for (let cycle = 1; cycle <= 2; cycle++) {
-    await page.getByLabel('Your question').fill('Synthetic fallback question');
+    await page.getByRole('textbox', { name: 'Your question', exact: true }).fill('Synthetic fallback question');
     await page.getByRole('button', { name: 'Ask', exact: true }).click();
     await expect.poll(() => calls).toBe(cycle);
     const delay = await page.evaluate(() => performance.getEntriesByName('test-request').at(-1)!.startTime - performance.getEntriesByName('test-submit').at(-1)!.startTime);
     expect(delay).toBeGreaterThanOrEqual(0); expect(delay).toBeLessThan(100);
-    expect(await page.locator('.archive img').evaluate(el => el.getAnimations()[0]?.effect?.getTiming().duration)).toBe(600);
-    await expect(page.locator('.archive')).toHaveCount(0);
-    await page.locator('a.wordmark').click();
-    await expect(page.locator('.archive')).toHaveClass(/fallback/);
-    await expect.poll(() => page.locator('.archive img').evaluate(el => el.getAnimations()[0]?.effect?.getTiming().duration)).toBe(2200);
+    await expect(page.getByRole('heading', { name: 'Your answer' })).toBeVisible();
+    await expect(stage(page)).toHaveCount(0);
+    await page.getByRole('link', { name: 'noti.school home' }).click();
+    await expect(stage(page)).toBeVisible();
+    await page.waitForTimeout(300);
     expect(calls).toBe(cycle);
   }
 });
 
-test('live WebGL has no bitmap animation; context loss and import failure activate it', async ({ page }) => {
-  await fixture(page, false); await page.goto('/'); await expect(page.locator('canvas')).toBeVisible();
-  expect(await page.locator('.archive img').evaluate(el => el.getAnimations().length)).toBe(0);
-  await page.locator('canvas').evaluate(el => el.dispatchEvent(new Event('webglcontextlost', { cancelable: true })));
-  await expect(page.locator('.archive')).toHaveClass(/fallback/);
-  await expect.poll(() => page.locator('.archive img').evaluate(el => el.getAnimations().length)).toBe(1);
+test('live WebGL hides the fallback; context loss and import failure bring it back', async ({ page }) => {
+  await fixture(page, false); await page.goto('/');
+  await expect(stage(page).locator('canvas')).toBeVisible();
+  await expect(stage(page).getByText('Handbook illustration')).toBeHidden();
+  await stage(page).locator('canvas').evaluate(el => el.dispatchEvent(new Event('webglcontextlost', { cancelable: true })));
+  await expect(stage(page).getByText('Handbook illustration')).toBeVisible();
   await page.route('**/assets/scene-*.js', route => route.abort());
-  await page.reload(); await expect(page.locator('.archive')).toHaveClass(/fallback/);
-  await expect.poll(() => page.locator('.archive img').evaluate(el => el.getAnimations().length)).toBe(1);
+  await page.reload();
+  await page.waitForTimeout(1500);
+  await expect(stage(page).locator('canvas')).toHaveCount(0);
+  await expect(stage(page).getByText('Handbook illustration')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Your question', exact: true })).toBeVisible();
+});
+
+test('initial reduced motion renders still frames; hidden tab and unmount stop drawing', async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as Window & { drawCount: number };
+    target.drawCount = 0;
+    for (const name of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced'] as const) {
+      const original = WebGL2RenderingContext.prototype[name];
+      Object.defineProperty(WebGL2RenderingContext.prototype, name, { value: function (...args: number[]) {
+        target.drawCount++; return Reflect.apply(original, this, args);
+      } });
+    }
+  });
+  const draws = () => page.evaluate(() => (window as Window & { drawCount: number }).drawCount);
+  await fixture(page, false); await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto('/');
+  await expect(stage(page).locator('canvas')).toBeVisible();
+  await expect.poll(draws).toBeGreaterThan(0);
+  await page.waitForTimeout(300);
+  const still = await draws();
+  await page.waitForTimeout(600);
+  expect(await draws(), 'Reduced motion draws only on state change').toBe(still);
+  // A state change (citation) renders exactly one more still frame batch, then stops again.
+  await page.getByRole('button', { name: 'Citation 2' }).click();
+  await expect.poll(draws).toBeGreaterThan(still);
+  const changed = await draws();
+  await page.waitForTimeout(400);
+  expect(await draws()).toBe(changed);
+  await page.getByRole('banner').getByRole('link', { name: 'For universities' }).click();
+  await expect(page.locator('canvas')).toHaveCount(0);
+  const disposed = await draws();
+  await page.waitForTimeout(300);
+  expect(await draws()).toBe(disposed);
 });

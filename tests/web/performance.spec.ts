@@ -1,12 +1,12 @@
 import { test, expect } from '../../apps/web/node_modules/@playwright/test/index.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-// intent: measure actual driver calls, including instancing, without product telemetry; status: done.
+// intent: measure actual driver calls of the Clay hero, including instancing, without product telemetry; status: done.
 test('actual WebGL draw calls per rendered frame', async ({ page, browser }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => {
-    const target = window as Window & { archiveDraws: Record<string, number> };
-    target.archiveDraws = {};
+    const target = window as Window & { heroDraws: Record<string, number> };
+    target.heroDraws = {};
     let frame = 0;
     const raf = window.requestAnimationFrame;
     window.requestAnimationFrame = (callback) => raf.call(window, (time) => {
@@ -16,7 +16,7 @@ test('actual WebGL draw calls per rendered frame', async ({ page, browser }) => 
     for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced'] as const) {
       const original = WebGL2RenderingContext.prototype[name];
       Object.defineProperty(WebGL2RenderingContext.prototype, name, { value: function (...args: number[]) {
-        target.archiveDraws[frame] = (target.archiveDraws[frame] ?? 0) + 1;
+        target.heroDraws[frame] = (target.heroDraws[frame] ?? 0) + 1;
         return Reflect.apply(original, this, args);
       } });
     }
@@ -36,16 +36,16 @@ test('actual WebGL draw calls per rendered frame', async ({ page, browser }) => 
   await page.goto('/');
   await expect(page.locator('canvas')).toBeVisible();
   await page.waitForTimeout(2500);
-  await page.evaluate(() => { (window as Window & { archiveDraws: Record<string, number> }).archiveDraws = {}; });
+  await page.evaluate(() => { (window as Window & { heroDraws: Record<string, number> }).heroDraws = {}; });
   await page.waitForTimeout(1200);
-  const counts = await page.evaluate(() => Object.values((window as Window & { archiveDraws: Record<string, number> }).archiveDraws));
+  const counts = await page.evaluate(() => Object.values((window as Window & { heroDraws: Record<string, number> }).heroDraws));
   expect(counts.length).toBeGreaterThan(2);
   const baseline = process.env.MOTION_BASELINE === '1';
   if (!baseline) expect(Math.max(...counts)).toBeLessThanOrEqual(160);
   const artifacts = new URL('./artifacts/', import.meta.url).pathname;
   await mkdir(artifacts, { recursive: true });
   const label = baseline ? 'before' : 'after';
-  await page.getByRole('button', { name: 'Pause animation' }).click();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.screenshot({ path: `${artifacts}draws-${label}.png` });
   const evidence = { viewport: { width: 1440, height: 900 }, fixture: 'synthetic demo, disabled providers',
     browser: browser.version(), renderer: 'headless Chromium / ANGLE SwiftShader (software)',

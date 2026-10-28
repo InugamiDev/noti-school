@@ -1,4 +1,5 @@
 import {
+  batch,
   createComputed,
   createEffect,
   createSignal,
@@ -8,24 +9,13 @@ import {
   untrack,
 } from 'solid-js';
 import { createRemoteResource as createResource, accessScope, setAccessScope } from './resource';
-import {
-  ArrowUp,
-  ArrowUpRight,
-  BookOpen,
-  Pause,
-  Play,
-  School,
-  X,
-  MessageSquare,
-} from 'lucide-solid';
+import { ArrowUp, ArrowUpRight, BookOpen, X, MessageSquare } from 'lucide-solid';
 import {
   AskRequest,
   QUESTION_MAX_CHARACTERS,
   QUESTION_MAX_BYTES,
   type AnswerOutput,
-  type Schemas,
 } from '@noti/contracts';
-import type { z } from 'zod';
 import {
   get,
   post,
@@ -42,16 +32,18 @@ import {
   retainOperations,
   requestScope,
 } from './api';
-import Archive from './Archive';
 import Sources from './Sources';
 import Auth from './Auth';
 import Admin from './Admin';
-import { isSiteRoute, sitePages, SiteHeader, SiteFooter } from './site/SiteShell';
+import { PilotNotice, SiteHeader, SiteFooter } from './site/SiteShell';
+import { isSiteRoute, parseHash, sitePages, type LandingSection } from './site/routes';
+import { siteCommands } from './site/commands';
 import MarketingPages from './site/MarketingPages';
-import { HomeSections } from './site/Sections';
-import './site/site.css';
+import { Landing } from './landing/Landing';
+import { coverageText, heroLabel, membershipInstitution, schoolOptions } from './landing/landing';
+import { CommandMenu, looksVietnamese, Toaster, useCommandMenu } from './ui';
+import './site/site.scss';
 import Pagination, { pageSuffix } from './Pagination';
-type Institution = z.infer<typeof Schemas.Institution>;
 const institutionPath = '/api/v1/institutions/{institution_id}';
 export const scoped = (institution: string, suffix: string, params: Record<string, string> = {}) =>
   endpoint(`${institutionPath}${suffix}`, { institution_id: institution, ...params });
@@ -66,15 +58,19 @@ export default function App() {
   };
   // Scrub credentials before creating resources, so same-origin requests cannot carry them in Referer.
   const [authCallback, setAuthCallback] = createSignal(readCallback());
-  const [route, setRoute] = createSignal(location.hash.slice(1) || '/');
+  const [route, setRoute] = createSignal(parseHash(location.hash).route);
+  // A landing anchor such as #how renders the landing and scrolls to that section.
+  const [section, setSection] = createSignal<LandingSection | ''>(parseHash(location.hash).section);
   const hash = () => {
     setAuthCallback(readCallback());
-    setRoute(location.hash.slice(1) || '/');
+    const next = parseHash(location.hash);
+    batch(() => {
+      setRoute(next.route);
+      setSection(next.section);
+    });
     void refreshCapabilities();
     void refreshMe();
     cancel(false);
-    clearTimeout(transitionTimer);
-    setTransitioning(false);
     if (route() === '/') {
       setAnswer(undefined);
       setConversation(undefined);
@@ -107,6 +103,12 @@ export default function App() {
     }
   });
   const selected = () => institutions()?.items.find((i) => i.id === institution());
+  // Signed-in accounts ask about their own school; signed-out visitors see the listed pilot institutions.
+  createEffect(() => {
+    const own = membershipInstitution(institution(), institutions()?.items ?? [], me()?.memberships);
+    if (own && own !== institution()) setInstitution(own);
+  });
+  const schools = () => schoolOptions(institutions()?.items ?? [], me()?.memberships);
   const demo = () => capabilities()?.mode === 'mock' || selected()?.coverage === 'synthetic_demo';
   createEffect(() => {
     if (institution()) writePreference('institution', institution());
@@ -116,9 +118,7 @@ export default function App() {
     setDraft(text);
     saveDraft(text, draftOwner, conversation());
   };
-  const [paused, setPaused] = createSignal(readPreference('motion-paused') === 'true'),
-    [zoom, setZoom] = createSignal(0),
-    [transitioning, setTransitioning] = createSignal(false);
+  const [paused, setPaused] = createSignal(readPreference('motion-paused') === 'true');
   const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
   const [reduced, setReduced] = createSignal(motionQuery.matches);
   const motionChange = () => setReduced(motionQuery.matches);
@@ -130,11 +130,41 @@ export default function App() {
   onCleanup(() => document.removeEventListener('visibilitychange', visibility));
   const siteMotion = () => !paused() && !reduced() && visible();
   createEffect(() => writePreference('motion-paused', String(paused())));
-  createEffect(() => {
-    if (paused() || reduced()) setTransitioning(false);
-  });
+  // Portalled layers (sheet, menus, toasts) live outside the shell, so the pause preference is mirrored on <html>.
+  createEffect(() => (document.documentElement.dataset.motion = siteMotion() ? 'on' : 'off'));
+  let composer: HTMLTextAreaElement | undefined;
+  let picker: HTMLElement | undefined;
+  // Runs once the landing has rendered, instead of the default heading focus (command menu and "/" actions).
+  let afterHome: (() => void) | undefined;
+  const revealComposer = () => {
+    if (!composer?.isConnected) return;
+    composer.focus({ preventScroll: true });
+    composer.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' });
+  };
+  const revealSection = (id: string) => {
+    const target = document.getElementById(id);
+    if (!target) return;
+    target.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' });
+    target.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
+  };
+  const onHome = (action: () => void) => {
+    if (route() === '/') action();
+    else {
+      afterHome = action;
+      location.hash = '/';
+    }
+  };
+  const focusAsk = () => (route() === '/answer' ? revealComposer() : onHome(revealComposer));
+  const navigate = (href: string) => {
+    if (location.hash === href || (href === '#/' && route() === '/' && !section())) {
+      const target = parseHash(href);
+      if (target.section) revealSection(target.section);
+      else onHome(revealComposer);
+    } else location.hash = href;
+  };
   createEffect(() => {
     const current = route();
+    const target = section();
     const marketing = isSiteRoute(current) ? sitePages[current] : undefined;
     const appTitle = current.startsWith('/sources')
       ? 'Sources'
@@ -147,7 +177,7 @@ export default function App() {
             : current === '/answer'
               ? 'Your answer'
               : 'Page not found';
-    document.title = `${marketing?.[0] || appTitle} — noti.school`;
+    document.title = `${marketing?.[0] || appTitle} · noti.school`;
     document
       .querySelector('meta[name="description"]')
       ?.setAttribute(
@@ -156,13 +186,16 @@ export default function App() {
       );
     queueMicrotask(() => {
       if (route() !== current) return;
+      const pending = afterHome;
+      afterHome = undefined;
+      if (target) return revealSection(target);
       const heading = document.querySelector<HTMLElement>('main h1, main h2');
       heading?.setAttribute('tabindex', '-1');
       heading?.focus({ preventScroll: true });
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      if (pending && current === '/') pending();
     });
   });
-  let transitionTimer: ReturnType<typeof setTimeout> | undefined;
   const [busy, setBusy] = createSignal(false),
     [error, setError] = createSignal(''),
     [answer, setAnswer] = createSignal<AnswerOutput>();
@@ -257,7 +290,6 @@ export default function App() {
     draftOwner = `anonymous:${institution()}`;
     setAccessScope(JSON.stringify([draftOwner, institution()]));
   }
-  let composer!: HTMLTextAreaElement;
   function cancel(announce = true) {
     if (controller) {
       controller.abort();
@@ -269,12 +301,9 @@ export default function App() {
         );
     }
   }
-  onCleanup(() => {
-    cancel(false);
-    clearTimeout(transitionTimer);
-  });
-  async function ask(event: SubmitEvent) {
-    event.preventDefault();
+  onCleanup(() => cancel(false));
+  async function ask(event?: SubmitEvent) {
+    event?.preventDefault();
     if (busy() || accessScope() === 'initial') return;
     setError('');
     setCitation('');
@@ -298,7 +327,7 @@ export default function App() {
       /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(draft())
     ) {
       setError(
-        `Enter 1–${QUESTION_MAX_CHARACTERS.toLocaleString('en')} Unicode characters, at most ${QUESTION_MAX_BYTES.toLocaleString('en')} UTF-8 bytes. Only tab and line breaks are allowed as control characters.`,
+        `Enter 1 to ${QUESTION_MAX_CHARACTERS.toLocaleString('en')} Unicode characters, at most ${QUESTION_MAX_BYTES.toLocaleString('en')} UTF-8 bytes. Only tab and line breaks are allowed as control characters.`,
       );
       return;
     }
@@ -319,17 +348,14 @@ export default function App() {
       return;
     }
     if (active.signal.aborted || owner !== accessScope()) return;
-    // The request starts before any visual transition. No automatic retries of paid work.
+    // The request starts immediately. No automatic retries of paid work.
     const pending = post('/api/v1/answers', 'Answer', parsed.data, {
       signal: active.signal,
       headers: { 'Idempotency-Key': key },
     });
-    setTransitioning(!matchMedia('(prefers-reduced-motion: reduce)').matches && !paused());
-    setZoom((v) => v + 1);
     setRoute('/answer');
+    setSection('');
     historyReplace('/answer');
-    clearTimeout(transitionTimer);
-    transitionTimer = setTimeout(() => setTransitioning(false), 600);
     queueMicrotask(() => document.getElementById('answer-heading')?.focus());
     try {
       const result = readAnswer(await pending);
@@ -422,6 +448,34 @@ export default function App() {
       </div>
     </form>
   );
+  const commandMenu = useCommandMenu();
+  // "/" focuses the question box when the visitor is not typing somewhere else.
+  const slash = (event: KeyboardEvent) => {
+    if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && (active.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)))
+      return;
+    if (commandMenu.open() || (route() !== '/' && route() !== '/answer')) return;
+    event.preventDefault();
+    focusAsk();
+  };
+  window.addEventListener('keydown', slash);
+  onCleanup(() => window.removeEventListener('keydown', slash));
+  const fillQuestion = (text: string) => {
+    updateDraft(text);
+    if (looksVietnamese(text)) setLanguage('vi');
+    focusAsk();
+  };
+  const commands = () =>
+    siteCommands({
+      language: language(),
+      signedIn: !!me(),
+      focusAsk,
+      fillQuestion,
+      navigate,
+      toggleLanguage: () => setLanguage((value) => (value === 'en' ? 'vi' : 'en')),
+      openSchoolPicker: () => onHome(() => picker?.querySelector('button')?.click()),
+    });
   return (
     <div
       class="app-shell"
@@ -430,14 +484,13 @@ export default function App() {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
           return;
         const link = event.target instanceof Element ? event.target.closest('a') : null;
-        if (link?.getAttribute('href') !== `#${route()}`) return;
-        // A same-route hash link emits no route change; still return to the primary task.
+        const href = link?.getAttribute('href');
+        // A same-hash link emits no route change; still return to the primary task or the section.
+        if (!href || (href !== `#${route()}` && href !== location.hash)) return;
         event.preventDefault();
-        const target =
-          route() === '/'
-            ? document.getElementById('question')
-            : document.querySelector<HTMLElement>('main h1, main h2');
-        target?.focus({ preventScroll: true });
+        if (section() || href !== `#${route()}`) return navigate(href);
+        if (route() === '/') return revealComposer();
+        document.querySelector<HTMLElement>('main h1, main h2')?.focus({ preventScroll: true });
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       }}
     >
@@ -451,109 +504,37 @@ export default function App() {
       >
         Skip to content
       </a>
-      <SiteHeader route={route()} signedIn={!!me()} />
+      <PilotNotice />
+      <SiteHeader route={route()} signedIn={!!me()} onSearch={() => commandMenu.setOpen(true)} />
       <main id="main" tabIndex={-1}>
-        <Show when={route() === '/' || transitioning()}>
-          <div class="site-home" data-site-page="home">
-            <section
-              class="hero"
-              classList={{ leaving: route() !== '/' }}
-              aria-hidden={route() !== '/'}
-              inert={route() !== '/'}
-            >
-              <Archive paused={paused()} zoom={zoom()} />
-              <div class="hero-content">
-                <div class="institution">
-                  <School size={17} />
-                  <label class="sr-only" for="institution">
-                    Institution
-                  </label>
-                  <select
-                    id="institution"
-                    value={institution()}
-                    onChange={(e) => {
-                      cancel(false);
-                      setInstitution(e.currentTarget.value);
-                      setAnswer(undefined);
-                    }}
-                  >
-                    <Show
-                      when={institutions()?.items.length}
-                      fallback={<option value="">HCMIU · coverage unavailable</option>}
-                    >
-                      <For each={institutions()?.items}>
-                        {(item: Institution) => (
-                          <option value={item.id}>
-                            {item.name}
-                            {item.coverage === 'synthetic_demo' ? ' · Demo' : ''}
-                          </option>
-                        )}
-                      </For>
-                    </Show>
-                  </select>
-                </div>
-                <h1 tabIndex={-1}>noti.school</h1>
-                <p class="promise">
-                  Your university questions,
-                  <br class="mobile-break" /> answered with sources.
-                </p>
-                <Show when={route() === '/'}>{form()}</Show>
-                <div class="suggestions">
-                  <span>Start with a question</span>
-                  <For
-                    each={[
-                      'Where can I find the student handbook?',
-                      'How do I find the right course form?',
-                      'Tôi có thể tìm quy chế học vụ ở đâu?',
-                    ]}
-                  >
-                    {(question) => (
-                      <button
-                        onClick={() => {
-                          updateDraft(draft() ? `${draft()}\n${question}` : question);
-                          composer.focus();
-                        }}
-                      >
-                        {question}
-                        <ArrowUpRight size={15} />
-                      </button>
-                    )}
-                  </For>
-                </div>
-                <p class="coverage">
-                  {selected()?.coverage === 'approved_sources'
-                    ? 'Approved sources available'
-                    : selected()?.coverage === 'synthetic_demo'
-                      ? 'Demo collection · synthetic examples only'
-                      : 'Pilot collection · source coverage not yet confirmed'}
-                </p>
-                <Show when={error()}>
-                  <p role="alert" class="error">
-                    {error()}
-                  </p>
-                </Show>
-              </div>
-              <button
-                class="motion-control"
-                title={paused() ? 'Resume animation' : 'Pause animation'}
-                aria-label={paused() ? 'Resume animation' : 'Pause animation'}
-                aria-pressed={paused()}
-                disabled={reduced()}
-                aria-describedby={reduced() ? 'system-motion' : undefined}
-                onClick={() => setPaused((v) => !v)}
-              >
-                {paused() ? <Play size={16} /> : <Pause size={16} />}
-              </button>
-              <Show when={reduced()}>
-                <span id="system-motion" class="sr-only">
-                  Animation is disabled by your system’s reduced-motion preference.
-                </span>
-              </Show>
-            </section>
-            <Show when={route() === '/'}>
-              <HomeSections motion={siteMotion()} institution={institution()} />
-            </Show>
-          </div>
+        <Show when={route() === '/'}>
+          <Landing
+            draft={draft()}
+            onDraft={updateDraft}
+            onSubmit={() => void ask()}
+            pending={busy()}
+            language={language()}
+            onLanguage={setLanguage}
+            schools={schools()}
+            institution={institution()}
+            onSchool={(id) => {
+              cancel(false);
+              setInstitution(id);
+              setAnswer(undefined);
+            }}
+            schoolFallback="HCMIU pilot"
+            schoolLabel={heroLabel(selected()?.name, selected()?.slug)}
+            coverage={
+              institutions.loading && !institutions()
+                ? 'Checking which schools are available…'
+                : coverageText(selected()?.coverage)
+            }
+            error={error()}
+            textareaRef={(element) => (composer = element)}
+            pickerRef={(element) => (picker = element)}
+            motion={siteMotion()}
+            onFocusAsk={focusAsk}
+          />
         </Show>
         <Show
           when={
@@ -848,6 +829,13 @@ export default function App() {
         </Show>
       </main>
       <SiteFooter paused={paused()} reduced={reduced()} toggle={() => setPaused((v) => !v)} />
+      <CommandMenu
+        open={commandMenu.open()}
+        onOpenChange={commandMenu.setOpen}
+        items={commands()}
+        onFallback={fillQuestion}
+      />
+      <Toaster />
     </div>
   );
 }

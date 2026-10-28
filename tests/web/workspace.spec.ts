@@ -95,7 +95,7 @@ test('transition leaves one composer and disabled identity remains explicit',asy
  await setup(page);await page.emulateMedia({reducedMotion:'no-preference'});
  await page.route('**/api/v1/answers',async route=>{await new Promise(r=>setTimeout(r,800));await route.fulfill({json:answer});});
  await page.goto('/');await page.getByLabel('Your question').fill('Synthetic transition');await page.getByRole('button',{name:'Ask',exact:true}).click();
- await expect(page.locator('#question')).toHaveCount(1);await expect(page.locator('.hero')).toHaveAttribute('inert','');
+ await expect(page.locator('#question')).toHaveCount(1);await expect(page.locator('[data-site-page="home"]')).toHaveCount(0);
  await page.route('**/capabilities',route=>{const cap={state:'disabled',reason:'not_configured'};return route.fulfill({json:{mode:'disabled',answers:cap,indexing:cap,discovery:cap,google:cap,email:cap,identity:cap}});});
  await page.goto('/#/auth');await expect(page.getByRole('button',{name:'Continue with Google'})).toBeDisabled();await expect(page.getByRole('button',{name:'Request account deletion'})).toBeDisabled();
 });

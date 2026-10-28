@@ -8,7 +8,7 @@ import base, {
 
 const { expect } = base;
 
-// intent: isolate website acceptance from live services; status: authored; next: combined candidate run.
+// intent: isolate website acceptance from live services; status: updated for the Clay site; next: combined candidate run.
 export const institutionId = "11111111-1111-4111-8111-111111111111";
 export const institutionName = "Example institution · synthetic QA fixture";
 export const marketingRoutes = [
@@ -27,8 +27,10 @@ export const marketingRoutes = [
 ] as const;
 export type MarketingRoute = (typeof marketingRoutes)[number];
 export const hrefFor = (name: MarketingRoute) => (name === "home" ? "#/" : `#/${name}`);
+// Landing anchors (`#how`) are routes too: they open the landing and scroll to the section.
+export const landingSections = ["scope", "how", "roles", "reads", "join", "faq"] as const;
 export const artifactRoot = fileURLToPath(
-  new URL("../../.verification/marketing/", import.meta.url),
+  new URL("./artifacts/marketing/", import.meta.url),
 );
 
 // Independent expected text, read from the synthetic design example; never import the component as its own oracle.
@@ -47,7 +49,7 @@ export const exampleEvidence = [
     question: "Which version of the sample form should I use?",
     answer:
       "Use version B of the Practice request form in this fictional collection. Version A is archived and is kept only for reference.",
-    title: "Practice request form — version note",
+    title: "Practice request form, version note",
     locator: "Section 2 · Version history",
     version: "Example version B",
     passage:
@@ -191,7 +193,8 @@ export async function assertGeometry(page: Page) {
         !rect.height ||
         style.visibility === "hidden" ||
         style.display === "none" ||
-        element.closest("[hidden],[inert]")
+        // aria-hidden covers framework-internal form proxies (e.g. Kobalte's visually hidden native select).
+        element.closest("[hidden],[inert],[aria-hidden='true']")
       )
         continue;
       if (rect.left < -1 || rect.right > innerWidth + 1) {
@@ -232,7 +235,7 @@ export async function screenshot(page: Page, testInfo: TestInfo, name: string) {
 }
 
 export async function tabTo(page: Page, target: Locator, backwards = false) {
-  for (let index = 0; index < 45; index++) {
+  for (let index = 0; index < 60; index++) {
     await page.keyboard.press(backwards ? "Shift+Tab" : "Tab");
     if (await target.evaluate((element) => element === document.activeElement)) return;
   }
