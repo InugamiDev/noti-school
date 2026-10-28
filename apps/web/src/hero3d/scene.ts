@@ -99,7 +99,7 @@ export function mountScene(host: HTMLElement, initial: SceneOptions): SceneHandl
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   const canvas = renderer.domElement;
   canvas.setAttribute('aria-hidden', 'true');
   host.prepend(canvas);
@@ -287,7 +287,7 @@ export function mountScene(host: HTMLElement, initial: SceneOptions): SceneHandl
   let disposed = false;
   let raf = 0;
   const pointer = { x: 0, y: 0 };
-  const clock = new THREE.Clock();
+  const timer = new THREE.Timer();
 
   const render = () => {
     if (!lost && !disposed) renderer.render(scene, camera);
@@ -323,7 +323,8 @@ export function mountScene(host: HTMLElement, initial: SceneOptions): SceneHandl
     }
   };
   const frame = () => {
-    const seconds = clock.getElapsedTime();
+    timer.update();
+    const seconds = timer.getElapsed();
     const rotation = worldRotationTarget(pointer, seconds);
     world.rotation.y = approach(world.rotation.y, rotation.y, 0.06);
     world.rotation.x = approach(world.rotation.x, rotation.x, 0.06);
@@ -415,6 +416,7 @@ export function mountScene(host: HTMLElement, initial: SceneOptions): SceneHandl
       if (disposed) return;
       disposed = true;
       pause();
+      timer.dispose();
       resizeObserver.disconnect();
       intersection.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
