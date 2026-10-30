@@ -1,3 +1,5 @@
+@use '../styles/mixins' as *;
+
 .btn {
   --h: 44px;
   display: inline-flex;
@@ -69,10 +71,13 @@
   }
 }
 
+// Small buttons keep their 36px box; the hit area is still 44x44px.
 .sm {
   --h: 36px;
+  position: relative;
   padding: 0 14px;
   font-size: 0.875rem;
+  @include hit-area('before');
 }
 
 .icon {

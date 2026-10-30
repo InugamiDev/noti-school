@@ -3,7 +3,7 @@
 // next: put navigation links and at most one primary Button in children.
 // confidence: high
 import { Dialog } from '@kobalte/core/dialog';
-import { X } from 'lucide-solid';
+import X from 'lucide-solid/icons/x';
 import { createComputed, on, type JSX } from 'solid-js';
 import { cx } from './lib/cx';
 import styles from './Sheet.module.scss';

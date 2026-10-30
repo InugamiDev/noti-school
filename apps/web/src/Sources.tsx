@@ -6,7 +6,14 @@
 // confidence: high
 import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import { createRemoteResource as createResource } from './resource';
-import { BookOpen, Download, ExternalLink, FileText, Library, SearchX, TriangleAlert } from 'lucide-solid';
+import BookOpen from 'lucide-solid/icons/book-open';
+import ChevronRight from 'lucide-solid/icons/chevron-right';
+import Download from 'lucide-solid/icons/download';
+import ExternalLink from 'lucide-solid/icons/external-link';
+import FileText from 'lucide-solid/icons/file-text';
+import Library from 'lucide-solid/icons/library';
+import SearchX from 'lucide-solid/icons/search-x';
+import TriangleAlert from 'lucide-solid/icons/triangle-alert';
 import { get, errorText, RequestError, safeLink } from './api';
 import { scoped } from './App';
 import Pagination, { pageSuffix } from './Pagination';
@@ -326,7 +333,10 @@ export default function Sources(props: {
               </Show>
               <Show when={chunk()}>
                 <details class={page.details}>
-                  <summary>Read source passage</summary>
+                  <summary>
+                    <ChevronRight class={cx(page.chevron)} size={18} aria-hidden="true" />
+                    Read source passage
+                  </summary>
                   <p class={page.passage}>{chunk()!.text}</p>
                 </details>
               </Show>

@@ -3,7 +3,8 @@
 // next: keep option values stable strings; labels are display-only.
 // confidence: medium (popup placement checked by typecheck and build only, not in a browser)
 import { Select as KSelect } from '@kobalte/core/select';
-import { Check, ChevronsUpDown } from 'lucide-solid';
+import Check from 'lucide-solid/icons/check';
+import ChevronsUpDown from 'lucide-solid/icons/chevrons-up-down';
 import { Show, type JSX } from 'solid-js';
 import { cx } from './lib/cx';
 import styles from './Select.module.scss';

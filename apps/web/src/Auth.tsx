@@ -7,7 +7,9 @@
 import { createEffect, createSignal, Show, onCleanup } from 'solid-js';
 import { z } from 'zod';
 import type { Schemas } from '@noti/contracts';
-import { CircleAlert, LogOut, Trash2 } from 'lucide-solid';
+import CircleAlert from 'lucide-solid/icons/circle-alert';
+import LogOut from 'lucide-solid/icons/log-out';
+import Trash2 from 'lucide-solid/icons/trash';
 import { request, post, errorText, takeAuthCallback } from './api';
 import { Button, cx, Tabs, TextField } from './ui';
 import {
@@ -30,6 +32,8 @@ export default function Auth(props: {
   callback?: ReturnType<typeof takeAuthCallback> | undefined;
   capabilities: z.infer<typeof Schemas.Capabilities> | undefined;
   authenticated: boolean;
+  /** The Me request failed for a reason other than "not signed in": who this is is unknown, not signed out. */
+  identityUnavailable?: boolean;
   refresh: () => void;
   signedOut: () => void;
 }) {
@@ -263,6 +267,12 @@ export default function Auth(props: {
         <p class={page.notice}>
           <CircleAlert size={18} aria-hidden="true" />
           Sign in to the account before confirming deletion. Keep this tab open.
+        </p>
+      </Show>
+      <Show when={props.identityUnavailable}>
+        <p class={cx(page.notice, page.error)}>
+          <CircleAlert size={18} aria-hidden="true" />
+          Your account could not be checked right now.
         </p>
       </Show>
       <Show when={!identityReady()}>

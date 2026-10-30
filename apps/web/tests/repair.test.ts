@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AskRequest, ANSWER_WAIT_MS, QUESTION_MAX_CHARACTERS, QUESTION_MAX_BYTES } from '@noti/contracts';
-import { request, operationKey, clearOperations, invalidateRequests } from '../src/api.ts';
+import { request, operationKey, clearOperations, invalidateRequests, loadContracts } from '../src/api.ts';
 const id = '11111111-1111-4111-8111-111111111111';
 test('frozen Unicode and control character boundary', () => {
   const parse = (question: string) => AskRequest.safeParse({ institution_id: id, question, language: 'vi' }).success;
@@ -33,6 +33,8 @@ test('exact payload/owner operation identity survives explicit replay, never con
   assert.notEqual(await operationKey('A', { ...body, language: 'vi' }), first);
 });
 test('scope revocation aborts waits and rejects delayed response bodies', async () => {
+  // The app loads the contracts before asking, so the answer request starts synchronously; mirror that here.
+  await loadContracts();
   const fetch = globalThis.fetch;
   let finish!: (value: Response) => void;
   globalThis.fetch = () => new Promise(resolve => { finish = resolve; });

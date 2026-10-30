@@ -5,7 +5,11 @@
 // next: App still owns every request, signal and scope rule; this component only renders state and reports intent.
 // confidence: high for wiring; visual parity checked by screenshot only
 import type { AnswerOutput } from '@noti/contracts';
-import { ArrowLeft, Info, MessageSquare, School, TriangleAlert } from 'lucide-solid';
+import ArrowLeft from 'lucide-solid/icons/arrow-left';
+import Info from 'lucide-solid/icons/info';
+import MessageSquare from 'lucide-solid/icons/message-square';
+import School from 'lucide-solid/icons/school';
+import TriangleAlert from 'lucide-solid/icons/triangle-alert';
 import { For, Show, type JSX } from 'solid-js';
 import {
   AnswerCard,

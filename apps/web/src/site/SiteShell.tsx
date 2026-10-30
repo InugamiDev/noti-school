@@ -6,7 +6,11 @@
 //       An identity outage shows a neutral "Account" control, never a "Sign in" call to action.
 // confidence: high
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { Menu, Pause, Play, Search, X } from 'lucide-solid';
+import Menu from 'lucide-solid/icons/menu';
+import Pause from 'lucide-solid/icons/pause';
+import Play from 'lucide-solid/icons/play';
+import Search from 'lucide-solid/icons/search';
+import X from 'lucide-solid/icons/x';
 import type { SessionState } from '../app/session';
 import { Button, createDelayedLoading, Kbd, localStore, Sheet } from '../ui';
 
@@ -23,8 +27,9 @@ const siteLinks: readonly NavLink[] = [
   ['Help', '#/help'],
 ];
 
+// "Ask" is the workspace answer page (composer first when nothing is asked), not the marketing landing.
 const workspaceLinks: readonly NavLink[] = [
-  ['Ask', '#/'],
+  ['Ask', '#/answer'],
   ['Sources', '#/sources'],
   ['History', '#/history'],
 ];

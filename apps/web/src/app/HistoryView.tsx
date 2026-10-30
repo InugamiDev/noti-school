@@ -5,7 +5,12 @@
 //       While identity or the list is unresolved, skeleton rows stand in the real list; signed-out and empty come only after.
 // confidence: high
 import type { AnswerOutput } from '@noti/contracts';
-import { History, LogIn, MessageSquare, MessagesSquare, Trash2, TriangleAlert } from 'lucide-solid';
+import History from 'lucide-solid/icons/rotate-ccw-clock';
+import LogIn from 'lucide-solid/icons/log-in';
+import MessageSquare from 'lucide-solid/icons/message-square';
+import MessagesSquare from 'lucide-solid/icons/messages-square';
+import Trash2 from 'lucide-solid/icons/trash';
+import TriangleAlert from 'lucide-solid/icons/triangle-alert';
 import { For, Show } from 'solid-js';
 import Pagination from '../Pagination';
 import { Badge, Button, cx, EmptyState, LoadingRegion, SkeletonRow } from '../ui';

@@ -278,13 +278,30 @@
 }
 
 .details {
-  summary {
+  > summary {
     display: flex;
     align-items: center;
+    gap: 8px;
     min-height: 44px;
+    list-style: none;
     font-weight: 600;
     cursor: pointer;
   }
+
+  > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  // Same disclosure affordance as the admin graph details: a chevron that turns when open.
+  &[open] .chevron {
+    transform: rotate(90deg);
+  }
+}
+
+.chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform var(--t-fast);
 }
 
 .link {

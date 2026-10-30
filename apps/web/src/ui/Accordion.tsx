@@ -1,5 +1,5 @@
 import { Accordion as KAccordion } from '@kobalte/core/accordion';
-import { Plus } from 'lucide-solid';
+import Plus from 'lucide-solid/icons/plus';
 import { For, type JSX } from 'solid-js';
 import { cx } from './lib/cx';
 import styles from './Accordion.module.scss';

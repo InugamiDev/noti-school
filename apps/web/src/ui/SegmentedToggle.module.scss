@@ -24,11 +24,19 @@
     color var(--t-fast),
     box-shadow var(--t-fast);
 
-  // Extends the hit area to 44px without changing the visual size.
-  &::after {
-    content: '';
-    position: absolute;
-    inset: -5px -1px;
+  // Extends the hit area to 44x44px without changing the visual size. Neighbouring thumbs would overlap if both grew
+  // from the centre, so the end thumbs grow outward from the middle of the gap between them.
+  @include hit-area;
+
+  &:first-child::after {
+    left: auto;
+    right: -1px;
+    transform: translateY(-50%);
+  }
+
+  &:last-child::after {
+    left: -1px;
+    transform: translateY(-50%);
   }
 
   &[data-pressed] {

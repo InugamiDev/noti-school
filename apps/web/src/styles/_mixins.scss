@@ -48,3 +48,17 @@
     @error 'clay-elevation expects 1, 2 or 3, got #{$level}.';
   }
 }
+
+// A transparent pseudo-element centred on the control that makes its hit area at least 44x44px (DESIGN.md touch
+// targets) without changing the visual box. The control must be positioned (relative or absolute).
+@mixin hit-area($pseudo: 'after', $size: 44px) {
+  &::#{$pseudo} {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, #{$size});
+    height: max(100%, #{$size});
+    transform: translate(-50%, -50%);
+  }
+}

@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from 'solid-js';
-import { FileText } from 'lucide-solid';
+import FileText from 'lucide-solid/icons/file-text';
 import { Badge, Button } from '../ui';
 
 const examples = [

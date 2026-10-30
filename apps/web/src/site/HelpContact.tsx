@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Match, Switch } from 'solid-js';
-import { SearchX } from 'lucide-solid';
+import SearchX from 'lucide-solid/icons/search-x';
 import { Accordion, Button, EmptyState, matchesQuery, SearchInput, Select } from '../ui';
 import { faqCategories, questions, type FaqCategory } from './faq';
 

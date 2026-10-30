@@ -1,7 +1,7 @@
 import { For, Show } from 'solid-js';
 import { createRemoteResource } from './resource';
 import { get, endpoint } from './api';
-import { BookOpen } from 'lucide-solid';
+import BookOpen from 'lucide-solid/icons/book-open';
 import { Badge, LoadingRegion, SkeletonRow } from './ui';
 import { kindText, sourceBadge } from './app/workspace';
 import page from './app/Page.module.scss';

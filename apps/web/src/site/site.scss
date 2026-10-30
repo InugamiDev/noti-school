@@ -54,6 +54,12 @@ html[data-motion='off'] {
   min-height: 44px;
   padding-top: 0;
   padding-bottom: 0;
+
+  // Two lines at 1.4 (39px) fit the 44px row, so wrapping on a phone, or re-wrapping when the web font arrives, never
+  // changes its height.
+  p {
+    line-height: 1.4;
+  }
 }
 
 .site-pilot-close {
@@ -148,7 +154,7 @@ html[data-motion='off'] {
     padding: 0 12px;
     border-radius: var(--r-full);
     text-decoration: none;
-    font-weight: 500;
+    font-weight: 400;
     font-size: 0.9375rem;
     color: var(--muted);
     transition:
@@ -169,7 +175,7 @@ html[data-motion='off'] {
   width: 230px;
   justify-content: flex-start;
   color: var(--muted);
-  font-weight: 500;
+  font-weight: 400;
 
   kbd {
     margin-left: auto;
@@ -322,10 +328,15 @@ html[data-motion='off'] {
     color: var(--ink);
   }
 
+  // 44px rows on phones (touch targets), denser from 720px.
   a {
     display: flex;
     align-items: center;
-    min-height: 36px;
+    min-height: 44px;
+
+    @include respond-to('sm') {
+      min-height: 36px;
+    }
   }
 }
 
@@ -414,7 +425,7 @@ html[data-motion='off'] {
     border-radius: var(--r-full);
     background: var(--surface);
     color: var(--ink);
-    font: 500 0.9375rem/1.3 var(--font-body);
+    font: 400 0.9375rem/1.3 var(--font-body);
     text-align: left;
     cursor: pointer;
     transition:
@@ -434,7 +445,7 @@ html[data-motion='off'] {
     }
 
     span {
-      font: 500 0.75rem/1 var(--font-mono);
+      font: 400 0.75rem/1 var(--font-mono);
       color: var(--faint);
     }
   }

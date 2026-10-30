@@ -2,7 +2,8 @@
 // status: done
 // next: wrap each supporting span in <Passage id> so the active citation highlights it; never mark decorative text.
 // confidence: high
-import { FileText, Link } from 'lucide-solid';
+import FileText from 'lucide-solid/icons/file-text';
+import Link from 'lucide-solid/icons/link';
 import { createContext, useContext, type Accessor, type JSX } from 'solid-js';
 import { Button } from './Button';
 import { copyText } from './lib/clipboard';

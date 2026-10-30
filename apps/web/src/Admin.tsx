@@ -6,7 +6,11 @@
 //       Until identity and each first load settle, the cards render as shells with skeletons, never the forbidden notice.
 // confidence: high
 import { createMemo, createSignal, For, Show, onCleanup, type Resource } from 'solid-js';
-import { ChevronRight, CircleAlert, Download, RefreshCw, ShieldAlert } from 'lucide-solid';
+import ChevronRight from 'lucide-solid/icons/chevron-right';
+import CircleAlert from 'lucide-solid/icons/circle-alert';
+import Download from 'lucide-solid/icons/download';
+import RefreshCw from 'lucide-solid/icons/refresh-cw';
+import ShieldAlert from 'lucide-solid/icons/shield-alert';
 import { createRemoteResource as createResource } from './resource';
 import { SourceCreate, VersionCreate, VersionAction, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction } from '@noti/contracts';
 import { get, post, request, errorText, readAnswer, safeLink } from './api';
@@ -104,7 +108,7 @@ export default function Admin(props: { institution: string; allowed: boolean; id
     () => props.allowed && reportId() ? { institution: props.institution, report: reportId() } : false,
     async key => {
       const value = await get(scoped(key.institution, '/feedback/{feedback_id}/context', { feedback_id: key.report }), 'FeedbackContext');
-      const answer = readAnswer(value.answer);
+      const answer = await readAnswer(value.answer);
       if (value.feedback.id !== key.report || value.feedback.institution_id !== key.institution || answer.institution_id !== key.institution || value.feedback.answer_id !== answer.id) throw new Error('Scope mismatch');
       return { ...value, answer };
     },

@@ -4,7 +4,7 @@
 // next: callers own persistence (draft/language via lib/storage) and the actual ask request; this only emits onSubmit.
 // confidence: high for the keyboard contract (unit tested in lib/prompt.ts); medium for the JS auto-grow fallback (browser-only)
 import { TextField as KTextField } from '@kobalte/core/text-field';
-import { ArrowUp } from 'lucide-solid';
+import ArrowUp from 'lucide-solid/icons/arrow-up';
 import { createEffect, on, Show, type JSX } from 'solid-js';
 import { cx } from './lib/cx';
 import { canSubmitPrompt, isPlainEnter, looksVietnamese, promptKeyAction, type AnswerLanguage } from './lib/prompt';

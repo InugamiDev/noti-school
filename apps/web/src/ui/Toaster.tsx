@@ -1,32 +1,43 @@
-// intent: one toast surface for the app (solid-sonner), Clay-styled, bottom centre, 2.6s, announced through a polite live region.
+// intent: app-wide toasts without solid-sonner in the initial bundle. The host loads when the browser is idle or with
+//         the first toast; sonner replays queued toasts to a late subscriber, so nothing shown early is lost.
 // status: done
 // next: mount <Toaster /> once near the app root; call toast() from anywhere.
 // confidence: high
-import { CircleCheck, Info, TriangleAlert } from 'lucide-solid';
-import { Toaster as SonnerToaster, toast as sonnerToast } from 'solid-sonner';
-import styles from './Toaster.module.scss';
+import { createSignal, lazy, onCleanup, onMount, Show } from 'solid-js';
+import { whenIdle } from './lib/idle';
 
 export type ToastTone = 'success' | 'info' | 'error';
 
-const TOAST_MS = 2600;
+let host: Promise<typeof import('./ToasterHost')> | undefined;
+const loadHost = () =>
+  (host ??= import('./ToasterHost').catch((error: unknown) => {
+    host = undefined; // retry with the next toast
+    throw error;
+  }));
+// A failed host renders nothing rather than throwing into the page's error boundary.
+const Host = lazy(() =>
+  loadHost().then(
+    module => ({ default: module.ToasterHost }),
+    () => ({ default: () => null }),
+  ),
+);
+const [wanted, setWanted] = createSignal(false);
 
 /** Toast host; render once. Sonner's container is an aria-live="polite" region. */
 export function Toaster() {
+  onMount(() => onCleanup(whenIdle(() => setWanted(true))));
   return (
-    <SonnerToaster
-      position="bottom-center"
-      duration={TOAST_MS}
-      visibleToasts={3}
-      offset={20}
-      containerAriaLabel="Notifications"
-      toastOptions={{ unstyled: true, class: styles.toast ?? '' }}
-    />
+    <Show when={wanted()}>
+      <Host />
+    </Show>
   );
 }
 
-/** Shows a short confirmation; tone picks the icon (success check, info, error triangle). Returns the toast id. */
-export function toast(message: string, tone: ToastTone = 'success'): string | number {
-  const icon =
-    tone === 'error' ? <TriangleAlert size={18} /> : tone === 'info' ? <Info size={18} /> : <CircleCheck size={18} />;
-  return sonnerToast(message, tone === 'error' ? { icon, class: styles.error ?? '' } : { icon });
+/** Shows a short confirmation; tone picks the icon (success check, info, error triangle). */
+export function toast(message: string, tone: ToastTone = 'success'): void {
+  setWanted(true);
+  loadHost().then(
+    module => module.toast(message, tone),
+    () => undefined,
+  );
 }

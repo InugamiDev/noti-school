@@ -4,7 +4,14 @@
 // status: done
 // next: the previews are illustrations of real UI states, never real account data; copy stays university-neutral.
 // confidence: high
-import { BookOpen, FileQuestion, FileText, Flag, Library, Lock, MessageSquare, RotateCcw } from 'lucide-solid';
+import BookOpen from 'lucide-solid/icons/book-open';
+import FileQuestion from 'lucide-solid/icons/file-question-mark';
+import FileText from 'lucide-solid/icons/file-text';
+import Flag from 'lucide-solid/icons/flag';
+import Library from 'lucide-solid/icons/library';
+import Lock from 'lucide-solid/icons/lock';
+import MessageSquare from 'lucide-solid/icons/message-square';
+import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import { For } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import type { LucideIcon } from 'lucide-solid';

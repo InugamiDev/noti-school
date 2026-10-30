@@ -2,22 +2,20 @@
 // status: done
 // next: App supplies the actions; add entries here rather than in the shell.
 // confidence: high
-import {
-  BookOpen,
-  CircleHelp,
-  CornerDownRight,
-  FileText,
-  History,
-  Languages,
-  Library,
-  ListChecks,
-  Lock,
-  MessageSquare,
-  School,
-  Send,
-  UserRound,
-  Users,
-} from 'lucide-solid';
+import BookOpen from 'lucide-solid/icons/book-open';
+import CircleHelp from 'lucide-solid/icons/circle-question-mark';
+import CornerDownRight from 'lucide-solid/icons/corner-down-right';
+import FileText from 'lucide-solid/icons/file-text';
+import History from 'lucide-solid/icons/rotate-ccw-clock';
+import Languages from 'lucide-solid/icons/languages';
+import Library from 'lucide-solid/icons/library';
+import ListChecks from 'lucide-solid/icons/list-checks';
+import Lock from 'lucide-solid/icons/lock';
+import MessageSquare from 'lucide-solid/icons/message-square';
+import School from 'lucide-solid/icons/school';
+import Send from 'lucide-solid/icons/send';
+import UserRound from 'lucide-solid/icons/user-round';
+import Users from 'lucide-solid/icons/users';
 import type { AnswerLanguage, CommandItem } from '../ui';
 import { sampleQuestions } from '../landing/logic';
 

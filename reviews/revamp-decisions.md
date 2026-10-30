@@ -22,7 +22,7 @@ The ORDER lists "dark mode parity" as a priority. CONTEXT.md item 1 (binding own
 | Fable | F10 | accept | Feedback categories and statuses get human labels; "Sources and versions". |
 | Fable | F11 | reject | Reordering admin cards and hiding the source form is a layout change for an admin flow covered by repair specs; low impact per effort this round. |
 | Fable | F12 | accept | A failed `/me` (5xx, network, unreadable) is now an `unavailable` session state, distinct from signed out (401/403). Header shows a neutral "Account"; answer, history and admin say the account could not be checked and offer no sign-in button. A Retry button was not added; the app already revalidates identity on focus and visibility change. |
-| Fable | F13 | adapt | Stage height is already reserved by `aspect-ratio`; the proof row (the 46px shifter) is gone and the pilot notice row keeps a fixed 44px. The size-adjust retune was not attempted. |
+| Fable | F13 | adapt | Stage height is already reserved by `aspect-ratio`; the proof row (the 46px shifter) is gone and the pilot notice row keeps a fixed 44px. The size-adjust retune was not attempted. Follow-up (2026-10-30): at 390px the row was 46px; it now holds two lines inside 44px (review R8), and the fallback metrics were extended to DejaVu Sans (FU4). |
 | Fable | F14 | accept | 44px for header controls, pilot close and chips; citation chips keep 24px visual with a 44px hit area (O20 agrees). |
 | Fable | F15 | accept | `color-scheme` meta light, `theme-color` #f4f5f2, no em dash in title and og:title. This is the dark-mode parity work. |
 | Fable | F16 | accept | Stuck nav is opaque; DESIGN.md bans glass. |
@@ -34,7 +34,7 @@ The ORDER lists "dark mode parity" as a priority. CONTEXT.md item 1 (binding own
 | Fable | F22 | adapt | Pill eyebrow removed from every marketing page header. The slogan h1s stay: twelve distinct h1s are pinned by `marketing.spec.ts` and rewriting them is copy work outside this pass. |
 | Fable | F23 | adapt | Picker name truncates at 180px with the full name in the title attribute; reordering flex children is rejected because it breaks the DOM-order tab sequence pinned by `experience.spec.ts`. |
 | Fable | F24 | accept | FAQ heading "Common questions". |
-| Fable | F25 | adapt | Picked O13 over F25: the form stays (its validation is useful and spec-covered) but the button says "Check details", is secondary, and has no send icon. The dark band goes; it was the only dark surface and drew the strongest CTA to a form that sends nothing. |
+| Fable | F25 | adapt | Picked O13 over F25: the form stays (its validation is useful and spec-covered) but the button says "Check details", is secondary, and has no send icon. The dark band goes; apart from the intentional dark pilot notice strip it was the only dark surface, and it drew the strongest CTA to a form that sends nothing. |
 | Fable | F26 | accept | Account card rows stack label over value under 520px. |
 | Fable | F27 | accept | Example account card says "Your school"; HCMIU only in pilot notice and FAQ (O14 agrees). |
 | Opus | O1 | adapt | Workspace routes get workspace nav (Ask, Sources, History, and Admin for admins) in the header from 960px and as one row under the bar below it; the footer drops its Workspace column there. The pilot notice hides on workspace routes by route (hiding it when Me resolves shifted the page and failed the CLS budget in `loading.spec.ts`). The rest of the footer stays. |
@@ -83,7 +83,7 @@ The ORDER lists "dark mode parity" as a priority. CONTEXT.md item 1 (binding own
 2. Tokens: `--field-border`, section spacing token, radius cleanup; fonts trimmed.
 3. Landing: proof row out, sample chips kept; How merged with the no-answer example (no cards); Reads as list plus photo figure; Scope as text plus one example account card; Roles keep the preview card only; Join on a light panel with "Check details"; "Common questions"; new order.
    Also found: the photo commit's credit links failed the external-link allowlist in `marketing.spec.ts` (the one baseline failure). The allowlist now names the two attribution URLs the CC BY 2.0 licence calls for.
-4. Site shell: opaque sticky nav, 44px controls, workspace nav on app routes, pilot notice hidden when signed in, footer affiliation line.
+4. Site shell: opaque sticky nav, 44px controls, workspace nav on app routes, pilot notice hidden on workspace routes (by route, see O1), footer affiliation line.
 5. Session `unavailable` state, wired to header and answer view.
 6. Answer view: question echo, cleared composer, sources before follow-up on phones, aside without inner scroll, no duplicate reader affordance, CircleStop, unavailable copy.
 7. Auth: per-state modes, wrapping tabs.

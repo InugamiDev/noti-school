@@ -3,7 +3,9 @@
 // next: callers decide what choosing 'request' means (request form, toast); this only reports the id.
 // confidence: high for keyboard/filter logic (lib/school.ts tested); medium for popover placement (browser-only)
 import { Popover } from '@kobalte/core/popover';
-import { ChevronsUpDown, Plus, School as SchoolIcon } from 'lucide-solid';
+import ChevronsUpDown from 'lucide-solid/icons/chevrons-up-down';
+import Plus from 'lucide-solid/icons/plus';
+import SchoolIcon from 'lucide-solid/icons/school';
 import { createMemo, createSignal, createUniqueId, For, Show, type JSX } from 'solid-js';
 import { Badge } from './Badge';
 import { moveActive } from './lib/command';

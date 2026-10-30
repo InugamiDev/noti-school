@@ -175,7 +175,7 @@ Reference implementation: `.handoff/clay/index.html` (landing), `.handoff/clay/c
 
 Bricolage Grotesque for headings, Hanken Grotesk for interface and body, JetBrains Mono for document locators and keyboard hints. All three ship Vietnamese glyphs. Self-host with @fontsource packages in the app; the Google Fonts link is mockup-only. Headings use `text-wrap: balance`, paragraphs `text-wrap: pretty`. Body line-height stays at 1.6 or more for diacritics.
 
-Weights shipped: Hanken 400 and 600, JetBrains Mono 400, Bricolage variable. Labels and emphasis use 600; 500 resolves to 400 and 700 to 600 by font matching, so do not add a weight without a component that needs it.
+Weights shipped: Hanken 400 and 600, JetBrains Mono 400, Bricolage variable. Labels and emphasis (`strong` included) use 600. CSS asks only for shipped weights: a missing weight is silently resolved to a neighbour or, for a heavier mono weight, faux-bolded, so do not add a weight without a component that needs it. While a web font loads, text uses a metric-matched local fallback (Arial, or DejaVu Sans where Arial is missing) so the swap does not rewrap headings; font-swap layout shift on `#/` stays under 0.02 at 390x844 and 1440x900.
 
 Scale: hero h1 68px (40px phone). Section h2 36px (30px phone); only the hero is larger. Card titles 18 to 20px. Body 16px, ledes 17px, meta 13px, locators 12px mono.
 
@@ -201,7 +201,7 @@ One stock photo, used where it supports the "what it reads" section: a `<figure>
 
 ### Site shell
 
-Sticky nav is opaque (`--page`) with a hairline when scrolled. Marketing routes show How it works, Who it's for, For universities, Help. Workspace routes (answer, sources, history, admin, account) show Ask, Sources, History and, for admins, Admin; the footer drops its Workspace column there, and below 960px the same links sit in one row under the bar. The pilot notice is marketing chrome: it hides on workspace routes (by route, not by identity, so resolving Me never shifts the page). Header controls are 44px. The account control reads "Sign in" (filled) only when the visitor is known to be signed out; while identity is unknown it is a same-size placeholder, and during an identity outage it is a neutral "Account".
+Sticky nav is opaque (`--page`) with a hairline when scrolled. Marketing routes show How it works, Who it's for, For universities, Help. Workspace routes (answer, sources, history, admin, account) show Ask (the answer page, `#/answer`), Sources, History and, for admins, Admin, with `aria-current` on the current one; the footer drops its Workspace column there, and below 960px the same links sit in one row under the bar. The pilot notice is marketing chrome: it hides on workspace routes (by route, not by identity, so resolving Me never shifts the page). Header controls are 44px. The pilot notice row is 44px high and its text wraps to at most two lines inside it on phones, so wrapping never changes its height. The account control reads "Sign in" (filled) only when the visitor is known to be signed out; while identity is unknown it is a same-size placeholder, and during an identity outage it is a neutral "Account".
 
 ### Workspace
 
@@ -224,12 +224,12 @@ Built in SolidJS. Styling in Sass (SCSS modules + global tokens), behaviour from
 
 | Component | Built from | Contract |
 |---|---|---|
-| Button (primary, secondary, ghost, icon, sm, loading) | Kobalte Button | 44px default, 36px small; loading replaces label with spinner and disables |
-| Prompt input | Kobalte TextField (textarea) + ToggleGroup + Button | shadcn AI Elements Prompt Input layout; Enter asks, Shift+Enter new line, IME never submits; send disabled when empty; draft and language persist locally. Bar controls: picker 40px, language track 40px with 34px thumbs, send 40px with a 44px hit area. When the draft reads as Vietnamese and English is selected, a dashed "Answer in Tiếng Việt?" chip offers the switch; it never switches silently |
-| Citation chip + source excerpt | Button with aria-pressed | Selecting a chip highlights its passage and moves the 3D pin; copy-citation button gives a toast |
+| Button (primary, secondary, ghost, icon, sm, loading) | Kobalte Button | 44px default. Small keeps a 36px visual box but still has a 44x44px hit area (a transparent centred `::before`, `hit-area` mixin). Loading replaces label with spinner and disables |
+| Prompt input | Kobalte TextField (textarea) + ToggleGroup + Button | shadcn AI Elements Prompt Input layout; Enter asks, Shift+Enter new line, IME never submits; send disabled when empty; draft and language persist locally. Bar controls: picker 40px, language track 40px with 34px thumbs, send 40px with a 44px hit area. The bar is one row from 520px: the picker trigger truncates (min-width 0) before anything wraps. When the draft reads as Vietnamese and English is selected, a dashed "Answer in Tiếng Việt?" chip offers the switch; it never switches silently, and it sits on the box's top edge (out of the bar's flow, after the language toggle in Tab order) so it never adds a row mid-typing |
+| Citation chip + source excerpt | Button with aria-pressed | Selecting a chip highlights its passage and moves the 3D pin; copy-citation button gives a toast. Disclosures (the reader's "Read source passage", admin graph) use a chevron that turns when open |
 | Answer card states | Kobalte Tabs (demo only) | Answer, loading (real progress text + Stop), no supported answer, unavailable. Unavailable never falls back to a guess |
-| Command menu | Kobalte Dialog + Combobox pattern (Solid UI Command) | Cmd/Ctrl+K; arrows, Enter, Esc; placeholder "Search or ask"; text that matches nothing becomes one selectable "Ask “…”" row; the key legend hides on coarse pointers |
-| Toast | solid-sonner (Solid UI Sonner) | Bottom centre, 2.6s, polite live region |
+| Command menu | Kobalte Dialog + Combobox pattern (Solid UI Command) | Code loads when the browser is idle or on first open, outside the initial bundle; Cmd/Ctrl+K; arrows, Enter, Esc; placeholder "Search or ask"; text that matches nothing becomes one selectable "Ask “…”" row; the key legend hides on coarse pointers |
+| Toast | solid-sonner (Solid UI Sonner) | Bottom centre, 2.6s, polite live region; sonner loads when idle or with the first toast |
 | Tooltip | Kobalte Tooltip | 300ms delay, never the only label |
 | Accordion (FAQ) | Kobalte Accordion | Live filter that ignores Vietnamese diacritics |
 | School picker (in the prompt bar) | Kobalte Popover + Listbox | Opens below the bar (flips only when space runs out) so it never covers the headline; trigger truncates at 180px with the full name as its title; options at most 56px; searchable; arrows, Enter, Esc; outside click closes; choosing an unavailable school swaps the answer card to a request prompt and moves the 3D scene; choice persists |
@@ -237,7 +237,7 @@ Built in SolidJS. Styling in Sass (SCSS modules + global tokens), behaviour from
 | Request-your-university form | Kobalte TextField + Select | Inline errors with aria-invalid/aria-describedby; nothing is sent until a real endpoint exists, so the button is a secondary "Check details" with no send icon |
 | Account page | Kobalte Tabs + TextField | Signed out: Sign in, Create account, Verify email, Reset password. Signed in: the account card plus Redeem invitation and Verify email (Reset password only with a reset link). Never a sign-in form for a signed-in visitor. The tab track wraps on phones |
 | Badge, chip, kbd, skeleton, empty state | plain Solid | See components.html |
-| Mobile sheet | corvu Drawer or Kobalte Dialog | Focus moves in and returns to the menu button |
+| Mobile sheet | corvu Drawer or Kobalte Dialog | Focus moves in and returns to the menu button; loads like the command menu |
 
 Quality-of-life rules: `/` focuses the question, Cmd/Ctrl+K opens the command menu, the pilot notice can be dismissed and stays dismissed, the question draft survives reloads, sample questions in Vietnamese switch the answer language, every async action has a visible pending state, and every copy action confirms with a toast.
 
@@ -255,7 +255,7 @@ Quality-of-life rules: `/` focuses the question, Cmd/Ctrl+K opens the command me
 - Do give every state a design: loading, empty, no answer, unavailable, error.
 - Do label example content "Sample handbook, not HCMIU policy" and never invent university rules, deadlines, offices, email formats, partners or affiliation.
 - Do write copy for any university ("your school", "your university"); mention HCMIU only as the current pilot.
-- Do keep 44px touch targets, visible focus, full keyboard use and AA contrast (verified for every token pair above). Sub-44px visuals (citation chips, sample chips, segmented thumbs) carry a 44px hit area via `::after`.
+- Do keep 44px touch targets, visible focus, full keyboard use and AA contrast (verified for every token pair above). Sub-44px visuals (small buttons, citation chips, sample chips, segmented thumbs) carry a 44x44px hit area through the `hit-area` mixin (a transparent centred pseudo-element); adjacent segmented thumbs grow outward so neither covers the other. Footer links are 44px rows below 720px.
 - Do keep the light theme for visitors who prefer dark: `color-scheme` and `theme-color` declare light so there is no dark pre-paint or dark browser chrome over a light page. A dark theme is a separate, owner-approved task (CONTEXT.md item 1).
 - Don't add gradients, glass, glows, or more 3D on other pages; the hero is the one 3D moment.
 - Don't use em or en dashes in copy (the document title included), arrow glyphs on every link, or eyebrow labels.

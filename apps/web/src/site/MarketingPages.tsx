@@ -1,5 +1,6 @@
 import { For, Match, Switch, type JSX } from 'solid-js';
-import { BookOpen, Languages } from 'lucide-solid';
+import BookOpen from 'lucide-solid/icons/book-open';
+import Languages from 'lucide-solid/icons/languages';
 import { Badge, Button } from '../ui';
 import { Band } from './Band';
 import { Closing, DocumentRows, Workflow } from './Sections';

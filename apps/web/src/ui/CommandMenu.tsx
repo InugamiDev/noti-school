@@ -1,15 +1,16 @@
 // intent: Cmd/Ctrl+K command palette on Kobalte Dialog with a combobox-style filtered, grouped listbox. Text that matches
 //         no command becomes one selectable "Ask" row.
 // status: done
-// next: pass app-level commands from the shell; onFallback should put the text into the question box.
+// next: pass app-level commands from the shell; onFallback should put the text into the question box. Import it through
+//       ui/index.ts, which loads this module (and Kobalte Dialog) on first open or when the browser is idle.
 // confidence: high for filtering/Enter resolution (lib/command.ts tested); medium for focus hand-off (browser-only)
 import { Dialog } from '@kobalte/core/dialog';
-import { MessageSquare, Search } from 'lucide-solid';
-import { createComputed, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
+import MessageSquare from 'lucide-solid/icons/message-square';
+import Search from 'lucide-solid/icons/search';
+import { createComputed, createEffect, createMemo, createSignal, createUniqueId, For, on, Show, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { Kbd } from './Kbd';
 import { commandsWithAsk, groupCommands, moveActive, resolveCommandEnter, type CommandItem } from './lib/command';
-import { isCommandShortcut } from './lib/platform';
 import styles from './CommandMenu.module.scss';
 
 export interface CommandMenuProps {
@@ -175,26 +176,4 @@ export function CommandMenu(props: CommandMenuProps) {
       </Dialog.Portal>
     </Dialog>
   );
-}
-
-export interface CommandMenuState {
-  open: Accessor<boolean>;
-  setOpen: (open: boolean) => void;
-  toggle: () => void;
-}
-
-/** Open state for CommandMenu plus a global Cmd/Ctrl+K listener that toggles it; the listener is removed on cleanup. */
-export function useCommandMenu(): CommandMenuState {
-  const [open, setOpen] = createSignal(false);
-  const toggle = () => setOpen(value => !value);
-  onMount(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isCommandShortcut(event)) return;
-      event.preventDefault();
-      toggle();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    onCleanup(() => window.removeEventListener('keydown', onKeyDown));
-  });
-  return { open, setOpen: value => setOpen(value), toggle };
 }

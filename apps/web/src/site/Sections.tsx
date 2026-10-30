@@ -3,7 +3,10 @@
 // next: the landing has its own sections in src/landing; keep these for the secondary pages only.
 // confidence: high
 import { createSignal, For, Show } from 'solid-js';
-import { BookOpen, FileText, Library, ListChecks } from 'lucide-solid';
+import BookOpen from 'lucide-solid/icons/book-open';
+import FileText from 'lucide-solid/icons/file-text';
+import Library from 'lucide-solid/icons/library';
+import ListChecks from 'lucide-solid/icons/list-checks';
 import { Dynamic } from 'solid-js/web';
 import { Band } from './Band';
 import { Button } from '../ui';

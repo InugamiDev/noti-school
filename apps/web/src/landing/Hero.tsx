@@ -4,7 +4,7 @@
 // status: done
 // next: the composer submit is owned by App (routes to /answer); this module only renders and reports intent.
 // confidence: high for wiring; visual parity checked by screenshot only
-import { School } from 'lucide-solid';
+import School from 'lucide-solid/icons/school';
 import { createSignal, For, Show } from 'solid-js';
 import { ClayHero } from '../hero3d/ClayHero';
 import type { Citation, HeroScope } from '../hero3d/layout';

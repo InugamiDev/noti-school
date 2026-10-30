@@ -38,6 +38,12 @@ p {
   text-wrap: pretty;
 }
 
+// Hanken ships 400 and 600: emphasis uses 600 instead of the user-agent bold (700).
+strong,
+b {
+  font-weight: 600;
+}
+
 a {
   color: inherit;
 }

@@ -4,17 +4,14 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  ErrorBoundary,
+  lazy,
   Show,
   onCleanup,
   untrack,
 } from 'solid-js';
 import { createRemoteResource as createResource, accessScope, setAccessScope } from './resource';
-import {
-  AskRequest,
-  QUESTION_MAX_CHARACTERS,
-  QUESTION_MAX_BYTES,
-  type AnswerOutput,
-} from '@noti/contracts';
+import type { AnswerOutput } from '@noti/contracts';
 import {
   get,
   post,
@@ -25,6 +22,7 @@ import {
   saveDraft,
   loadDraftConversation,
   endpoint,
+  loadContracts,
   takeAuthCallback,
   operationKey,
   clearOperations,
@@ -32,25 +30,38 @@ import {
   requestScope,
   RequestError,
 } from './api';
-import Sources from './Sources';
-import Auth from './Auth';
-import Admin from './Admin';
 import { isWorkspaceRoute, PilotNotice, SiteHeader, SiteFooter } from './site/SiteShell';
 import { isSiteRoute, parseHash, sitePages, type LandingSection } from './site/routes';
 import { siteCommands } from './site/commands';
-import MarketingPages from './site/MarketingPages';
 import { Landing } from './landing/Landing';
 import { coverageText, heroLabel, membershipInstitution, schoolOptions } from './landing/logic';
-import { CommandMenu, looksVietnamese, PromptInput, Toaster, useCommandMenu } from './ui';
+import { Button, CommandMenu, EmptyState, looksVietnamese, PromptInput, Toaster, useCommandMenu } from './ui';
+import RefreshCw from 'lucide-solid/icons/refresh-cw';
 import './site/site.scss';
 import { pageSuffix } from './Pagination';
 import { AnswerView } from './app/AnswerView';
-import { HistoryView } from './app/HistoryView';
 import { deriveInstitutions, deriveSession, type InstitutionsState, type SessionState } from './app/session';
 import page from './app/Page.module.scss';
 const institutionPath = '/api/v1/institutions/{institution_id}';
 export const scoped = (institution: string, suffix: string, params: Record<string, string> = {}) =>
   endpoint(`${institutionPath}${suffix}`, { institution_id: institution, ...params });
+
+// Routes other than the landing and the answer page load on demand, so the first paint of #/ ships none of their code.
+const Sources = lazy(() => import('./Sources'));
+const Auth = lazy(() => import('./Auth'));
+const Admin = lazy(() => import('./Admin'));
+const HistoryView = lazy(() => import('./app/HistoryView').then((module) => ({ default: module.HistoryView })));
+const MarketingPages = lazy(() => import('./site/MarketingPages'));
+
+/** Loads the code a route renders; resolves at once for routes in the initial bundle. */
+export function preloadRoute(route: string): Promise<unknown> {
+  if (route === '/answer' || route.startsWith('/sources')) return Sources.preload();
+  if (route.startsWith('/auth')) return Auth.preload();
+  if (route.startsWith('/admin')) return Admin.preload();
+  if (route.startsWith('/history')) return HistoryView.preload();
+  if (isSiteRoute(route) && route !== '/') return MarketingPages.preload();
+  return Promise.resolve();
+}
 
 // intent: stable prompt-first HTML with truthful service state; status: implemented.
 export default function App() {
@@ -206,7 +217,8 @@ export default function App() {
         'content',
         marketing?.[1] || 'Your noti.school workspace for questions, sources and account access.',
       );
-    queueMicrotask(() => {
+    // A lazily loaded route renders when its chunk arrives; focus its heading after that, not before.
+    void preloadRoute(current).then(() => queueMicrotask(() => {
       if (route() !== current) return;
       const pending = afterHome;
       afterHome = undefined;
@@ -216,7 +228,7 @@ export default function App() {
       heading?.focus({ preventScroll: true });
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       if (pending && current === '/') pending();
-    });
+    }));
   });
   const [busy, setBusy] = createSignal(false),
     [error, setError] = createSignal(''),
@@ -340,6 +352,16 @@ export default function App() {
   onCleanup(() => cancel(false));
   async function ask(event?: SubmitEvent) {
     event?.preventDefault();
+    // Already loaded by the start-up requests; awaiting a settled import keeps rapid double submits ordered.
+    let contracts: Awaited<ReturnType<typeof loadContracts>>;
+    try {
+      contracts = await loadContracts();
+    } catch {
+      setError('Answers are temporarily unavailable. Check your connection and try again.');
+      setErrorCode('unavailable');
+      return;
+    }
+    const { AskRequest, QUESTION_MAX_BYTES, QUESTION_MAX_CHARACTERS } = contracts;
     if (busy() || accessScope() === 'initial') return;
     setError('');
     setErrorCode(undefined);
@@ -396,7 +418,7 @@ export default function App() {
     historyReplace('/answer');
     queueMicrotask(() => document.getElementById('answer-heading')?.focus());
     try {
-      const result = readAnswer(await pending);
+      const result = await readAnswer(await pending);
       if (active.signal.aborted || owner !== accessScope() || controller !== active) return;
       if (result.institution_id !== institution()) throw new Error('Scope mismatch');
       setAnswer(result);
@@ -440,7 +462,7 @@ export default function App() {
         page.items.some((a) => a.institution_id !== key.institution || a.conversation_id !== key.id)
       )
         throw new Error('Scope mismatch');
-      return { ...page, items: page.items.map(readAnswer) };
+      return { ...page, items: await Promise.all(page.items.map(readAnswer)) };
     },
   );
   const followUp = () => (
@@ -515,6 +537,8 @@ export default function App() {
       <PilotNotice hidden={isWorkspaceRoute(route())} />
       <SiteHeader route={route()} session={session()} admin={admin()} onSearch={() => commandMenu.setOpen(true)} />
       <main id="main" tabIndex={-1}>
+        {/* Route chunks load lazily; a failed fetch shows a reload notice instead of an empty main. */}
+        <ErrorBoundary fallback={() => <RouteLoadError />}>
         <Show when={route() === '/'}>
           <Landing
             draft={draft()}
@@ -611,6 +635,7 @@ export default function App() {
                   callback={authCallback()}
                   capabilities={capabilities()}
                   authenticated={!!me()}
+                  identityUnavailable={session() === 'unavailable'}
                   refresh={() => {
                     void refreshMe();
                     void refreshCapabilities();
@@ -656,9 +681,10 @@ export default function App() {
               answerCursor={historyCursor()}
               answerNext={prior()?.next_cursor}
               onAnswerCursor={setHistoryCursor}
-              onView={(a) => {
+              onView={async (a) => {
+                const viewed = await readAnswer(a);
                 setAsked('');
-                setAnswer(readAnswer(a));
+                setAnswer(viewed);
                 setConversation({ id: a.conversation_id, institution: a.institution_id });
                 location.hash = '/answer';
               }}
@@ -714,6 +740,7 @@ export default function App() {
             </p>
           </div>
         </Show>
+        </ErrorBoundary>
       </main>
       <SiteFooter route={route()} paused={paused()} reduced={reduced()} toggle={() => setPaused((v) => !v)} />
       <CommandMenu
@@ -748,4 +775,18 @@ function writePreference(key: string, value: string) {
   } catch {
     /* Optional tab storage. */
   }
+}
+
+// Solid's lazy() keeps a rejected import, so the only reliable recovery is a reload (which also picks up a new deploy).
+function RouteLoadError() {
+  return (
+    <div class="site-wrap" role="alert">
+      <EmptyState
+        icon={RefreshCw}
+        title="This page could not load"
+        body="Part of the app did not download. Check your connection, then reload."
+        action={<Button onClick={() => location.reload()}>Reload</Button>}
+      />
+    </div>
+  );
 }

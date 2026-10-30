@@ -3,7 +3,8 @@
 // status: done
 // next: App owns the message so an access-scope change clears it.
 // confidence: high
-import { CircleCheck, TriangleAlert } from 'lucide-solid';
+import CircleCheck from 'lucide-solid/icons/circle-check';
+import TriangleAlert from 'lucide-solid/icons/triangle-alert';
 import { createSignal, Show } from 'solid-js';
 import { errorText, post, requestScope } from '../api';
 import { feedbackCategoryLabels } from './workspace';

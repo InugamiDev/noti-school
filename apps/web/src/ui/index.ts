@@ -16,7 +16,8 @@ export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button';
 export { Chip, type ChipProps } from './Chip';
 export { CitationChip, type CitationChipProps } from './CitationChip';
-export { CommandMenu, useCommandMenu, type CommandMenuProps, type CommandMenuState } from './CommandMenu';
+export { type CommandMenuProps } from './CommandMenu';
+export { CommandMenu, Sheet } from './deferred';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { Kbd, type KbdProps } from './Kbd';
 export { LoadingRegion, type LoadingRegionProps } from './LoadingRegion';
@@ -25,7 +26,7 @@ export { SchoolPicker, type SchoolPickerProps } from './SchoolPicker';
 export { SearchInput, type SearchInputProps } from './SearchInput';
 export { SegmentedToggle, type SegmentedOption, type SegmentedToggleProps } from './SegmentedToggle';
 export { Select, type SelectOption, type SelectProps } from './Select';
-export { Sheet, type SheetProps } from './Sheet';
+export { type SheetProps } from './Sheet';
 export {
   Skeleton,
   SkeletonRow,
@@ -40,6 +41,7 @@ export { Tabs, type TabItem, type TabsProps } from './Tabs';
 export { TextField, type TextFieldProps } from './TextField';
 export { Toaster, toast, type ToastTone } from './Toaster';
 export { Tooltip, type TooltipProps, type TooltipTriggerProps } from './Tooltip';
+export { useCommandMenu, type CommandMenuState } from './useCommandMenu';
 
 export { copyText } from './lib/clipboard';
 export {
@@ -52,6 +54,7 @@ export {
   type CommandItem,
 } from './lib/command';
 export { cx } from './lib/cx';
+export { whenIdle } from './lib/idle';
 export {
   createDelayedLoading,
   createLoadingTimer,

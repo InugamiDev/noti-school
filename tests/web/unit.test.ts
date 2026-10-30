@@ -30,6 +30,6 @@ test('does not echo unsafe server errors or automatically retry',async()=>{
   globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({error:{code:'internal_error',message:'secret traceback',request_id:'11111111-1111-4111-8111-111111111111',retryable:true}}),{status:500});};
   try{await assert.rejects(request('/api/v1/answers',Schemas.Answer),e=>e instanceof Error&&!e.message.includes('secret'));assert.equal(calls,1);}finally{globalThis.fetch=original;}
 });
-test('rejects structurally valid answer with missing citation',()=>{
-  assert.throws(()=>readAnswer({id:'11111111-1111-4111-8111-111111111111',institution_id:'11111111-1111-4111-8111-111111111111',conversation_id:'11111111-1111-4111-8111-111111111111',status:'answered',language:'en',claims:[{text:'Synthetic test',evidence_ids:['11111111-1111-4111-8111-111111111111']}],evidence:[],explanation:null,created_at:'2026-09-25T00:00:00Z'}));
+test('rejects structurally valid answer with missing citation',async()=>{
+  await assert.rejects(readAnswer({id:'11111111-1111-4111-8111-111111111111',institution_id:'11111111-1111-4111-8111-111111111111',conversation_id:'11111111-1111-4111-8111-111111111111',status:'answered',language:'en',claims:[{text:'Synthetic test',evidence_ids:['11111111-1111-4111-8111-111111111111']}],evidence:[],explanation:null,created_at:'2026-09-25T00:00:00Z'}));
 });

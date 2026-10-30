@@ -3,8 +3,9 @@
 // status: done
 // next: the landing page passes citation/scope from the answer card and school picker; scene.ts and Archive.tsx retire later.
 // confidence: high
-import { MousePointer2 } from 'lucide-solid';
+import MousePointer2 from 'lucide-solid/icons/mouse-pointer-2';
 import { createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { whenIdle } from '../ui/lib/idle';
 import type { Citation, HeroScope } from './layout';
 import type { SceneHandle } from './scene';
 import styles from './ClayHero.module.scss';
@@ -20,18 +21,6 @@ export type ClayHeroProps = {
 
 const DESCRIPTION =
   'Clay illustration: one bookstack per university on a shared base. Your school is in colour with an open page and a citation pin; another school is locked; an empty slot waits for the next university.';
-const IDLE_TIMEOUT_MS = 1200;
-const IDLE_FALLBACK_MS = 200;
-
-function whenIdle(run: () => void): () => void {
-  if (typeof window.requestIdleCallback === 'function') {
-    const id = window.requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
-    return () => window.cancelIdleCallback(id);
-  }
-  const id = window.setTimeout(run, IDLE_FALLBACK_MS);
-  return () => window.clearTimeout(id);
-}
-
 export function ClayHero(props: ClayHeroProps) {
   let stage!: HTMLDivElement;
   const [ready, setReady] = createSignal(false);

@@ -46,3 +46,36 @@
   descent-override: 31.89%;
   line-gap-override: 0%;
 }
+
+// The same metric matching against DejaVu Sans, the default sans-serif on many Linux systems without Arial (and the
+// headless test browsers). Separate families: when a local() face is missing the browser moves on to the next family.
+// Values from fontTools (frequency-weighted average advance, hhea vertical metrics) against DejaVu Sans 2.37 (2026-10-30).
+@font-face {
+  font-family: 'Bricolage Fallback Linux';
+  font-weight: 700;
+  src: local('DejaVu Sans Bold'), local('DejaVuSans-Bold');
+  size-adjust: 85.33%;
+  ascent-override: 108.99%;
+  descent-override: 31.64%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Hanken Fallback Linux';
+  font-weight: 400;
+  src: local('DejaVu Sans'), local('DejaVuSans');
+  size-adjust: 88.42%;
+  ascent-override: 113.09%;
+  descent-override: 34.27%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Hanken Fallback Linux';
+  font-weight: 600 700;
+  src: local('DejaVu Sans Bold'), local('DejaVuSans-Bold');
+  size-adjust: 79.16%;
+  ascent-override: 126.32%;
+  descent-override: 38.28%;
+  line-gap-override: 0%;
+}

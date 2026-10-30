@@ -3,7 +3,9 @@
 // next: callers map API outcomes to states; abstained answers use no-answer, provider outages use unavailable.
 // confidence: high
 // Truthfulness rules enforced here: no "verified" label in any state; unavailable is role=alert and never shows answer text.
-import { CircleStop, CloudOff, FileQuestion } from 'lucide-solid';
+import CircleStop from 'lucide-solid/icons/circle-stop';
+import CloudOff from 'lucide-solid/icons/cloud-off';
+import FileQuestion from 'lucide-solid/icons/file-question-mark';
 import { Match, Show, Switch, type JSX } from 'solid-js';
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';

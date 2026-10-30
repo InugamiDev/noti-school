@@ -1,4 +1,4 @@
-import { Search } from 'lucide-solid';
+import Search from 'lucide-solid/icons/search';
 import { splitProps, type JSX } from 'solid-js';
 import { cx } from './lib/cx';
 import styles from './SearchInput.module.scss';

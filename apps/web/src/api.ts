@@ -1,9 +1,22 @@
-import { z } from 'zod';
-import { ApiError, Schemas, validateAnswer, ANSWER_WAIT_MS } from '@noti/contracts';
+import type { z } from 'zod';
+import type { Schemas } from '@noti/contracts';
 import registry from '../../../docs/contracts/endpoints.json';
 
 // intent: enforce the frozen public boundary; status: implemented; next: integrate real services.
 type SchemaName = keyof typeof Schemas;
+type Contracts = typeof import('@noti/contracts');
+let contracts: Promise<Contracts> | undefined;
+let loaded: Contracts | undefined;
+/** Contract schemas (and zod) load with the first API request, in parallel with it, not in the initial bundle. */
+// A failed chunk fetch (flaky network, or a deploy that removed the old hashed file) is forgotten so the next call retries.
+export const loadContracts = () =>
+  (contracts ??= import('@noti/contracts').then(
+    module => (loaded = module),
+    (error: unknown) => {
+      contracts = undefined;
+      throw error;
+    },
+  ));
 let scopeController = new AbortController();
 export const requestScope = () => scopeController.signal;
 export function invalidateRequests() {
@@ -28,9 +41,10 @@ export function endpoint(template: string, params: Record<string, string> = {}) 
     return encodeURIComponent(value);
   });
 }
+/** `schema` is a zod schema or the name of a contract schema, resolved once the contracts have loaded. */
 export async function request<T>(
   path: string,
-  schema: z.ZodType<T> | null,
+  schema: z.ZodType<T> | SchemaName | null,
   init: RequestInit = {},
 ): Promise<T> {
   if (!path.startsWith('/api/') || path.startsWith('//'))
@@ -42,7 +56,12 @@ export async function request<T>(
   let response: Response;
   const owned = !['/api/v1/me', '/api/v1/capabilities', '/api/v1/institutions'].includes(path);
   const scope = scopeController.signal;
-  const timeout = path === '/api/v1/answers' && init.method === 'POST' ? ANSWER_WAIT_MS : 45000;
+  const loading = loadContracts().catch(() => {
+    throw new RequestError('Connection unavailable. Please try again.');
+  });
+  loading.catch(() => undefined); // awaited below; this only stops an early fetch failure leaving it unhandled
+  // Asking loads the contracts first (App ask), so the answer request still starts synchronously.
+  const timeout = path === '/api/v1/answers' && init.method === 'POST' ? (loaded ?? (await loading)).ANSWER_WAIT_MS : 45000;
   const signal = AbortSignal.any([AbortSignal.timeout(timeout), ...(init.signal ? [init.signal] : []), ...(owned ? [scope] : [])]);
   try {
     response = await fetch(path, {
@@ -59,6 +78,7 @@ export async function request<T>(
       : 'Connection unavailable. Please try again.');
   }
   if (response.status === 204 && schema === null) return undefined as T;
+  const { ApiError, Schemas } = await loading;
   let value: unknown;
   try {
     value = await response.json();
@@ -84,17 +104,13 @@ export async function request<T>(
     );
   }
   if (!schema) return undefined as T;
-  const result = schema.safeParse(value);
+  const result = (typeof schema === 'string' ? (Schemas[schema] as unknown as z.ZodType<T>) : schema).safeParse(value);
   if (!result.success)
     throw new RequestError('The response could not be read safely. Please try again later.');
   return result.data;
 }
 export function get<N extends SchemaName>(path: string, name: N, signal?: AbortSignal) {
-  return request(
-    path,
-    Schemas[name] as unknown as z.ZodType<z.infer<(typeof Schemas)[N]>>,
-    signal ? { signal } : {},
-  );
+  return request<z.infer<(typeof Schemas)[N]>>(path, name, signal ? { signal } : {});
 }
 export function post<N extends SchemaName>(
   path: string,
@@ -102,7 +118,7 @@ export function post<N extends SchemaName>(
   body: unknown,
   extra: RequestInit = {},
 ) {
-  return request(path, Schemas[name] as unknown as z.ZodType<z.infer<(typeof Schemas)[N]>>, {
+  return request<z.infer<(typeof Schemas)[N]>>(path, name, {
     method: 'POST',
     body: body instanceof FormData ? body : JSON.stringify(body),
     ...extra,
@@ -117,7 +133,10 @@ export function safeLink(value: string | null) {
     return undefined;
   }
 }
-export const readAnswer = validateAnswer;
+/** Validates an answer against its own evidence (throws on mismatch). */
+export async function readAnswer(value: unknown) {
+  return (await loadContracts()).validateAnswer(value);
+}
 export function errorText(value: unknown) {
   return value instanceof RequestError
     ? value.message
@@ -133,10 +152,15 @@ export function saveDraft(value: string, owner = 'anonymous', conversation?: { i
 export function loadDraftConversation(owner: string) {
   try {
     const saved = JSON.parse(sessionStorage.getItem('noti.owned-draft') || 'null');
-    const conversation = z.object({ id: z.uuid(), institution: z.uuid() }).safeParse(saved?.conversation);
-    return saved?.owner === owner && conversation.success ? conversation.data : undefined;
+    // Read synchronously at start-up, before the contract schemas load; asking validates the id again (AskRequest).
+    const conversation: unknown = saved?.conversation;
+    if (saved?.owner !== owner || !conversation || typeof conversation !== 'object') return undefined;
+    const { id, institution } = conversation as Record<string, unknown>;
+    return isUuid(id) && isUuid(institution) ? { id, institution } : undefined;
   } catch { return undefined; }
 }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
 export function loadDraft(owner = 'anonymous', anonymousOwner?: string) {
   try {
     sessionStorage.removeItem('noti.draft'); // Unscoped legacy text cannot establish ownership.
