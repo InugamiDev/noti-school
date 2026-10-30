@@ -34,6 +34,12 @@ import type { LucideIcon } from 'lucide-solid';
 import { Band } from '../site/Band';
 import { Badge, Button, Tabs, type BadgeTone } from '../ui';
 import styles from './Landing.module.scss';
+import studyAvif1600 from '../assets/photos/study-desk-1600.avif';
+import studyAvif800 from '../assets/photos/study-desk-800.avif';
+import studyJpg1600 from '../assets/photos/study-desk-1600.jpg';
+import studyJpg800 from '../assets/photos/study-desk-800.jpg';
+import studyWebp1600 from '../assets/photos/study-desk-1600.webp';
+import studyWebp800 from '../assets/photos/study-desk-800.webp';
 
 interface SectionProps {
   motion: boolean;
@@ -346,9 +352,33 @@ export function ReadsSection(props: SectionProps) {
             title="Handbooks and regulations"
             body="Student handbooks, academic regulations and their dated editions. Older versions stay labelled."
           >
-            <div class={styles.photo} role="img" aria-label="Photo slot for a real handbook or library photo">
-              <Badge>Photo needed: real handbook, 1200 × 900</Badge>
-            </div>
+            {/* Illustrative stock photo (CC BY 2.0, see assets/photos/CREDITS.md); not a partner university's documents. */}
+            <figure class={styles.photo}>
+              <picture>
+                <source type="image/avif" srcset={`${studyAvif800} 800w, ${studyAvif1600} 1600w`} sizes="(min-width: 1024px) 520px, 92vw" />
+                <source type="image/webp" srcset={`${studyWebp800} 800w, ${studyWebp1600} 1600w`} sizes="(min-width: 1024px) 520px, 92vw" />
+                <img
+                  src={studyJpg800}
+                  srcset={`${studyJpg800} 800w, ${studyJpg1600} 1600w`}
+                  sizes="(min-width: 1024px) 520px, 92vw"
+                  width="1600"
+                  height="1068"
+                  loading="lazy"
+                  decoding="async"
+                  alt="An open, well-worn book on a stack of older books beside a laptop in daylight."
+                />
+              </picture>
+              <figcaption>
+                Photo:{' '}
+                <a href="https://commons.wikimedia.org/wiki/File:Cozy_study_space_with_an_open_book,_fresh_apple,_and_laptop_on_a_desk_in_bright_natural_light.jpg" target="_blank" rel="noopener noreferrer">
+                  Shixart1985
+                </a>
+                ,{' '}
+                <a href="https://creativecommons.org/licenses/by/2.0/" target="_blank" rel="noopener noreferrer">
+                  CC BY 2.0
+                </a>
+              </figcaption>
+            </figure>
           </BentoCard>
           <BentoCard class={styles.bentoNarrow} title="Forms and procedures" body="Steps for common requests.">
             <div class={styles.tags}>
