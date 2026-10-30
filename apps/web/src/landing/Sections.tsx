@@ -113,7 +113,7 @@ export function ReadsSection(props: SectionProps) {
           <Heading
             id="reads-title"
             title="What it reads"
-            lede="Only documents your university has reviewed and approved. Web pages and other schools' files are never used."
+            lede="Only documents and official pages your university has reviewed and approved. Nothing from the open web or other schools."
           />
           <ul class={styles.kinds}>
             <For each={kinds}>
