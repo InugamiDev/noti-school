@@ -52,8 +52,8 @@ html[data-motion='off'] {
   align-items: center;
   gap: 12px;
   min-height: 44px;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .site-pilot-close {
@@ -61,8 +61,9 @@ html[data-motion='off'] {
   margin-left: auto;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
   padding: 0;
   border: 0;
   border-radius: var(--r-full);
@@ -80,7 +81,8 @@ html[data-motion='off'] {
   position: sticky;
   top: 0;
   z-index: 40;
-  background: color-mix(in srgb, var(--page) 92%, transparent);
+  // Opaque: DESIGN.md has no glass, and content must not show through the bar.
+  background: var(--page);
   border-bottom: 1px solid transparent;
   transition:
     border-color var(--t-med),
@@ -116,7 +118,7 @@ html[data-motion='off'] {
   flex: none;
   width: 26px;
   height: 26px;
-  border-radius: 9px;
+  border-radius: var(--r-sm);
   background: var(--clay);
   box-shadow:
     inset 0 -3px 0 rgba(0, 0, 0, 0.18),
@@ -176,14 +178,14 @@ html[data-motion='off'] {
 
 .site-nav-account {
   margin-left: auto;
-  // Fits both "Sign in" and "Account", so the control keeps one box while identity resolves and after.
-  min-width: 6.25rem;
+  // Fits both "Sign in" and "Account" at 44px, so the control keeps one box while identity resolves and after.
+  min-width: 7rem;
 }
 
 .site-nav-account-pending {
   display: inline-block;
   flex: none;
-  height: 36px;
+  height: 44px;
   border: 1px solid var(--line);
   border-radius: var(--r-full);
   background: var(--sunken);
@@ -207,6 +209,38 @@ html[data-motion='off'] {
   }
 
   .site-nav-row .site-nav-menu {
+    display: none;
+  }
+}
+
+// Workspace links on phones and tablets: one row under the bar, so Ask, Sources and History stay one tap apart.
+.site-subnav {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  a {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: var(--r-full);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    color: var(--muted);
+
+    &:hover,
+    &[aria-current='page'] {
+      color: var(--ink);
+      background: var(--sunken);
+    }
+  }
+
+  @include respond-to('lg') {
     display: none;
   }
 }
@@ -241,7 +275,7 @@ html[data-motion='off'] {
 
 // ---------- footer
 .site-footer {
-  margin-top: 112px;
+  margin-top: var(--section);
   padding: 40px 0 56px;
   border-top: 1px solid var(--line);
   color: var(--muted);
@@ -309,7 +343,7 @@ html[data-motion='off'] {
 
 // ---------- sections
 .site-landing .site-band {
-  padding-top: 112px;
+  padding-top: var(--section);
 }
 
 .site-card {
@@ -327,7 +361,7 @@ html[data-motion='off'] {
   width: 44px;
   height: 44px;
   margin-bottom: 14px;
-  border-radius: 14px;
+  border-radius: var(--r-sm);
   background: var(--clay-soft);
   color: var(--clay);
   box-shadow: inset 0 -2px 0 rgba(168, 67, 31, 0.12);
@@ -437,7 +471,7 @@ html[data-motion='off'] {
 
 .site-page-heading {
   h1 {
-    margin-top: 14px;
+    margin-top: 0;
     max-width: 20ch;
     font-size: clamp(2.25rem, 4.6vw, 3.5rem);
     line-height: 1.05;

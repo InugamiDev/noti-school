@@ -1,9 +1,10 @@
-// intent: landing hero: headline, the real question composer (PromptInput + SchoolPicker), sample chips, proof row,
-//         and the ClayHero stage with the sample answer card overlapping its base.
+// intent: landing hero: headline, the real question composer (PromptInput + SchoolPicker), sample question chips,
+//         and the ClayHero stage with the sample answer card overlapping its base. No proof row: the sections below
+//         make those claims with evidence.
 // status: done
 // next: the composer submit is owned by App (routes to /answer); this module only renders and reports intent.
 // confidence: high for wiring; visual parity checked by screenshot only
-import { BookOpenCheck, CircleHelp, Lock, School, Send } from 'lucide-solid';
+import { School } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { ClayHero } from '../hero3d/ClayHero';
 import type { Citation, HeroScope } from '../hero3d/layout';
@@ -96,8 +97,7 @@ export function Hero(props: HeroProps) {
               {props.error}
             </p>
           </Show>
-          <div class={styles.try}>
-            <span>Try</span>
+          <div class={styles.try} role="group" aria-label="Sample questions">
             <For each={sampleQuestions}>
               {question => (
                 <Chip
@@ -113,20 +113,6 @@ export function Hero(props: HeroProps) {
               )}
             </For>
           </div>
-          <ul class={styles.proof}>
-            <li>
-              <BookOpenCheck size={16} aria-hidden="true" />
-              Cites page and section
-            </li>
-            <li>
-              <Lock size={16} aria-hidden="true" />
-              Your school's sources only
-            </li>
-            <li>
-              <CircleHelp size={16} aria-hidden="true" />
-              Says when it doesn't know
-            </li>
-          </ul>
         </div>
         <div class={styles.stage}>
           <ClayHero activeCitation={citation()} scope={props.scope} schoolLabel={props.schoolLabel} />
@@ -137,14 +123,15 @@ export function Hero(props: HeroProps) {
                 <AnswerCard
                   state="answer"
                   aria-label="Example answer"
-                  badge={<Badge tone="clay">Sample handbook, not HCMIU policy</Badge>}
+                  badge={<Badge>Sample handbook, not HCMIU policy</Badge>}
                 >
                   <p class={styles.answerText}>
-                    You can withdraw from a course until the end of week 10{cite('a', 1)}. Later
-                    withdrawals need the dean's approval{cite('b', 2)}.
+                    You can withdraw from a course until the end of week{' '}
+                    <span class={styles.keep}>10{cite('a', 1)}.</span> Later withdrawals need the
+                    dean's <span class={styles.keep}>approval{cite('b', 2)}.</span>
                   </p>
                   <SourceExcerpt
-                    locator="Sample Student Handbook, 2025 ed. · p. 31 · sec. 4.2"
+                    locator="Sample Handbook, 2025 · p. 31 · sec. 4.2"
                     citation={SAMPLE_CITATION}
                     activePassage={citation()}
                   >
@@ -165,7 +152,6 @@ export function Hero(props: HeroProps) {
                   from yet. See below how your university can join.
                 </p>
                 <Button variant="primary" size="sm" href="#join">
-                  <Send aria-hidden="true" />
                   Request your university
                 </Button>
               </article>

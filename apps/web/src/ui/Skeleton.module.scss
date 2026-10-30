@@ -68,7 +68,7 @@
 
 .tile {
   flex: none;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
 }
 
 .rowText {

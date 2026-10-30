@@ -6,17 +6,13 @@
 import { CircleCheck, TriangleAlert } from 'lucide-solid';
 import { createSignal, Show } from 'solid-js';
 import { errorText, post, requestScope } from '../api';
+import { feedbackCategoryLabels } from './workspace';
 import { scoped } from '../App';
 import { Button, cx, Select } from '../ui';
 import page from './Page.module.scss';
 import styles from './Workspace.module.scss';
 
-const categories = [
-  { value: 'unsupported', label: 'Unsupported claim' },
-  { value: 'incorrect', label: 'Incorrect' },
-  { value: 'outdated', label: 'Outdated' },
-  { value: 'other', label: 'Other' },
-];
+const categories = Object.entries(feedbackCategoryLabels).map(([value, label]) => ({ value, label }));
 
 export const FEEDBACK_SENT = 'Feedback received. Thank you.';
 const SENDING = 'Sending…';

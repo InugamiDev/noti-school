@@ -1,5 +1,6 @@
-// intent: /answer route body on the Clay kit: school from Me, AnswerCard states (loading with Stop, supported, qualified,
-//         no supported answer, unavailable), citation chips with source excerpts, feedback and the follow-up composer.
+// intent: /answer route body on the Clay kit: school from Me, the asked question, AnswerCard states (loading with Stop,
+//         supported, qualified, no supported answer, unavailable), citation chips with source excerpts, feedback and the
+//         follow-up composer. Below lg the order is answer, sources, follow-up, so evidence sits next to the answer.
 // status: done
 // next: App still owns every request, signal and scope rule; this component only renders state and reports intent.
 // confidence: high for wiring; visual parity checked by screenshot only
@@ -33,6 +34,8 @@ import page from './Page.module.scss';
 import styles from './Workspace.module.scss';
 
 export interface AnswerViewProps {
+  /** The question that produced the answer on screen, echoed above it; empty for answers opened from history. */
+  question: string;
   /** School name from the Me membership; undefined when signed out or not a member. */
   school: string | undefined;
   session: SessionState;
@@ -77,8 +80,10 @@ export function AnswerView(props: AnswerViewProps) {
       Report an issue
     </Button>
   );
+  // Before anything has been asked the page is one column: a composer, with no empty sources column beside it.
+  const idle = () => !props.busy && !props.error && !props.answer;
   return (
-    <div class={styles.workspace}>
+    <div class={cx(styles.workspace, idle() && styles.idle)}>
       <div class={styles.main}>
         <Button variant="ghost" size="sm" href="#/" class={styles.back}>
           <ArrowLeft aria-hidden="true" />
@@ -102,7 +107,11 @@ export function AnswerView(props: AnswerViewProps) {
             when={props.school}
             fallback={
               <span>
-                {props.session === 'signed-in' ? 'No school membership on this account.' : 'Not signed in.'}
+                {props.session === 'signed-in'
+                  ? 'No school membership on this account.'
+                  : props.session === 'unavailable'
+                    ? 'Your account could not be checked right now.'
+                    : 'Not signed in.'}
               </span>
             }
           >
@@ -114,9 +123,15 @@ export function AnswerView(props: AnswerViewProps) {
             )}
           </Show>
           <Show when={props.demo}>
-            <Badge tone="clay">Demo collection, synthetic examples only</Badge>
+            <Badge>Demo collection, synthetic examples only</Badge>
           </Show>
         </LoadingRegion>
+        <Show when={!idle() && props.question}>
+          <p class={styles.question}>
+            <span class="sr-only">You asked: </span>
+            {props.question}
+          </p>
+        </Show>
         <Show when={props.busy}>
           <AnswerCard state="loading" progress="Finding an answer and its sources…" onStop={() => props.onStop()} />
         </Show>
@@ -149,7 +164,8 @@ export function AnswerView(props: AnswerViewProps) {
           >
             <AnswerCard
               state="unavailable"
-              body={props.error}
+              title={props.error}
+              body="You can still open the source library. Your question is kept in the box below."
               action={
                 <Button size="sm" href="#/sources">
                   Browse sources
@@ -238,45 +254,47 @@ export function AnswerView(props: AnswerViewProps) {
             );
           }}
         </Show>
-        <section class={styles.followUp} aria-labelledby="follow-up-heading">
-          <h2 id="follow-up-heading" class={styles.h2}>
-            Ask a follow-up
-          </h2>
-          {props.composer}
-        </section>
       </div>
-      <aside class={styles.aside} aria-labelledby="sources-heading">
-        <h2 id="sources-heading" class={styles.h2}>
-          Supporting sources
-        </h2>
-        <Show
-          when={props.answer?.evidence.length ? props.answer : undefined}
-          fallback={
-            <p class={page.muted}>
-              {props.answer ? 'No passage supports an answer to this question.' : 'Sources will appear with the answer.'}
-            </p>
-          }
-        >
-          {(a) => (
-            <For each={a().evidence}>
-              {(e, i) => (
-                <div class={styles.excerpt}>
-                  <div class={styles.excerptHead}>
-                    <span class={styles.excerptNumber}>Source {i() + 1}</span>
-                    <Button size="sm" variant="ghost" aria-pressed={props.citation === e.id} onClick={() => props.onCitation(e.id)}>
-                      Open in reader
-                    </Button>
+      <Show when={!idle()}>
+        <aside class={styles.aside} aria-labelledby="sources-heading">
+          <h2 id="sources-heading" class={styles.h2}>
+            Supporting sources
+          </h2>
+          <Show
+            when={props.answer?.evidence.length ? props.answer : undefined}
+            fallback={
+              <p class={page.muted}>
+                {props.answer ? 'No passage supports an answer to this question.' : 'Sources will appear with the answer.'}
+              </p>
+            }
+          >
+            {(a) => (
+              <For each={a().evidence}>
+                {(e, i) => (
+                  <div class={styles.excerpt}>
+                    <div class={styles.excerptHead}>
+                      <span class={styles.excerptNumber}>Source {i() + 1}</span>
+                      <Button size="sm" variant="ghost" aria-pressed={props.citation === e.id} onClick={() => props.onCitation(e.id)}>
+                        Open in reader
+                      </Button>
+                    </div>
+                    <SourceExcerpt locator={evidenceLocator(e)} citation={citationText(e)} activePassage={props.citation}>
+                      <Passage id={e.id}>{e.quote}</Passage>
+                    </SourceExcerpt>
                   </div>
-                  <SourceExcerpt locator={evidenceLocator(e)} citation={citationText(e)} activePassage={props.citation}>
-                    <Passage id={e.id}>{e.quote}</Passage>
-                  </SourceExcerpt>
-                </div>
-              )}
-            </For>
-          )}
-        </Show>
-        {props.reader}
-      </aside>
+                )}
+              </For>
+            )}
+          </Show>
+          {props.reader}
+        </aside>
+      </Show>
+      <section class={styles.followUp} aria-labelledby="follow-up-heading">
+        <h2 id="follow-up-heading" class={styles.h2}>
+          {props.answer ? 'Ask a follow-up' : 'Ask a question'}
+        </h2>
+        {props.composer}
+      </section>
     </div>
   );
 }

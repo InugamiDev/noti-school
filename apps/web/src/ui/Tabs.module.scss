@@ -10,7 +10,8 @@
 .trigger {
   position: relative;
   height: 34px;
-  padding: 0 14px;
+  // Three role labels fit one row at 390px with 12px padding; 14px from xs up.
+  padding: 0 12px;
   border: 0;
   border-radius: var(--r-full);
   background: transparent;
@@ -41,4 +42,10 @@
 
 .panel {
   padding-top: 16px;
+}
+
+@media (min-width: 520px) {
+  .trigger {
+    padding: 0 14px;
+  }
 }

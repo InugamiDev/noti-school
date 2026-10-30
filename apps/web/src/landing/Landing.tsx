@@ -1,4 +1,4 @@
-// intent: the public landing page in reference order; owns only the hero scope preview ("my university isn't listed").
+// intent: the public landing page: hero, how (with the no-answer example), reads, scope, roles, join, FAQ; owns only the hero scope preview ("my university isn't listed").
 // status: done
 // next: App owns the draft, language, institution and submit flow; keep this component free of API calls.
 // confidence: high
@@ -8,7 +8,7 @@ import { localStore, REQUEST_SCHOOL_ID, toast } from '../ui';
 import { FaqSection } from './FaqSection';
 import { Hero, type ComposerProps } from './Hero';
 import { JoinSection } from './JoinSection';
-import { HonestSection, HowSection, ReadsSection, RolesSection, ScopeSection } from './Sections';
+import { HowSection, ReadsSection, RolesSection, ScopeSection } from './Sections';
 
 const SCOPE_KEY = 'scope';
 
@@ -47,11 +47,10 @@ export function Landing(props: LandingProps) {
         }}
         scope={scope()}
       />
-      <ScopeSection motion={props.motion} />
-      <HowSection motion={props.motion} />
-      <RolesSection motion={props.motion} />
-      <HonestSection motion={props.motion} onAskAgain={props.onFocusAsk} />
+      <HowSection motion={props.motion} onAskAgain={props.onFocusAsk} />
       <ReadsSection motion={props.motion} />
+      <ScopeSection motion={props.motion} />
+      <RolesSection motion={props.motion} />
       <JoinSection motion={props.motion} />
       <FaqSection
         motion={props.motion}

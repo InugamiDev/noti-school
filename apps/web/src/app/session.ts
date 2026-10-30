@@ -1,9 +1,10 @@
-// intent: explicit tri-states for identity and the institution list, so loading never renders as signed out or unavailable.
+// intent: explicit states for identity and the institution list, so loading never renders as signed out or unavailable,
+//         and an identity outage never renders as signed out (a signed-in user is not told to sign in again).
 // status: done
 // next: App derives both with createMemo, passing the previous value so a background refetch keeps the resolved state.
 // confidence: high; unit-tested in tests/app-session.test.ts
 
-export type SessionState = 'loading' | 'signed-in' | 'signed-out';
+export type SessionState = 'loading' | 'signed-in' | 'signed-out' | 'unavailable';
 export type InstitutionsState = 'loading' | 'ready' | 'unavailable';
 
 interface ResourceSnapshot {
@@ -11,12 +12,14 @@ interface ResourceSnapshot {
   loading: boolean;
   /** A value is present (an identity, or at least one institution). */
   present: boolean;
+  /** The read failed for a reason other than "not signed in" (outage, network error, 5xx). */
+  failed?: boolean;
 }
 
-/** Identity: an identity is signed in; a settled read without one (empty or error) is signed out; otherwise keep waiting. */
+/** Identity: an identity is signed in; a settled outage is unavailable; any other settled read without one is signed out. */
 export function deriveSession(me: ResourceSnapshot, previous: SessionState = 'loading'): SessionState {
   if (me.present) return 'signed-in';
-  if (!me.loading) return 'signed-out';
+  if (!me.loading) return me.failed ? 'unavailable' : 'signed-out';
   // A background refetch keeps the last settled answer instead of dropping back to unknown.
   return previous;
 }

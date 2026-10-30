@@ -15,7 +15,7 @@
   width: 100%;
   height: 44px;
   padding: 0 14px 0 42px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-border);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);
@@ -35,4 +35,8 @@
     border-color: var(--clay);
     box-shadow: var(--ring);
   }
+}
+
+.input:hover:not(:focus) {
+  border-color: var(--muted);
 }

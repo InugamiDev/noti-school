@@ -1,9 +1,9 @@
 // intent: "Bring noti.school to your university": three steps plus a request form that validates inline but sends nothing,
-//         because no request endpoint exists. A valid submit says so and points to the contact page.
+//         because no request endpoint exists. The button says "Check details", not "send", and a valid submit says
+//         nothing was sent and points to the contact page. Light panel: no dark CTA band for a form that sends nothing.
 // status: done
 // next: when a real endpoint exists, post the draft and replace the not-sent status with the server's response.
 // confidence: high
-import { Send } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { Band } from '../site/Band';
 import { Button, Select, TextField, toast } from '../ui';
@@ -92,9 +92,8 @@ export function JoinSection(props: { motion: boolean }) {
               autocomplete="email"
               inputRef={element => (emailInput = element)}
             />
-            <Button variant="primary" type="submit">
-              <Send aria-hidden="true" />
-              Send request
+            <Button variant="secondary" type="submit">
+              Check details
             </Button>
             <p class={styles.formHint}>Nothing is sent from this form yet. It checks your details and shows where to reach us.</p>
             <div role="status" class={styles.formStatus}>

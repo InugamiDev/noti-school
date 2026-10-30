@@ -1,13 +1,14 @@
-// intent: Cmd/Ctrl+K command palette on Kobalte Dialog with a combobox-style filtered, grouped listbox.
+// intent: Cmd/Ctrl+K command palette on Kobalte Dialog with a combobox-style filtered, grouped listbox. Text that matches
+//         no command becomes one selectable "Ask" row.
 // status: done
 // next: pass app-level commands from the shell; onFallback should put the text into the question box.
 // confidence: high for filtering/Enter resolution (lib/command.ts tested); medium for focus hand-off (browser-only)
 import { Dialog } from '@kobalte/core/dialog';
-import { Search } from 'lucide-solid';
+import { MessageSquare, Search } from 'lucide-solid';
 import { createComputed, createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { Kbd } from './Kbd';
-import { filterCommands, groupCommands, moveActive, resolveCommandEnter, type CommandItem } from './lib/command';
+import { commandsWithAsk, groupCommands, moveActive, resolveCommandEnter, type CommandItem } from './lib/command';
 import { isCommandShortcut } from './lib/platform';
 import styles from './CommandMenu.module.scss';
 
@@ -29,7 +30,7 @@ export function CommandMenu(props: CommandMenuProps) {
   const listId = createUniqueId();
   const [query, setQuery] = createSignal('');
   const [active, setActive] = createSignal(0);
-  const shown = createMemo(() => filterCommands(props.items, query()));
+  const shown = createMemo(() => commandsWithAsk(props.items, query(), text => props.onFallback(text), MessageSquare));
   const groups = createMemo(() => groupCommands(shown()));
   const optionId = (item: CommandItem) => `${listId}-${item.id}`;
   const activeItem = () => shown()[active()];
@@ -103,7 +104,7 @@ export function CommandMenu(props: CommandMenuProps) {
                 aria-autocomplete="list"
                 aria-activedescendant={activeItem() ? optionId(activeItem() as CommandItem) : undefined}
                 autocomplete="off"
-                placeholder={props.placeholder ?? 'Search pages, questions and actions'}
+                placeholder={props.placeholder ?? 'Search or ask'}
                 value={query()}
                 onInput={event => {
                   setQuery(event.currentTarget.value);
@@ -118,7 +119,7 @@ export function CommandMenu(props: CommandMenuProps) {
                 when={shown().length}
                 fallback={
                   <li class={styles.empty} role="presentation">
-                    {query().trim() ? 'No results. Press Enter to ask it as a question.' : 'No commands available.'}
+                    No commands available.
                   </li>
                 }
               >

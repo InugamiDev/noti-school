@@ -10,7 +10,7 @@ import { For, Show } from 'solid-js';
 import Pagination from '../Pagination';
 import { Badge, Button, cx, EmptyState, LoadingRegion, SkeletonRow } from '../ui';
 import type { SessionState } from './session';
-import { answerPresentation } from './workspace';
+import { answerPresentation, formatDate } from './workspace';
 import page from './Page.module.scss';
 
 interface ConversationRow {
@@ -47,7 +47,7 @@ export interface HistoryViewProps {
   onAsk: () => void;
 }
 
-const dateText = (iso: string) => new Date(iso).toLocaleDateString();
+const dateText = formatDate;
 
 function Alert(props: { text: string }) {
   return (
@@ -60,6 +60,7 @@ function Alert(props: { text: string }) {
 
 export function HistoryView(props: HistoryViewProps) {
   const signedIn = () => props.session === 'signed-in';
+  const unavailable = () => props.session === 'unavailable';
   // A member whose list has not arrived yet (no rows, no error) is still loading, not empty.
   const listLoading = () =>
     props.pending || props.rowsLoading || (props.member && !props.rows && !props.rowsError);
@@ -69,21 +70,32 @@ export function HistoryView(props: HistoryViewProps) {
         Your conversations
       </h1>
       <p class={page.lede}>Saved conversations for your school account. Only you can open them.</p>
+      <div class={page.after} />
       <Show
         when={props.member || props.pending}
         fallback={
           <EmptyState
             icon={LogIn}
-            title={signedIn() ? 'No conversations for this school' : 'Sign in to see your conversations'}
+            title={
+              signedIn()
+                ? 'No conversations for this school'
+                : unavailable()
+                  ? 'Your account could not be checked'
+                  : 'Sign in to see your conversations'
+            }
             body={
               signedIn()
                 ? 'This account is not a member of the selected school.'
-                : 'Conversations are saved to your school account, not to this browser.'
+                : unavailable()
+                  ? 'Saved conversations need your account. Try again in a moment.'
+                  : 'Conversations are saved to your school account, not to this browser.'
             }
             action={
-              <Button size="sm" variant="primary" href="#/auth">
-                {signedIn() ? 'Open account' : 'Sign in'}
-              </Button>
+              <Show when={!unavailable()}>
+                <Button size="sm" variant="primary" href="#/auth">
+                  {signedIn() ? 'Open account' : 'Sign in'}
+                </Button>
+              </Show>
             }
           />
         }
@@ -124,12 +136,12 @@ export function HistoryView(props: HistoryViewProps) {
                 {(row) => (
                   <li>
                     <a class={page.row} href={`#/history/${row.id}`} onClick={() => props.onOpen(row)}>
-                      <span class={page.rowIcon} aria-hidden="true">
-                        <MessageSquare size={20} />
-                      </span>
+                      <MessageSquare class={cx(page.rowGlyph)} size={18} aria-hidden="true" />
                       <span class={page.rowText}>
                         Open conversation
-                        <span class={page.meta}>Started {dateText(row.created_at)}</span>
+                        <span class={page.meta}>
+                          Started {dateText(row.created_at)} · {row.id.slice(0, 8)}
+                        </span>
                       </span>
                     </a>
                   </li>

@@ -26,7 +26,7 @@ test('site routes and sections are recognised by exact key only', () => {
   assert.equal(isSiteRoute('toString'), false);
   assert.equal(isLandingSection('faq'), true);
   assert.equal(isLandingSection('constructor'), false);
-  assert.deepEqual(Object.keys(landingSections), ['scope', 'how', 'roles', 'reads', 'join', 'faq']);
+  assert.deepEqual(Object.keys(landingSections), ['how', 'reads', 'scope', 'roles', 'join', 'faq']);
 });
 
 test('public copy has no em or en dashes', () => {

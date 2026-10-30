@@ -82,8 +82,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
       class={`site-page site-page-${props.route.slice(1)}`}
       data-site-page={props.route.slice(1)}
     >
+      {/* No eyebrow pill: the document title and the nav highlight already name the page. */}
       <div class="site-wrap site-page-heading">
-        <Badge>{intro()[0]}</Badge>
         <h1 tabIndex={-1}>{intro()[1]}</h1>
         <p>{intro()[2]}</p>
       </div>
@@ -418,7 +418,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
         <Match when={props.route === '/privacy'}>
           <Band motion={props.motion} class="site-reading">
             <p class="site-draft-notice">
-              <Badge tone="clay">Draft pilot notice, subject to release review</Badge>
+              <Badge>Draft pilot notice, subject to release review</Badge>
             </p>
             <TextSection title="Information used by the pilot">
               <p>
@@ -477,7 +477,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
         <Match when={props.route === '/terms'}>
           <Band motion={props.motion} class="site-reading">
             <p class="site-draft-notice">
-              <Badge tone="clay">Draft pilot material, pending public-release review</Badge>
+              <Badge>Draft pilot material, pending public-release review</Badge>
             </p>
             <TextSection title="Purpose and status">
               <p>

@@ -6,7 +6,7 @@
   padding: 0 6px;
   border: 1px solid var(--line);
   border-bottom-width: 2px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--muted);
   font: 500 0.72rem/1 var(--font-mono);

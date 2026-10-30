@@ -7,7 +7,7 @@
 import { createSignal, For, Match, Show, Switch } from 'solid-js';
 import { createRemoteResource as createResource } from './resource';
 import { BookOpen, Download, ExternalLink, FileText, Library, SearchX, TriangleAlert } from 'lucide-solid';
-import { get, errorText, safeLink } from './api';
+import { get, errorText, RequestError, safeLink } from './api';
 import { scoped } from './App';
 import Pagination, { pageSuffix } from './Pagination';
 import {
@@ -24,7 +24,9 @@ import {
 import {
   effectiveText,
   filterSources,
+  formatDate,
   indexingText,
+  isAccessCode,
   kindText,
   locatorText,
   sourceBadge,
@@ -32,7 +34,7 @@ import {
 } from './app/workspace';
 import page from './app/Page.module.scss';
 
-const dateText = (iso: string) => new Date(iso).toLocaleDateString();
+const dateText = formatDate;
 
 export default function Sources(props: {
   institution: string;
@@ -101,8 +103,7 @@ export default function Sources(props: {
     source.error ||
     evidence.error ||
     versions.error ||
-    version.error ||
-    chunk.error;
+    version.error;
   const visible = () => filterSources(sources()?.items ?? [], query());
   return (
     <section>
@@ -111,7 +112,9 @@ export default function Sources(props: {
           {props.source ? 'Source reader' : 'Source library'}
         </h1>
         <p class={page.lede}>
-          Original documents shared with your account, with their versions and review status.
+          {props.source
+            ? 'One document and all of its editions. The current edition is marked.'
+            : 'Original documents shared with your account, with their versions and review status.'}
         </p>
       </Show>
       <Show when={props.unavailable && !props.institution}>
@@ -161,11 +164,14 @@ export default function Sources(props: {
             <TriangleAlert size={18} aria-hidden="true" />
             <div class={page.noticeBody}>
               <p>{errorText(error())}</p>
-              <div class={page.links}>
-                <Button size="sm" href="#/auth">
-                  Sign in
-                </Button>
-              </div>
+              {/* Offer sign-in only when the failure is about access, not for an outage or a missing item. */}
+              <Show when={error() instanceof RequestError && isAccessCode((error() as RequestError).code)}>
+                <div class={page.links}>
+                  <Button size="sm" href="#/auth">
+                    Sign in
+                  </Button>
+                </div>
+              </Show>
             </div>
           </div>
         </Show>
@@ -191,9 +197,7 @@ export default function Sources(props: {
                         return (
                           <li>
                             <a class={page.row} href={`#/sources/${s.id}`}>
-                              <span class={page.rowIcon} aria-hidden="true">
-                                <BookOpen size={20} />
-                              </span>
+                              <BookOpen class={cx(page.rowGlyph)} size={18} aria-hidden="true" />
                               <span class={page.rowText}>
                                 {s.title}
                                 <span class={page.meta}>{kindText(s.kind)}</span>
@@ -265,7 +269,11 @@ export default function Sources(props: {
                         </Badge>
                       </div>
                       <p class={page.small}>
-                        {indexingText(v.indexing)}. {effectiveText(v.effective_from, v.effective_until, dateText)}
+                        {indexingText(v.indexing)}.
+                        <Show when={v.effective_from || v.effective_until}>
+                          {' '}
+                          {effectiveText(v.effective_from, v.effective_until, dateText)}
+                        </Show>
                       </p>
                       <a
                         class={page.link}
@@ -313,6 +321,9 @@ export default function Sources(props: {
                 <p class={page.notice}>Expired version · historical citation</p>
               </Show>
               <blockquote class={page.quote}>{e().quote}</blockquote>
+              <Show when={chunk.error}>
+                <p class={page.small}>This passage could not be loaded. Open the original instead.</p>
+              </Show>
               <Show when={chunk()}>
                 <details class={page.details}>
                   <summary>Read source passage</summary>

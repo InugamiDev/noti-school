@@ -1,4 +1,5 @@
 // intent: the question composer, shadcn AI Elements Prompt Input anatomy: one bordered group, auto-growing textarea, bottom bar.
+//         When the draft reads as Vietnamese but English is selected, the bar offers the switch; it never switches silently.
 // status: done
 // next: callers own persistence (draft/language via lib/storage) and the actual ask request; this only emits onSubmit.
 // confidence: high for the keyboard contract (unit tested in lib/prompt.ts); medium for the JS auto-grow fallback (browser-only)
@@ -6,7 +7,7 @@ import { TextField as KTextField } from '@kobalte/core/text-field';
 import { ArrowUp } from 'lucide-solid';
 import { createEffect, on, Show, type JSX } from 'solid-js';
 import { cx } from './lib/cx';
-import { canSubmitPrompt, isPlainEnter, promptKeyAction, type AnswerLanguage } from './lib/prompt';
+import { canSubmitPrompt, isPlainEnter, looksVietnamese, promptKeyAction, type AnswerLanguage } from './lib/prompt';
 import { Kbd } from './Kbd';
 import { SegmentedToggle, type SegmentedOption } from './SegmentedToggle';
 import { Spinner } from './Spinner';
@@ -114,6 +115,11 @@ export function PromptInput(props: PromptInputProps) {
           <div class={styles.bar}>
             <Show when={props.school}>{school => school()()}</Show>
             <SegmentedToggle aria-label="Answer language" options={LANGUAGES} value={props.language} onChange={props.onLanguage} />
+            <Show when={props.language === 'en' && looksVietnamese(props.value)}>
+              <button type="button" class={styles.suggest} onClick={() => props.onLanguage('vi')}>
+                Answer in <span lang="vi">Tiếng Việt</span>?
+              </button>
+            </Show>
             <span class={styles.end}>
               <span class={styles.hint}>
                 <Show when={props.hint} fallback={<><Kbd>Enter</Kbd> to ask</>}>

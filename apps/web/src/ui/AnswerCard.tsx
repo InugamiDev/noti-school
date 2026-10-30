@@ -3,7 +3,7 @@
 // next: callers map API outcomes to states; abstained answers use no-answer, provider outages use unavailable.
 // confidence: high
 // Truthfulness rules enforced here: no "verified" label in any state; unavailable is role=alert and never shows answer text.
-import { CloudOff, FileQuestion, Square } from 'lucide-solid';
+import { CircleStop, CloudOff, FileQuestion } from 'lucide-solid';
 import { Match, Show, Switch, type JSX } from 'solid-js';
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';
@@ -20,7 +20,7 @@ interface AnswerCardCommon {
 
 export interface AnswerStateProps extends AnswerCardCommon {
   state: 'answer';
-  /** Leading label, e.g. <Badge tone="clay">Sample handbook, not HCMIU policy</Badge>. Never a "verified" label. */
+  /** Leading label, e.g. <Badge>Sample handbook, not HCMIU policy</Badge>. Never a "verified" label. */
   badge?: JSX.Element;
   /** Trailing header actions, e.g. a copy-answer icon button. */
   actions?: JSX.Element;
@@ -93,7 +93,7 @@ export function AnswerCard(props: AnswerCardProps) {
             <Show when={loading().onStop}>
               {stop => (
                 <Button variant="ghost" size="sm" class={styles.stop} onClick={() => stop()()}>
-                  <Square aria-hidden="true" />
+                  <CircleStop aria-hidden="true" />
                   Stop
                 </Button>
               )}

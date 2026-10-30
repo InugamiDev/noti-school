@@ -1,34 +1,11 @@
-// intent: the static landing sections between the hero and the request form, copy as in design/clay/reference/index.html.
+// intent: the landing sections between the hero and the request form. Each section has its own arrangement so the page
+//         reads as an argument, not a template: how (steps list + no-answer example), reads (document kinds + photo),
+//         scope (rules + one example account), roles (tabs with a small real-UI preview).
 // status: done
-// next: the mini previews are illustrations of real UI states, never real account data.
+// next: the previews are illustrations of real UI states, never real account data; copy stays university-neutral.
 // confidence: high
-import {
-  Bookmark,
-  BookOpen,
-  BookOpenCheck,
-  Building2,
-  ChartNoAxesColumn,
-  Check,
-  Clock,
-  FileQuestion,
-  FileSearch,
-  FileText,
-  Flag,
-  History,
-  Languages,
-  Layers,
-  Library,
-  Lock,
-  MessageSquare,
-  PenLine,
-  RotateCcw,
-  School,
-  Search,
-  ShieldCheck,
-  Upload,
-  UserRoundCheck,
-} from 'lucide-solid';
-import { For, type JSX } from 'solid-js';
+import { BookOpen, FileQuestion, FileText, Flag, Library, Lock, MessageSquare, RotateCcw } from 'lucide-solid';
+import { For } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import type { LucideIcon } from 'lucide-solid';
 import { Band } from '../site/Band';
@@ -45,7 +22,7 @@ interface SectionProps {
   motion: boolean;
 }
 
-function Heading(props: { id: string; title: string; lede?: string; light?: boolean }) {
+function Heading(props: { id: string; title: string; lede?: string }) {
   return (
     <>
       <h2 id={props.id} class={styles.secTitle} tabIndex={-1}>
@@ -56,10 +33,138 @@ function Heading(props: { id: string; title: string; lede?: string; light?: bool
   );
 }
 
+const steps = [
+  ['Find the passages', "Your question is matched against your school's approved documents, in English or Vietnamese."],
+  [
+    'Write only what they support',
+    'Each sentence of the answer must point to a passage. When no passage supports an answer, you get the limit and a next step instead.',
+  ],
+  ['Show you where', 'Every claim links to the document, edition, page and section, so you can read it yourself.'],
+] as const;
+
+export function HowSection(props: SectionProps & { onAskAgain: () => void }) {
+  return (
+    <Band motion={props.motion} id="how" labelledby="how-title">
+      <div class={`site-wrap ${styles.how}`}>
+        <div>
+          <Heading id="how-title" title="How an answer gets made" />
+          <ol class={styles.steps}>
+            <For each={steps}>
+              {([title, body], index) => (
+                <li>
+                  <span class={styles.stepNumber} aria-hidden="true">
+                    {index() + 1}
+                  </span>
+                  <h3>{title}</h3>
+                  <p>{body}</p>
+                </li>
+              )}
+            </For>
+          </ol>
+        </div>
+        <figure class={styles.howExample}>
+          <article class={`${styles.card} ${styles.noAnswer}`} aria-label="Example of a no-answer result">
+            <span class={styles.noAnswerIcon} aria-hidden="true">
+              <FileQuestion size={20} />
+            </span>
+            <h3>No supported answer</h3>
+            <p>Your school's approved sources don't cover dormitory pet rules.</p>
+            <ol>
+              <li>Search the source library for a related document.</li>
+              <li>Rephrase with a course code or form name.</li>
+              <li>Confirm with the responsible university office.</li>
+            </ol>
+            <div class={styles.actions}>
+              <Button size="sm" href="#/sources">
+                <Library aria-hidden="true" />
+                Open sources
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => props.onAskAgain()}>
+                <RotateCcw aria-hidden="true" />
+                Ask again
+              </Button>
+            </div>
+          </article>
+          <figcaption>What you see when the documents don't say.</figcaption>
+        </figure>
+      </div>
+    </Band>
+  );
+}
+
+// Sample locators show the citation format, not real documents.
+const kinds = [
+  ['Handbooks and regulations', 'Dated editions stay labelled, so an older rule is never shown as current.', 'sample · 2025 ed. · p. 31 · sec. 4.2'],
+  ['Forms and procedures', 'Steps for withdrawal, transcripts, leave of absence and appeals.', 'sample · form guide · step 3'],
+  ['Course information', 'Prerequisites, credits and schedules where your school publishes them.', 'sample · catalogue · p. 112'],
+  ['Either language', 'Ask in Vietnamese and read the answer in English, or the reverse. Quotes keep their original text.', 'sample · Quy chế đào tạo · Điều 12'],
+] as const;
+
+const PHOTO_PAGE =
+  'https://commons.wikimedia.org/wiki/File:Cozy_study_space_with_an_open_book,_fresh_apple,_and_laptop_on_a_desk_in_bright_natural_light.jpg';
+// Rendered width of the figure: the right grid column from lg (see .reads), otherwise the page width minus gutters.
+const PHOTO_SIZES = '(min-width: 1200px) 452px, (min-width: 960px) calc(40vw - 28px), calc(100vw - 32px)';
+
+export function ReadsSection(props: SectionProps) {
+  return (
+    <Band motion={props.motion} id="reads" labelledby="reads-title">
+      <div class={`site-wrap ${styles.reads}`}>
+        <div>
+          <Heading
+            id="reads-title"
+            title="What it reads"
+            lede="Only documents your university has reviewed and approved. Web pages and other schools' files are never used."
+          />
+          <ul class={styles.kinds}>
+            <For each={kinds}>
+              {([title, body, locator]) => (
+                <li>
+                  <h3>{title}</h3>
+                  <p>{body}</p>
+                  <span class={styles.kindLocator} lang={/[ạđếờ]/.test(locator) ? 'vi' : undefined}>
+                    {locator}
+                  </span>
+                </li>
+              )}
+            </For>
+          </ul>
+        </div>
+        {/* Illustrative stock photo (CC BY 2.0, see assets/photos/CREDITS.md); not a partner university's documents. */}
+        <figure class={styles.photo}>
+          <picture>
+            <source type="image/avif" srcset={`${studyAvif800} 800w, ${studyAvif1600} 1600w`} sizes={PHOTO_SIZES} />
+            <source type="image/webp" srcset={`${studyWebp800} 800w, ${studyWebp1600} 1600w`} sizes={PHOTO_SIZES} />
+            <img
+              src={studyJpg800}
+              srcset={`${studyJpg800} 800w, ${studyJpg1600} 1600w`}
+              sizes={PHOTO_SIZES}
+              width="1600"
+              height="1068"
+              loading="lazy"
+              decoding="async"
+              alt="An open, well-worn book on a stack of older books beside a laptop in daylight."
+            />
+          </picture>
+          <figcaption>
+            Illustrative photo, not a university document. Photo:{' '}
+            <a href={PHOTO_PAGE} target="_blank" rel="noopener noreferrer">
+              Shixart1985
+            </a>
+            ,{' '}
+            <a href="https://creativecommons.org/licenses/by/2.0/" target="_blank" rel="noopener noreferrer">
+              CC BY 2.0
+            </a>
+          </figcaption>
+        </figure>
+      </div>
+    </Band>
+  );
+}
+
 const rules = [
-  [UserRoundCheck, 'One account, one school', 'Your invitation decides which university you ask about.'],
-  [ShieldCheck, "Only that school's approved documents", 'An answer never mixes rules from another university.'],
-  [Lock, "Schools can't see each other", 'Documents, questions and feedback stay inside each university.'],
+  ['One account, one school', 'Your invitation decides which university you ask about.'],
+  ["Only that school's approved documents", 'An answer never mixes rules from another university.'],
+  ["Schools can't see each other", 'Documents, questions and feedback stay inside each university.'],
 ] as const;
 
 export function ScopeSection(props: SectionProps) {
@@ -70,19 +175,14 @@ export function ScopeSection(props: SectionProps) {
           <Heading
             id="scope-title"
             title="Every school gets its own sources"
-            lede="noti.school works for any university, but each account belongs to one school. That keeps answers accurate and each school's documents private."
+            lede="noti.school works for any university, and each account belongs to one school. That keeps answers accurate and each school's documents private."
           />
           <ul class={styles.rules}>
             <For each={rules}>
-              {([icon, title, body]) => (
+              {([title, body]) => (
                 <li>
-                  <span class={styles.ruleIcon} aria-hidden="true">
-                    <Dynamic component={icon} size={20} />
-                  </span>
-                  <div>
-                    <strong>{title}</strong>
-                    <span>{body}</span>
-                  </div>
+                  <strong>{title}</strong>
+                  <span>{body}</span>
                 </li>
               )}
             </For>
@@ -97,89 +197,51 @@ export function ScopeSection(props: SectionProps) {
               <div class={styles.accountName}>Example student</div>
               <div class={styles.accountSub}>Signed in with an invitation</div>
             </div>
-            <Badge tone="sage" dot>
-              Invited
-            </Badge>
+            <Badge>Example account</Badge>
           </div>
-          <div class={styles.accountRow}>
-            <School size={18} aria-hidden="true" />
-            University<span>HCMIU</span>
-          </div>
-          <div class={styles.accountRow}>
-            <Library size={18} aria-hidden="true" />
-            Sources you can ask about<span>HCMIU, approved only</span>
-          </div>
-          <div class={styles.accountRow}>
-            <Languages size={18} aria-hidden="true" />
-            Answer language<span lang="vi">English or Tiếng Việt</span>
-          </div>
-          <div class={`${styles.accountRow} ${styles.locked}`}>
-            <Building2 size={18} aria-hidden="true" />
-            Other universities
-            <span>
-              <Lock size={14} aria-hidden="true" />
-              Not searchable
-            </span>
-          </div>
+          <dl class={styles.accountRows}>
+            <div>
+              <dt>University</dt>
+              <dd>Your school</dd>
+            </div>
+            <div>
+              <dt>Sources you can ask about</dt>
+              <dd>Your school's, approved only</dd>
+            </div>
+            <div>
+              <dt>Answer language</dt>
+              <dd lang="vi">English or Tiếng Việt</dd>
+            </div>
+            <div class={styles.locked}>
+              <dt>Other universities</dt>
+              <dd>
+                <Lock size={14} aria-hidden="true" />
+                Not searchable
+              </dd>
+            </div>
+          </dl>
         </article>
       </div>
     </Band>
   );
 }
 
-const steps = [
-  [Search, 'Find the passages', "Your question is matched against your school's approved documents, in either language."],
-  [PenLine, 'Write only what they support', 'The answer is limited to what those passages say. Claims without support are removed.'],
-  [Bookmark, 'Show you where', 'Each claim links to the document, edition, page and section, so you can read it yourself.'],
-] as const;
-
-export function HowSection(props: SectionProps) {
-  return (
-    <Band motion={props.motion} id="how" labelledby="how-title">
-      <div class="site-wrap">
-        <Heading id="how-title" title="How an answer gets made" lede="Three steps, and you can check each one." />
-        <ol class={styles.steps}>
-          <For each={steps}>
-            {([icon, title, body], index) => (
-              <li class={`${styles.card} ${styles.step}`}>
-                <span class={styles.stepNumber} aria-hidden="true">
-                  0{index() + 1}
-                </span>
-                <span class={styles.stepIcon} aria-hidden="true">
-                  <Dynamic component={icon} size={20} />
-                </span>
-                <h3>{title}</h3>
-                <p>{body}</p>
-              </li>
-            )}
-          </For>
-        </ol>
-      </div>
-    </Band>
-  );
-}
-
-type Feature = readonly [LucideIcon, string, string];
+type Feature = readonly [string, string];
 type MiniRow = readonly [LucideIcon, string, string, BadgeTone];
 
 function RolePanel(props: { features: readonly Feature[]; heading: string; rows: readonly MiniRow[] }) {
   return (
     <div class={styles.rolePanel}>
-      <div class={styles.card}>
-        <ul class={styles.features}>
-          <For each={props.features}>
-            {([icon, title, body]) => (
-              <li>
-                <Dynamic component={icon} size={18} aria-hidden="true" />
-                <div>
-                  <strong>{title}</strong>
-                  <span>{body}</span>
-                </div>
-              </li>
-            )}
-          </For>
-        </ul>
-      </div>
+      <ul class={styles.features}>
+        <For each={props.features}>
+          {([title, body]) => (
+            <li>
+              <strong>{title}</strong>
+              <span>{body}</span>
+            </li>
+          )}
+        </For>
+      </ul>
       <div class={styles.card}>
         <div class={styles.mini} role="group" aria-label={`Preview: ${props.heading}`}>
           <span class={styles.miniHeading}>{props.heading}</span>
@@ -207,7 +269,7 @@ export function RolesSection(props: SectionProps) {
         <Heading
           id="roles-title"
           title="Built for everyone at a university"
-          lede="Students ask. Staff check what students are told. Each school's source team decides what counts as evidence."
+          lede="The same cited answer serves the student who asked, the advisor who checks it and the team that keeps the documents current."
         />
         <Tabs
           aria-label="Roles"
@@ -219,9 +281,9 @@ export function RolesSection(props: SectionProps) {
               content: (
                 <RolePanel
                   features={[
-                    [MessageSquare, 'Ask in your own words', 'English or Tiếng Việt, any time, without waiting for office hours.'],
-                    [BookOpenCheck, 'Check before you act', 'Open the cited page before you submit a form or miss a deadline.'],
-                    [History, 'Find past answers', 'Your question history keeps the sources it used.'],
+                    ['Ask in your own words', 'English or Tiếng Việt, any time, without waiting for office hours.'],
+                    ['Check before you act', 'Open the cited page before you submit a form or plan around a deadline.'],
+                    ['Find past answers', 'Answers you open keep the sources they used.'],
                   ]}
                   heading="Your history"
                   rows={[
@@ -238,13 +300,13 @@ export function RolesSection(props: SectionProps) {
               content: (
                 <RolePanel
                   features={[
-                    [FileSearch, 'See exactly what a student saw', 'Answers carry their citations, so you can confirm the same page.'],
-                    [Flag, 'Spot outdated rules', 'Reports point to the claim and the passage, not a vague complaint.'],
-                    [Clock, 'Fewer repeat questions', 'Routine questions get answered from the handbook you already wrote.'],
+                    ['See exactly what a student saw', 'Answers carry their citations, so you can confirm the same page.'],
+                    ['Spot outdated rules', 'Reports point to the claim and the passage, not a vague complaint.'],
+                    ['Fewer repeat questions', 'Routine questions get answered from the handbook you already wrote.'],
                   ]}
                   heading="Reported answers"
                   rows={[
-                    [Flag, 'Cites the 2023 edition', 'Review', 'clay'],
+                    [Flag, 'Cites the 2023 edition', 'In review', 'clay'],
                     [Flag, 'Missing form link', 'Open', 'neutral'],
                   ]}
                 />
@@ -256,9 +318,9 @@ export function RolesSection(props: SectionProps) {
               content: (
                 <RolePanel
                   features={[
-                    [Upload, 'Upload and approve', 'Nothing becomes evidence until your team publishes it.'],
-                    [Layers, 'Keep editions straight', 'Superseded versions are labelled, never silently replaced.'],
-                    [ChartNoAxesColumn, 'See the gaps', 'Unanswered questions show which documents are missing.'],
+                    ['Upload and approve', 'Nothing becomes evidence until your team publishes it.'],
+                    ['Keep editions straight', 'Superseded versions are labelled, never silently replaced.'],
+                    ['See the gaps', 'Unanswered questions show which documents are missing.'],
                   ]}
                   heading="Your school's library"
                   rows={[
@@ -271,143 +333,6 @@ export function RolesSection(props: SectionProps) {
             },
           ]}
         />
-      </div>
-    </Band>
-  );
-}
-
-export function HonestSection(props: SectionProps & { onAskAgain: () => void }) {
-  return (
-    <Band motion={props.motion} labelledby="honest-title">
-      <div class={`site-wrap ${styles.honest}`}>
-        <div>
-          <Heading
-            id="honest-title"
-            title="If the documents don't say, it won't guess."
-            lede="A missing answer is safer than a made-up rule. You get a clear limit and a next step instead."
-          />
-        </div>
-        <article class={`${styles.card} ${styles.noAnswer}`} aria-label="Example of a no-answer result">
-          <span class={styles.noAnswerIcon} aria-hidden="true">
-            <FileQuestion size={20} />
-          </span>
-          <h3>No supported answer</h3>
-          <p>Your school's approved sources don't cover dormitory pet rules.</p>
-          <ul>
-            <For
-              each={[
-                'Search the source library for a related document',
-                'Rephrase with a course code or form name',
-                'Confirm with the responsible university office',
-              ]}
-            >
-              {step => (
-                <li>
-                  <Check size={16} aria-hidden="true" />
-                  {step}
-                </li>
-              )}
-            </For>
-          </ul>
-          <div class={styles.actions}>
-            <Button size="sm" href="#/sources">
-              <Library aria-hidden="true" />
-              Open sources
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => props.onAskAgain()}>
-              <RotateCcw aria-hidden="true" />
-              Ask again
-            </Button>
-          </div>
-        </article>
-      </div>
-    </Band>
-  );
-}
-
-function BentoCard(props: { class?: string | undefined; title: string; body: string; children?: JSX.Element }) {
-  return (
-    <article class={`${styles.card} ${styles.bentoCard} ${props.class ?? ''}`}>
-      <div>
-        <h3>{props.title}</h3>
-        <p>{props.body}</p>
-      </div>
-      {props.children}
-    </article>
-  );
-}
-
-export function ReadsSection(props: SectionProps) {
-  return (
-    <Band motion={props.motion} id="reads" labelledby="reads-title">
-      <div class="site-wrap">
-        <Heading
-          id="reads-title"
-          title="What it reads"
-          lede="Only documents your university has reviewed and approved. Nothing from the open web, nothing from other schools."
-        />
-        <div class={styles.bento}>
-          <BentoCard
-            class={styles.bentoWide}
-            title="Handbooks and regulations"
-            body="Student handbooks, academic regulations and their dated editions. Older versions stay labelled."
-          >
-            {/* Illustrative stock photo (CC BY 2.0, see assets/photos/CREDITS.md); not a partner university's documents. */}
-            <figure class={styles.photo}>
-              <picture>
-                <source type="image/avif" srcset={`${studyAvif800} 800w, ${studyAvif1600} 1600w`} sizes="(min-width: 1024px) 520px, 92vw" />
-                <source type="image/webp" srcset={`${studyWebp800} 800w, ${studyWebp1600} 1600w`} sizes="(min-width: 1024px) 520px, 92vw" />
-                <img
-                  src={studyJpg800}
-                  srcset={`${studyJpg800} 800w, ${studyJpg1600} 1600w`}
-                  sizes="(min-width: 1024px) 520px, 92vw"
-                  width="1600"
-                  height="1068"
-                  loading="lazy"
-                  decoding="async"
-                  alt="An open, well-worn book on a stack of older books beside a laptop in daylight."
-                />
-              </picture>
-              <figcaption>
-                Photo:{' '}
-                <a href="https://commons.wikimedia.org/wiki/File:Cozy_study_space_with_an_open_book,_fresh_apple,_and_laptop_on_a_desk_in_bright_natural_light.jpg" target="_blank" rel="noopener noreferrer">
-                  Shixart1985
-                </a>
-                ,{' '}
-                <a href="https://creativecommons.org/licenses/by/2.0/" target="_blank" rel="noopener noreferrer">
-                  CC BY 2.0
-                </a>
-              </figcaption>
-            </figure>
-          </BentoCard>
-          <BentoCard class={styles.bentoNarrow} title="Forms and procedures" body="Steps for common requests.">
-            <div class={styles.tags}>
-              <For each={['Withdrawal', 'Transcript', 'Leave of absence', 'Appeal']}>{tag => <Badge>{tag}</Badge>}</For>
-            </div>
-          </BentoCard>
-          <BentoCard class={styles.bentoHalf} title="Course information" body="Prerequisites, credits and schedules where published.">
-            <dl class={styles.course}>
-              <div>
-                <dt>Calculus 1</dt>
-                <dd>sample · 4 credits</dd>
-              </div>
-              <div>
-                <dt>Physics 2</dt>
-                <dd>sample · needs Physics 1</dd>
-              </div>
-            </dl>
-          </BentoCard>
-          <BentoCard
-            class={styles.bentoHalf}
-            title="Ask in either language"
-            body="Ask in one language and read the answer in the other. Sources keep their original text."
-          >
-            <p class={styles.lang} aria-hidden="true">
-              <span lang="vi">Tiếng Việt</span>
-              <span>English</span>
-            </p>
-          </BentoCard>
-        </div>
       </div>
     </Band>
   );

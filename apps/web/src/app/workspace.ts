@@ -131,3 +131,19 @@ export function effectiveText(from: string | null, until: string | null, format:
 export function filterSources<T extends Pick<Source, 'title' | 'kind'>>(items: readonly T[], query: string): T[] {
   return items.filter(item => matchesQuery(query, item.title, kindText(item.kind)));
 }
+
+/** A date in the reader's locale with an unambiguous month name ("25 Sept 2026", "25 thg 9, 2026"), never 9/25 vs 25/9. */
+export function formatDate(iso: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso));
+}
+
+/** Reader-facing names for feedback categories, shared by the report form and the admin list. */
+export const feedbackCategoryLabels = {
+  unsupported: 'Unsupported claim',
+  incorrect: 'Incorrect',
+  outdated: 'Outdated source',
+  other: 'Other',
+} as const satisfies Record<string, string>;
+
+/** Reader-facing names for feedback review states. */
+export const feedbackStatusLabels = { open: 'Open', reviewed: 'Reviewed', resolved: 'Resolved' } as const;

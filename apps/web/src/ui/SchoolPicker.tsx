@@ -78,8 +78,9 @@ export function SchoolPicker(props: SchoolPickerProps) {
   );
 
   return (
-    <Popover open={open()} onOpenChange={onOpenChange} placement="top-start" gutter={10}>
-      <Popover.Trigger class={cx(styles.trigger, props.class)} aria-label={`School: ${label()}. Change school`}>
+    <Popover open={open()} onOpenChange={onOpenChange} placement="bottom-start" gutter={8}>
+      {/* Opens below the bar (flipping only when the space runs out) so it never covers the headline being read. */}
+      <Popover.Trigger class={cx(styles.trigger, props.class)} aria-label={`School: ${label()}. Change school`} title={label()}>
         <SchoolIcon class={cx(styles.school)} size={16} aria-hidden="true" />
         <span class={styles.name}>{label()}</span>
         <ChevronsUpDown class={cx(styles.chevron)} size={14} aria-hidden="true" />

@@ -44,7 +44,8 @@ test('admin is membership gated; source creation, upload and actions use real en
 });
 test('student cannot see admin controls',async({page})=>{await setup(page);await page.goto('/#/admin');await expect(page.getByText('Sign in with an administrator membership')).toBeVisible();await expect(page.getByRole('button',{name:'Create source'})).toHaveCount(0);});
 test('auth reset callback and invitation header are wired without persisting secrets',async({page})=>{
- await setup(page);await page.goto('/?token=synthetic-reset-token#/auth');await expect(page.locator('form h2')).toHaveText('Reset password');expect(page.url()).not.toContain('token=');await page.getByLabel('New password (when using a reset token)').fill('synthetic-new-password');const reset=page.waitForRequest(r=>r.url().endsWith('/reset-password'));await page.getByRole('button',{name:'Continue',exact:true}).click();expect((await reset).postDataJSON()).toEqual({token:'synthetic-reset-token',newPassword:'synthetic-new-password'});
+ // Signed out: creating an account with an invitation is a signed-out flow; signed-in visitors get no sign-up form.
+ await setup(page);await page.route('**/api/v1/me',route=>route.fulfill({status:401,json:{error:{code:'unauthenticated',message:'Synthetic',request_id:id,retryable:false}}}));await page.goto('/?token=synthetic-reset-token#/auth');await expect(page.locator('form h2')).toHaveText('Reset password');expect(page.url()).not.toContain('token=');await page.getByLabel('New password (when using a reset token)').fill('synthetic-new-password');const reset=page.waitForRequest(r=>r.url().endsWith('/reset-password'));await page.getByRole('button',{name:'Continue',exact:true}).click();expect((await reset).postDataJSON()).toEqual({token:'synthetic-reset-token',newPassword:'synthetic-new-password'});
  await page.getByRole('tab',{name:'Create account',exact:true}).click();await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Name',{exact:true}).fill('Synthetic');await page.getByLabel('Password',{exact:true}).fill('synthetic-password');await page.getByLabel('Invitation token',{exact:true}).fill('synthetic-invite');const signup=page.waitForRequest(r=>r.url().endsWith('/sign-up/email'));await page.locator('form').getByRole('button',{name:'Create account',exact:true}).click();expect((await signup).headers()['x-noti-invitation']).toBe('synthetic-invite');expect(await page.evaluate(()=>JSON.stringify(sessionStorage))).not.toContain('synthetic-password');
 });
 test('source pagination sends opaque cursor and keeps authenticated scope',async({page})=>{
@@ -100,7 +101,7 @@ test('transition leaves one composer and disabled identity remains explicit',asy
  await page.goto('/');await page.getByLabel('Your question').fill('Synthetic transition');await page.getByRole('button',{name:'Ask',exact:true}).click();
  await expect(page.getByLabel('Your question')).toHaveCount(1);await expect(page.locator('[data-site-page="home"]')).toHaveCount(0);
  await page.route('**/capabilities',route=>{const cap={state:'disabled',reason:'not_configured'};return route.fulfill({json:{mode:'disabled',answers:cap,indexing:cap,discovery:cap,google:cap,email:cap,identity:cap}});});
- await page.goto('/#/auth');await expect(page.getByRole('button',{name:'Continue with Google'})).toBeDisabled();await expect(page.getByRole('button',{name:'Request account deletion'})).toBeDisabled();
+ await page.goto('/#/auth');await expect(page.getByRole('button',{name:'Redeem invitation'})).toBeDisabled();await expect(page.getByRole('button',{name:'Request account deletion'})).toBeDisabled();
 });
 
 test('graph administration uses provenance contracts and exposes unavailable writes',async({page})=>{

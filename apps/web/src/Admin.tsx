@@ -6,7 +6,7 @@
 //       Until identity and each first load settle, the cards render as shells with skeletons, never the forbidden notice.
 // confidence: high
 import { createMemo, createSignal, For, Show, onCleanup, type Resource } from 'solid-js';
-import { CircleAlert, Download, RefreshCw, ShieldAlert } from 'lucide-solid';
+import { ChevronRight, CircleAlert, Download, RefreshCw, ShieldAlert } from 'lucide-solid';
 import { createRemoteResource as createResource } from './resource';
 import { SourceCreate, VersionCreate, VersionAction, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction } from '@noti/contracts';
 import { get, post, request, errorText, readAnswer, safeLink } from './api';
@@ -14,7 +14,7 @@ import { Schemas } from '@noti/contracts';
 import { scoped } from './App';
 import Pagination, { pageSuffix } from './Pagination';
 import { Badge, Button, cx, LoadingRegion, Select, Skeleton, SkeletonText, TextField } from './ui';
-import { answerPresentation, indexingText, versionBadge } from './app/workspace';
+import { answerPresentation, feedbackCategoryLabels, feedbackStatusLabels, indexingText, versionBadge } from './app/workspace';
 import page from './app/Page.module.scss';
 import styles from './app/Admin.module.scss';
 const kinds = [
@@ -81,7 +81,7 @@ function PassageSkeleton() {
 }
 // True once a resource has produced a value or an error; later refetches keep their content on screen.
 const settled = (resource: Resource<unknown>) => createMemo((done: boolean) => done || resource() !== undefined || !!resource.error, false);
-export default function Admin(props: { institution: string; allowed: boolean; pending: boolean; since?: number }) {
+export default function Admin(props: { institution: string; allowed: boolean; identityUnavailable?: boolean; pending: boolean; since?: number }) {
   let disposed = false;
   onCleanup(() => { disposed = true; });
   const [selected, setSelected] = createSignal(''),
@@ -183,17 +183,22 @@ export default function Admin(props: { institution: string; allowed: boolean; pe
           <div class={page.notice}>
             <ShieldAlert size={18} aria-hidden="true" />
             <div class={page.noticeBody}>
-              <p>Sign in with an administrator membership to manage this collection.</p>
-              <div class={page.links}>
-                <Button size="sm" href="#/auth">Sign in</Button>
-              </div>
+              <Show
+                when={!props.identityUnavailable}
+                fallback={<p>Your account could not be checked right now, so administration is unavailable. Try again in a moment.</p>}
+              >
+                <p>Sign in with an administrator membership to manage this collection.</p>
+                <div class={page.links}>
+                  <Button size="sm" href="#/auth">Sign in</Button>
+                </div>
+              </Show>
             </div>
           </div>
         }
       >
         <div class={styles.grid}>
           <section class={cx(page.card, styles.section)} aria-labelledby="admin-sources">
-            <h2 id="admin-sources" class={styles.h2}>Sources & versions</h2>
+            <h2 id="admin-sources" class={styles.h2}>Sources and versions</h2>
             <LoadingRegion
               loading={props.pending || !sourcesSettled()}
               since={props.since}
@@ -257,6 +262,7 @@ export default function Admin(props: { institution: string; allowed: boolean; pe
               <div class={styles.divider} />
               <Select
                 label="Select source"
+                placeholder="Pick a source to see its versions"
                 options={sourceOptions()}
                 value={selected()}
                 onChange={(value) => {setSelected(value);setVersionCursor('');setReviewVersion('');setChunkCursor('');}}
@@ -510,8 +516,8 @@ export default function Admin(props: { institution: string; allowed: boolean; pe
                   {(f) => (
                     <article class={page.item}>
                       <div class={page.itemHead}>
-                        <h3 class={page.h3}>{f.category}</h3>
-                        <Badge tone={f.status === 'open' ? 'clay' : f.status === 'resolved' ? 'sage' : 'neutral'} dot>{f.status}</Badge>
+                        <h3 class={page.h3}>{feedbackCategoryLabels[f.category]}</h3>
+                        <Badge tone={f.status === 'open' ? 'clay' : f.status === 'resolved' ? 'sage' : 'neutral'} dot>{feedbackStatusLabels[f.status]}</Badge>
                       </div>
                       <Show when={f.comment}><p class={page.passage}>{f.comment}</p></Show>
                       <div class={page.actions}>
@@ -591,7 +597,10 @@ export default function Admin(props: { institution: string; allowed: boolean; pe
           }
         >
           <details class={cx(page.card, styles.graph)}>
-            <summary>Evidence graph administration</summary>
+            <summary>
+              <ChevronRight class={cx(styles.chevron)} size={18} aria-hidden="true" />
+              Evidence graph administration
+            </summary>
             <p class={page.small}>Relations require a readable evidence chunk in this institution. Creating a candidate does not approve evidence or establish coverage.</p>
             <form class={page.form} novalidate onSubmit={e => {
               e.preventDefault();

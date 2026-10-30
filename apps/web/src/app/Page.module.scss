@@ -38,6 +38,11 @@
   max-width: 60ch;
 }
 
+// Space between a page header and its first block, matching the Sources toolbar and Admin grid.
+.after {
+  height: 28px;
+}
+
 .h2 {
   margin: 40px 0 16px;
   font-size: 1.375rem;
@@ -171,9 +176,15 @@
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   background: var(--clay-soft);
   color: var(--clay);
+}
+
+// A plain leading glyph for list rows: rows are not cards, and the accent stays for actions and evidence.
+.rowGlyph {
+  flex: none;
+  color: var(--muted);
 }
 
 .rowText {
@@ -202,7 +213,7 @@
 
 @media (max-width: 520px) {
   .rowEnd {
-    margin-left: 54px;
+    margin-left: 32px;
   }
 }
 
@@ -327,7 +338,7 @@
   min-width: 0;
   min-height: 44px;
   padding: 10px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-border);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);

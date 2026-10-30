@@ -35,7 +35,7 @@ import {
 import Sources from './Sources';
 import Auth from './Auth';
 import Admin from './Admin';
-import { PilotNotice, SiteHeader, SiteFooter } from './site/SiteShell';
+import { isWorkspaceRoute, PilotNotice, SiteHeader, SiteFooter } from './site/SiteShell';
 import { isSiteRoute, parseHash, sitePages, type LandingSection } from './site/routes';
 import { siteCommands } from './site/commands';
 import MarketingPages from './site/MarketingPages';
@@ -92,7 +92,7 @@ export default function App() {
   const [me, { refetch: refreshMe, mutate: setMe }] = createResource(() => get('/api/v1/me', 'Me'));
   // Unknown is not "no": until identity and the school list settle, views render loading, never signed out or unavailable.
   const session = createMemo<SessionState>(
-    (previous) => deriveSession({ loading: me.loading, present: !!me() }, previous),
+    (previous) => deriveSession({ loading: me.loading, present: !!me(), failed: identityOutage(me.error) }, previous),
     'loading',
   );
   const institutionsState = createMemo<InstitutionsState>(
@@ -222,7 +222,9 @@ export default function App() {
     [error, setError] = createSignal(''),
     // RequestError code of the last ask failure ('cancelled' after Stop), so outages render as the unavailable state.
     [errorCode, setErrorCode] = createSignal<string>(),
-    [answer, setAnswer] = createSignal<AnswerOutput>();
+    [answer, setAnswer] = createSignal<AnswerOutput>(),
+    // The question behind the answer on screen, echoed above it; empty for answers opened from history.
+    [asked, setAsked] = createSignal('');
   const [citation, setCitation] = createSignal('');
   const [conversation, setConversation] = createSignal<{ id: string; institution: string }>();
   const [historyCursor, setHistoryCursor] = createSignal('');
@@ -247,6 +249,8 @@ export default function App() {
     history()?.owner === me()?.identity.user_id && history()?.institution === institution()
       ? history()
       : undefined;
+  const admin = () =>
+    me()?.memberships.some((m) => m.institution_id === institution() && m.role === 'admin') ?? false;
   function member() {
     return me()?.memberships.some((m) => m.institution_id === institution());
   }
@@ -287,6 +291,7 @@ export default function App() {
       setDraft(nextDraft);
       saveDraft(nextDraft, owner, restoredConversation);
       setAnswer(undefined);
+      setAsked('');
       setConversation(restoredConversation);
       setCitation('');
       setError('');
@@ -308,6 +313,7 @@ export default function App() {
     setMe(undefined);
     clearAuthCallback();
     setAnswer(undefined);
+    setAsked('');
     setConversation(undefined);
     setCitation('');
     setFeedback(false);
@@ -364,6 +370,7 @@ export default function App() {
     }
     setBusy(true);
     setAnswer(undefined);
+    setAsked(parsed.data.question);
     const active = new AbortController();
     controller = active;
     saveDraft(draft(), draftOwner, previous);
@@ -394,6 +401,8 @@ export default function App() {
       if (result.institution_id !== institution()) throw new Error('Scope mismatch');
       setAnswer(result);
       setConversation({ id: result.conversation_id, institution: result.institution_id });
+      // The question is answered and echoed above the answer; an empty composer prevents resending it by accident.
+      updateDraft('');
     } catch (e) {
       if (!active.signal.aborted && owner === accessScope() && controller === active) {
         setError(errorText(e));
@@ -502,8 +511,9 @@ export default function App() {
       >
         Skip to content
       </a>
-      <PilotNotice />
-      <SiteHeader route={route()} session={session()} onSearch={() => commandMenu.setOpen(true)} />
+      {/* Marketing chrome: hidden on workspace routes by route, not by identity, so resolving Me never shifts the page. */}
+      <PilotNotice hidden={isWorkspaceRoute(route())} />
+      <SiteHeader route={route()} session={session()} admin={admin()} onSearch={() => commandMenu.setOpen(true)} />
       <main id="main" tabIndex={-1}>
         <Show when={route() === '/'}>
           <Landing
@@ -546,6 +556,7 @@ export default function App() {
         </Show>
         <Show when={route() === '/answer'}>
           <AnswerView
+            question={asked()}
             school={memberSchool()}
             session={session()}
             schoolPending={
@@ -618,11 +629,8 @@ export default function App() {
                   institution={institution()}
                   pending={workspacePending()}
                   since={waitSince()}
-                  allowed={
-                    me()?.memberships.some(
-                      (m) => m.institution_id === institution() && m.role === 'admin',
-                    ) ?? false
-                  }
+                  allowed={admin()}
+                  identityUnavailable={session() === 'unavailable'}
                 />
               )}
             </Show>
@@ -649,6 +657,7 @@ export default function App() {
               answerNext={prior()?.next_cursor}
               onAnswerCursor={setHistoryCursor}
               onView={(a) => {
+                setAsked('');
                 setAnswer(readAnswer(a));
                 setConversation({ id: a.conversation_id, institution: a.institution_id });
                 location.hash = '/answer';
@@ -706,7 +715,7 @@ export default function App() {
           </div>
         </Show>
       </main>
-      <SiteFooter paused={paused()} reduced={reduced()} toggle={() => setPaused((v) => !v)} />
+      <SiteFooter route={route()} paused={paused()} reduced={reduced()} toggle={() => setPaused((v) => !v)} />
       <CommandMenu
         open={commandMenu.open()}
         onOpenChange={commandMenu.setOpen}
@@ -716,6 +725,11 @@ export default function App() {
       <Toaster />
     </div>
   );
+}
+/** A failed Me read that is not "not signed in" (401/403) is an outage: the session is unknown, not signed out. */
+function identityOutage(error: unknown): boolean {
+  if (!error) return false;
+  return !(error instanceof RequestError && (error.status === 401 || error.status === 403));
 }
 function historyReplace(path: string) {
   window.history.replaceState(null, '', `#${path}`);

@@ -23,6 +23,13 @@ test('identity changes once the refetch settles', () => {
   assert.equal(deriveSession({ loading: false, present: true }, 'signed-out'), 'signed-in');
 });
 
+test('an identity outage is unavailable, not signed out', () => {
+  assert.equal(deriveSession({ loading: false, present: false, failed: true }, 'loading'), 'unavailable');
+  assert.equal(deriveSession({ loading: false, present: false, failed: true }, 'signed-in'), 'unavailable');
+  assert.equal(deriveSession({ loading: true, present: false, failed: true }, 'unavailable'), 'unavailable');
+  assert.equal(deriveSession({ loading: false, present: true, failed: false }, 'unavailable'), 'signed-in');
+});
+
 test('the school list is loading, ready or unavailable', () => {
   assert.equal(deriveInstitutions({ loading: true, present: false }), 'loading');
   assert.equal(deriveInstitutions({ loading: false, present: true }, 'loading'), 'ready');

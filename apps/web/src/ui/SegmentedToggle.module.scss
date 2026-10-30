@@ -10,7 +10,7 @@
 
 .item {
   position: relative;
-  height: 30px;
+  height: 34px;
   padding: 0 12px;
   border: 0;
   border-radius: var(--r-full);
@@ -28,7 +28,7 @@
   &::after {
     content: '';
     position: absolute;
-    inset: -7px -1px;
+    inset: -5px -1px;
   }
 
   &[data-pressed] {

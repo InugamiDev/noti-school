@@ -66,6 +66,25 @@
   padding: 0 10px 10px 12px;
 }
 
+.suggest {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--ink);
+  font: 600 0.8125rem/1 var(--font-body);
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast);
+
+  &:hover {
+    border-color: var(--clay);
+    background: var(--clay-soft);
+  }
+}
+
 // Hint, counter and send travel as one group, so a wrapping bar keeps send at the right end.
 .end {
   display: flex;

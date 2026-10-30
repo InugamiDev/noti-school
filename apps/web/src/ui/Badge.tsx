@@ -5,7 +5,7 @@ import styles from './Badge.module.scss';
 export type BadgeTone = 'neutral' | 'sage' | 'clay' | 'danger';
 
 export interface BadgeProps {
-  /** neutral (default) for superseded/meta, sage approved, clay under review or sample labels, danger unavailable. */
+  /** neutral (default) for superseded, meta, sample and demo labels; sage approved; clay under review only; danger unavailable. */
   tone?: BadgeTone;
   /** Shows a leading status dot in the current colour. */
   dot?: boolean;

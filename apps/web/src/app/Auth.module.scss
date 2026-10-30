@@ -30,15 +30,16 @@
   display: grid;
   gap: 8px;
 
-  // Five modes do not fit one pill row on phones; scroll the track instead of wrapping it into a blob.
-  // The extra block padding keeps the 44px trigger hit areas inside the scroll box.
+  // At most four modes per state; on phones the pill track wraps rather than hiding tabs behind a scroll.
   [role='tablist'] {
-    flex-wrap: nowrap;
+    justify-self: start;
     max-width: 100%;
-    padding-block: 5px;
-    overflow-x: auto;
-    scrollbar-width: none;
+    border-radius: var(--r-md);
   }
+}
+
+.panelTitle {
+  margin-bottom: 12px;
 }
 
 .google {

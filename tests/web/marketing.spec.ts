@@ -186,10 +186,15 @@ test("all website links resolve to known routes or real in-page targets", async 
           href,
         ).toBe(true);
       } else {
+        // The contact profile, plus the CC BY 2.0 attribution the stock photo's licence requires.
         expect(
-          href,
-          "Only the confirmed public contact profile is an approved external website destination",
-        ).toBe("https://github.com/InugamiDev");
+          [
+            "https://github.com/InugamiDev",
+            "https://commons.wikimedia.org/wiki/File:Cozy_study_space_with_an_open_book,_fresh_apple,_and_laptop_on_a_desk_in_bright_natural_light.jpg",
+            "https://creativecommons.org/licenses/by/2.0/",
+          ],
+          "Only the contact profile and the photo credit are approved external website destinations",
+        ).toContain(href);
       }
       if (link.target === "_blank") expect(link.rel ?? "", href).toMatch(/\bnoopener\b/);
     }
@@ -334,7 +339,8 @@ test("command menu opens with Ctrl+K and the search button, runs commands and as
   await page.keyboard.press("Enter");
   await page.keyboard.press("Control+k");
   await menu.getByRole("combobox").fill("Thủ tục bảo lưu ở đâu zz-synthetic");
-  await expect(menu).toContainText("No results. Press Enter to ask it as a question.");
+  // Unmatched text is a selectable row, not an instruction.
+  await expect(menu.getByRole("option")).toHaveText(["Ask “Thủ tục bảo lưu ở đâu zz-synthetic”"]);
   await page.keyboard.press("Enter");
   const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
   await expect(prompt).toHaveValue("Thủ tục bảo lưu ở đâu zz-synthetic");
@@ -409,18 +415,18 @@ test("request form validates inline and never pretends to send", async ({ page, 
   const form = page.getByRole("form", { name: "Request your university" });
   await form.scrollIntoViewIfNeeded();
   const before = marketingAudit.api.length;
-  await form.getByRole("button", { name: "Send request" }).click();
+  await form.getByRole("button", { name: "Check details" }).click();
   const university = form.getByRole("textbox", { name: "University" });
   await expect(university).toHaveAttribute("aria-invalid", "true");
   await expect(university).toBeFocused();
   await expect(form).toContainText("Enter your university's name.");
   await university.fill("Synthetic University");
   await form.getByRole("textbox", { name: "Email" }).fill("not-an-email");
-  await form.getByRole("button", { name: "Send request" }).click();
+  await form.getByRole("button", { name: "Check details" }).click();
   await expect(form.getByRole("textbox", { name: "Email" })).toBeFocused();
   await expect(form.getByRole("textbox", { name: "Email" })).toHaveAttribute("aria-invalid", "true");
   await form.getByRole("textbox", { name: "Email" }).fill("someone@example.edu");
-  await form.getByRole("button", { name: "Send request" }).click();
+  await form.getByRole("button", { name: "Check details" }).click();
   await expect(form.getByRole("status")).toContainText("This request was not sent");
   await expect(form.getByRole("status").getByRole("link", { name: "contact page" })).toHaveAttribute("href", "#/contact");
   await expect(page.getByText("Not sent. There is no request service yet.")).toBeVisible();

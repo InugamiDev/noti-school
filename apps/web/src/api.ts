@@ -72,8 +72,7 @@ export async function request<T>(
     const messages: Record<string, string> = {
       unauthenticated: 'Sign in to continue. Your draft is safe.',
       forbidden: 'Your account does not have access to this collection.',
-      provider_unavailable:
-        'Answers are temporarily unavailable. You can still browse accessible sources.',
+      provider_unavailable: 'Answers are temporarily unavailable.',
       budget_exhausted: 'Answers are paused for this month. Please browse the source collection.',
       conflict: 'This item changed or is already being processed. Refresh before trying again.',
       invalid_request: 'Please check the form and try again.',

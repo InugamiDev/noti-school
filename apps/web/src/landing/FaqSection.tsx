@@ -19,7 +19,7 @@ export function FaqSection(props: { motion: boolean; onAsk: (text: string) => vo
       <div class="site-wrap">
         <div class={styles.faqHead}>
           <h2 id="faq-title" class={styles.secTitle} tabIndex={-1}>
-            Questions
+            Common questions
           </h2>
           <SearchInput
             class={styles.faqFilter}

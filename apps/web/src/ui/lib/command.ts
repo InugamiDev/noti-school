@@ -58,3 +58,17 @@ export function resolveCommandEnter<T extends CommandItem>(shown: readonly T[], 
   const text = query.trim();
   return text ? { kind: 'fallback', text } : { kind: 'none' };
 }
+
+/** Id of the synthetic "Ask …" row that stands in for an empty result list. */
+export const ASK_COMMAND_ID = 'ask-typed-question';
+
+/**
+ * Matches for the query; when nothing matches non-blank text, a single selectable "Ask" row that runs `ask` with the
+ * trimmed text, so asking is an option the reader can see and pick, not an instruction to press Enter.
+ */
+export function commandsWithAsk(items: readonly CommandItem[], query: string, ask: (text: string) => void, icon?: LucideIcon): CommandItem[] {
+  const shown = filterCommands(items, query);
+  const text = query.trim();
+  if (shown.length || !text) return shown;
+  return [{ id: ASK_COMMAND_ID, group: 'Ask', label: `Ask “${text}”`, ...(icon ? { icon } : {}), run: () => ask(text) }];
+}

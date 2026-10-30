@@ -6,15 +6,13 @@
 // Bricolage Grotesque variable (wght axis covers 500 and 700, includes the vietnamese subset).
 @use '@fontsource-variable/bricolage-grotesque/wght.css' as bricolage;
 
-// Hanken Grotesk 400/500/600/700 (latin, latin-ext, vietnamese subsets).
+// Hanken Grotesk 400 and 600 only (latin, latin-ext, vietnamese subsets). The type scale uses regular for reading and
+// 600 for labels and emphasis; 500 resolves to 400 and 700/bold to 600 by CSS font matching, saving four files.
 @use '@fontsource/hanken-grotesk/400.css' as hanken_400;
-@use '@fontsource/hanken-grotesk/500.css' as hanken_500;
 @use '@fontsource/hanken-grotesk/600.css' as hanken_600;
-@use '@fontsource/hanken-grotesk/700.css' as hanken_700;
 
-// JetBrains Mono 400/500.
+// JetBrains Mono 400 (locators and key hints).
 @use '@fontsource/jetbrains-mono/400.css' as mono_400;
-@use '@fontsource/jetbrains-mono/500.css' as mono_500;
 
 // Metric-matched local fallbacks: while a web font loads, text renders in Arial (Liberation Sans on Linux)
 // scaled to the web font's average advance and vertical metrics, so the swap does not reflow lines.

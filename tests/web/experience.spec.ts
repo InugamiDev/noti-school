@@ -20,7 +20,7 @@ for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:192
  await page.keyboard.press('Tab');await expect(page.getByRole('button',{name:/^School: /})).toBeFocused();
  await page.keyboard.press('Tab');await expect(page.getByRole('group',{name:'Answer language'}).getByRole('button',{pressed:true})).toBeFocused();
  await page.getByRole('button',{name:'Ask',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Answers are temporarily unavailable');
- await expect(prompt).toHaveValue(/Tôi có thể/);await page.getByRole('link',{name:'Sign in',exact:true}).first().click();await expect(page.getByRole('heading',{name:'Welcome to noti.school'})).toBeVisible();
+ await expect(prompt).toHaveValue(/Tôi có thể/);await page.getByRole('link',{name:'Account',exact:true}).first().click();await expect(page.getByRole('heading',{name:'Welcome to noti.school'})).toBeVisible();
  await expect(page.locator('form').getByRole('button',{name:'Sign in',exact:true})).toBeDisabled();await expect(page.getByText('Sign-in availability is not confirmed.',{exact:false})).toBeVisible();
  await page.getByRole('link',{name:'Sources',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unavailable');
  await page.goto('/#/');await expect(page.getByLabel('Your question')).toHaveValue(/Tôi có thể/);

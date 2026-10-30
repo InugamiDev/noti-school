@@ -63,6 +63,15 @@ for (const size of sizes) {
     await expect(page.getByText('Synthetic University', { exact: true })).toBeVisible();
     await expect(page.getByText(/verified/i)).toHaveCount(0);
     await expect(page.locator('[data-claim]')).toContainText('withdrawal is possible');
+    // The asked question is echoed above the answer and the composer is cleared, so Enter cannot resend it by accident.
+    await expect(page.getByText('You asked: Synthetic question')).toBeVisible();
+    await expect(page.getByLabel('Your question')).toHaveValue('');
+    // Sources come before the follow-up composer in reading order (the phone layout).
+    const order = await page.evaluate(() => {
+      const sources = document.getElementById('sources-heading')!, follow = document.getElementById('follow-up-heading')!;
+      return !!(sources.compareDocumentPosition(follow) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(order).toBe(true);
     await page.getByRole('button', { name: 'Citation 1: open source' }).click();
     await expect(page.locator(`mark[data-passage="${citationId}"][data-active]`)).toHaveCount(1);
     await expect(page.getByRole('article', { name: 'Source citation' })).toBeFocused();
@@ -114,8 +123,12 @@ for (const size of sizes) {
   });
 
   test(`account forms at ${size.width}px: inline errors, no request until valid, provider notices`, async ({ page }) => {
-    await page.setViewportSize(size); const requests = await fixture(page); await page.goto('/#/auth');
-    await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
+    await page.setViewportSize(size); const requests = await fixture(page);
+    await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { error: { code: 'unauthenticated', message: 'Synthetic', request_id: id, retryable: false } } }));
+    await page.goto('/#/auth');
+    await expect(page.getByRole('heading', { name: 'Welcome to noti.school' })).toBeVisible();
+    // Every signed-out mode is reachable at this width: the tab list wraps instead of clipping.
+    for (const name of ['Sign in', 'Create account', 'Verify email', 'Reset password']) await expect(page.getByRole('tab', { name })).toBeInViewport();
     await expect(page.getByText('Google sign-in is not available yet.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeDisabled();
     await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -134,6 +147,28 @@ for (const size of sizes) {
     await page.screenshot({ path: `${artifacts}clay-auth-${size.width}.png`, fullPage: true });
   });
 }
+
+test('signed-in account page shows the account card and no sign-in form', async ({ page }) => {
+  await fixture(page); await page.goto('/#/auth');
+  await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Redeem invitation' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Sign in' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Create account' })).toHaveCount(0);
+  await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
+});
+
+test('identity outage is not reported as signed out', async ({ page }) => {
+  await fixture(page);
+  await page.route('**/api/v1/me', route => route.fulfill({ status: 503, json: { error: { code: 'core_unavailable', message: 'Synthetic', request_id: id, retryable: true } } }));
+  await page.goto('/#/answer');
+  await expect(page.getByText('Your account could not be checked right now.')).toBeVisible();
+  await expect(page.getByText('Not signed in.')).toHaveCount(0);
+  await expect(page.locator('.site-nav-account')).toHaveText('Account');
+  await page.goto('/#/history');
+  await expect(page.getByRole('heading', { name: 'Your account could not be checked' })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('link', { name: 'Sign in' })).toHaveCount(0);
+});
 
 test('feedback failure stays visible and does not claim success', async ({ page }) => {
   await fixture(page, { feedbackFails: true }); await ask(page);

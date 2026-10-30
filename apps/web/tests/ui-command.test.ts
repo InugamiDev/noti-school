@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterCommands, groupCommands, moveActive, resolveCommandEnter, type CommandItem } from '../src/ui/lib/command.ts';
+import { ASK_COMMAND_ID, commandsWithAsk, filterCommands, groupCommands, moveActive, resolveCommandEnter, type CommandItem } from '../src/ui/lib/command.ts';
 import { filterSchools, REQUEST_SCHOOL_ID, schoolOptionIds, type School } from '../src/ui/lib/school.ts';
 import { isCommandShortcut, isMacPlatform, modifierLabel } from '../src/ui/lib/platform.ts';
 
@@ -45,6 +45,21 @@ test('Enter runs the active match, falls back to asking unmatched text, and igno
   assert.deepEqual(resolveCommandEnter(shown, 0, 'register'), { kind: 'run', item: items[2] });
   assert.deepEqual(resolveCommandEnter([], 0, '  Học phí kỳ này?  '), { kind: 'fallback', text: 'Học phí kỳ này?' });
   assert.deepEqual(resolveCommandEnter([], 0, '   '), { kind: 'none' });
+});
+
+test('unmatched text becomes one selectable Ask row; matches and blank input add none', () => {
+  const asked: string[] = [];
+  const ask = (text: string) => asked.push(text);
+  assert.deepEqual(commandsWithAsk(items, 'register', ask).map(item => item.id), filterCommands(items, 'register').map(item => item.id));
+  assert.deepEqual(commandsWithAsk(items, '   ', ask).map(item => item.id), filterCommands(items, '   ').map(item => item.id));
+  const shown = commandsWithAsk(items, '  zz no match  ', ask);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0]!.id, ASK_COMMAND_ID);
+  assert.equal(shown[0]!.label, 'Ask “zz no match”');
+  const result = resolveCommandEnter(shown, 0, '  zz no match  ');
+  assert.equal(result.kind, 'run');
+  if (result.kind === 'run') result.item.run();
+  assert.deepEqual(asked, ['zz no match']);
 });
 
 test('Cmd/Ctrl+K detection and platform modifier label', () => {

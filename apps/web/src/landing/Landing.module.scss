@@ -1,4 +1,5 @@
-// intent: landing layout, mirrors the page styles in design/clay/reference/index.html with Clay tokens.
+// intent: landing layout on Clay tokens. Sections differ by arrangement (list, split, figure, tabs, form panel), and
+//         only content that is a real UI state sits in a card.
 // status: done
 // next: component internals live in ui/*.module.scss; only arrangement and section-specific pieces belong here.
 // confidence: high
@@ -14,9 +15,9 @@
 }
 
 .secTitle {
-  font-size: clamp(1.875rem, 3.4vw, 2.75rem);
-  line-height: 1.08;
-  max-width: 22ch;
+  font-size: clamp(1.875rem, 2.6vw, 2.25rem);
+  line-height: 1.1;
+  max-width: 24ch;
 
   &:focus {
     outline: none;
@@ -24,10 +25,10 @@
 }
 
 .secLede {
-  margin-top: 14px;
+  margin-top: 12px;
   color: var(--muted);
   font-size: 1.0625rem;
-  max-width: 56ch;
+  max-width: 54ch;
 }
 
 .split {
@@ -113,34 +114,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
-
-  > span {
-    font-size: 0.8125rem;
-    color: var(--muted);
-    margin-right: 2px;
-  }
-}
-
-.proof {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  margin: 28px 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.875rem;
-  color: var(--muted);
-
-  li {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  svg {
-    color: var(--sage);
-  }
+  margin-top: 16px;
 }
 
 .stage {
@@ -151,15 +125,17 @@
 .stageCard {
   position: relative;
   z-index: 3;
-  margin: -48px 12px 0;
+  margin: -40px 12px 0;
 
+  // Overlaps only the plinth's base, so the school stacks and labels above stay visible.
   @include respond-to('xl') {
-    margin: -64px 24px 0;
+    margin: -48px 32px 0;
   }
 }
 
 .answerText {
   margin-bottom: 14px;
+  text-wrap: pretty;
 
   button {
     margin: 0 2px;
@@ -177,10 +153,14 @@
   }
 }
 
+.keep {
+  white-space: nowrap;
+}
+
 .requestIcon {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   display: grid;
   place-items: center;
   background: var(--clay-soft);
@@ -194,38 +174,227 @@
   letter-spacing: -0.015em;
 }
 
-// ---------- scope
-.rules {
+// ---------- how: numbered list on the left, the no-answer state as the one card on the right
+.how {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+
+  @include respond-to('md') {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 64px;
+  }
+}
+
+.steps {
   list-style: none;
   padding: 0;
   margin: 28px 0 0;
   display: grid;
-  gap: 18px;
+  max-width: 34rem;
 
   li {
-    display: flex;
-    gap: 14px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    column-gap: 16px;
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+
+    &:last-child {
+      border-bottom: 1px solid var(--line);
+    }
   }
 
-  strong {
-    display: block;
-    font-size: 1.0625rem;
+  h3 {
+    grid-column: 2;
+    font-size: 1.125rem;
+    margin-bottom: 4px;
   }
 
-  span:not(.ruleIcon) {
+  p {
+    grid-column: 2;
     color: var(--muted);
   }
 }
 
-.ruleIcon {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+.stepNumber {
+  grid-row: span 2;
   display: grid;
   place-items: center;
-  background: var(--sage-soft);
-  color: #3c5a4b;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-full);
+  background: var(--clay-soft);
+  color: var(--clay-hover);
+  font: 400 0.8125rem/1 var(--font-mono);
+}
+
+.howExample {
+  margin: 0;
+
+  figcaption {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  @include respond-to('md') {
+    margin-top: 72px;
+  }
+}
+
+.noAnswer {
+  h3 {
+    font-size: 1.125rem;
+    margin: 14px 0 6px;
+  }
+
+  > p {
+    color: var(--muted);
+  }
+
+  ol {
+    margin: 14px 0 0;
+    padding-left: 22px;
+    display: grid;
+    gap: 6px;
+    font-size: 0.9375rem;
+  }
+
+  li::marker {
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+  }
+}
+
+.noAnswerIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  background: var(--sunken);
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+// ---------- reads: document kinds as rows, the photo as a captioned figure
+.reads {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+
+  @include respond-to('lg') {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 56px;
+  }
+}
+
+.kinds {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0 0;
+  display: grid;
+
+  @include respond-to('sm') {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 32px;
+  }
+
+  li {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  h3 {
+    font-size: 1.0625rem;
+  }
+
+  p {
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+}
+
+.kindLocator {
+  margin-top: 6px;
+  color: var(--faint);
+  font: 400 0.75rem/1.4 var(--font-mono);
+}
+
+.photo {
+  margin: 0;
+
+  picture {
+    display: block;
+    aspect-ratio: 3 / 2;
+    overflow: hidden;
+    border-radius: var(--r-md);
+    background: var(--sunken);
+    @include clay-elevation(2);
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    // Open pages fill the frame; the apple sits at the edge.
+    object-position: 35% 55%;
+  }
+
+  figcaption {
+    margin-top: 10px;
+    color: var(--faint);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+
+    a {
+      color: var(--muted);
+      text-underline-offset: 2px;
+    }
+  }
+
+  @include respond-to('lg') {
+    picture {
+      aspect-ratio: 4 / 5;
+    }
+  }
+}
+
+// ---------- scope
+.rules {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+  display: grid;
+
+  li {
+    display: grid;
+    gap: 2px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  strong {
+    font-size: 1.0625rem;
+  }
+
+  span {
+    color: var(--muted);
+  }
 }
 
 .account {
@@ -251,8 +420,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--clay-soft);
-  color: var(--clay);
+  background: var(--sunken);
+  color: var(--ink);
   font: 700 1rem/1 var(--font-display);
 }
 
@@ -261,105 +430,74 @@
 }
 
 .accountSub {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--muted);
 }
 
-.accountRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.9375rem;
+// Label over value on phones; label left, value right from xs.
+.accountRows {
+  margin: 0;
 
-  &:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
+  > div {
+    display: grid;
+    gap: 2px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.9375rem;
+
+    &:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    @include respond-to('xs') {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
   }
 
-  > svg {
+  dt {
     color: var(--muted);
+    font-size: 0.875rem;
+
+    @include respond-to('xs') {
+      font-size: 0.9375rem;
+    }
   }
 
-  > span {
-    margin-left: auto;
-    text-align: right;
+  dd {
+    margin: 0;
     font-weight: 600;
+
+    @include respond-to('xs') {
+      text-align: right;
+    }
   }
 }
 
-.locked {
+.locked dd {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
   color: var(--muted);
-
-  > span {
-    font-weight: 500;
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-  }
-}
-
-// ---------- how
-.steps {
-  list-style: none;
-  padding: 0;
-  margin: 40px 0 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-
-  @include respond-to('md') {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.step {
-  position: relative;
-
-  h3 {
-    font-size: 1.25rem;
-    margin-bottom: 8px;
-  }
-
-  p {
-    color: var(--muted);
-  }
-}
-
-.stepNumber {
-  position: absolute;
-  top: 24px;
-  right: 24px;
-  font: 500 0.75rem/1 var(--font-mono);
-  color: var(--faint);
-}
-
-.stepIcon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: var(--clay-soft);
-  color: var(--clay);
-  margin-bottom: 18px;
-  box-shadow: inset 0 -2px 0 rgba(168, 67, 31, 0.12);
 }
 
 // ---------- roles
 .roles {
-  margin-top: 32px;
+  margin-top: 28px;
 }
 
 .rolePanel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 24px;
+  align-items: start;
+  padding-top: 8px;
 
   @include respond-to('md') {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 48px;
   }
 }
 
@@ -368,21 +506,12 @@
   padding: 0;
   margin: 0;
   display: grid;
-  gap: 14px;
 
   li {
-    display: flex;
-    gap: 12px;
-  }
-
-  svg {
-    flex: none;
-    color: var(--clay);
-    margin-top: 4px;
-  }
-
-  strong {
-    display: block;
+    display: grid;
+    gap: 2px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
   }
 
   span {
@@ -392,20 +521,15 @@
 }
 
 .mini {
-  background: var(--page);
-  border-radius: var(--r-sm);
-  padding: 16px;
   display: grid;
   gap: 10px;
   font-size: 0.9rem;
 }
 
 .miniHeading {
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .miniRow {
@@ -413,8 +537,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--page);
   border-radius: var(--r-sm);
   min-width: 0;
 
@@ -433,225 +556,20 @@
   flex: none;
 }
 
-// ---------- honest
-.honest {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 32px;
-  align-items: center;
-
-  @include respond-to('md') {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 48px;
-  }
-}
-
-.noAnswer {
-  h3 {
-    font-size: 1.125rem;
-    margin: 14px 0 6px;
-  }
-
-  > p {
-    color: var(--muted);
-  }
-
-  ul {
-    margin: 14px 0 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 8px;
-  }
-
-  li {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    font-size: 0.9375rem;
-  }
-
-  li svg {
-    flex: none;
-    margin-top: 4px;
-    color: var(--sage);
-  }
-}
-
-.noAnswerIcon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: var(--sunken);
-  color: var(--muted);
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 18px;
-  flex-wrap: wrap;
-}
-
-// ---------- reads
-.bento {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  margin-top: 40px;
-
-  @include respond-to('lg') {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-}
-
-.bentoCard {
-  overflow: hidden;
-
-  h3 {
-    font-size: 1.25rem;
-    margin-bottom: 6px;
-  }
-
-  p {
-    color: var(--muted);
-  }
-}
-
-@include respond-to('lg') {
-  .bentoWide {
-    grid-column: span 4;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    align-items: end;
-  }
-
-  .bentoNarrow {
-    grid-column: span 2;
-  }
-
-  .bentoHalf {
-    grid-column: span 3;
-  }
-}
-
-.photo {
-  position: relative;
-  margin: 16px 0 0;
-  aspect-ratio: 4 / 3;
-  overflow: hidden;
-  border-radius: var(--r-sm);
-  background: var(--sunken);
-  box-shadow: var(--e1);
-
-  img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: 30% 60%;
-  }
-
-  figcaption {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    padding: 2px 8px;
-    border-radius: var(--r-full);
-    background: color-mix(in oklab, var(--surface) 82%, transparent);
-    color: var(--ink);
-    font-size: 0.6875rem;
-    line-height: 1.6;
-
-    a {
-      color: inherit;
-      text-underline-offset: 2px;
-    }
-  }
-
-  @include respond-to('lg') {
-    margin-top: 0;
-  }
-}
-
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 16px;
-}
-
-.course {
-  margin: 16px 0 0;
-  display: grid;
-  gap: 8px;
-
-  div {
-    display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    padding: 10px 12px;
-    border-radius: var(--r-sm);
-    background: var(--page);
-    font-size: 0.875rem;
-  }
-
-  dd {
-    margin: 0;
-    font-family: var(--font-mono);
-    color: var(--muted);
-    font-size: 0.78rem;
-  }
-}
-
-.lang {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  align-items: baseline;
-  margin-top: 18px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(1.5rem, 3vw, 2.25rem);
-  letter-spacing: -0.02em;
-
-  span:last-child {
-    color: var(--faint);
-  }
-}
-
-// ---------- join
+// ---------- join: a light panel; the form is the one card
 .join {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 32px;
   align-items: start;
-  padding: 28px;
-  border-radius: var(--r-md);
-  background: var(--ink);
-  color: #eef0ee;
-  @include clay-elevation(2);
+  padding: 24px;
+  border-radius: var(--r-lg);
+  background: var(--sunken);
 
   @include respond-to('md') {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 40px;
-    padding: 40px;
-  }
-
-  .secTitle {
-    color: #fff;
-  }
-
-  .secLede {
-    color: #b8c0c4;
-  }
-
-  :focus-visible {
-    outline-color: #f0b8a0;
+    gap: 48px;
+    padding: 48px;
   }
 }
 
@@ -676,19 +594,19 @@
       border-radius: 50%;
       display: grid;
       place-items: center;
-      background: rgba(255, 255, 255, 0.08);
-      color: #f0b8a0;
-      font: 600 0.85rem/1 var(--font-mono);
+      background: var(--surface);
+      color: var(--clay-hover);
+      font: 400 0.8125rem/1 var(--font-mono);
+      box-shadow: var(--e1);
     }
   }
 
   strong {
     display: block;
-    color: #fff;
   }
 
   span {
-    color: #b8c0c4;
+    color: var(--muted);
     font-size: 0.9375rem;
   }
 }
@@ -698,22 +616,19 @@
   gap: 14px;
   min-width: 0;
   padding: 24px;
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--ink);
-  @include clay-elevation(3);
+  @include clay-elevation(2);
 
   h3 {
-    font-size: 1.15rem;
-  }
-
-  :focus-visible {
-    outline-color: var(--clay);
+    font-size: 1.125rem;
   }
 }
 
 .formHint {
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
@@ -724,12 +639,13 @@
 .formStatus p {
   padding: 12px 14px;
   border-radius: var(--r-sm);
-  background: var(--clay-soft);
-  color: #8a3517;
+  background: var(--sunken);
+  color: var(--ink);
   font-size: 0.875rem;
 
   a {
     font-weight: 600;
+    color: var(--clay);
     text-underline-offset: 3px;
   }
 }

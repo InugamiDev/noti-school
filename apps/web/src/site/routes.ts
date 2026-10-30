@@ -61,12 +61,12 @@ export function isSiteRoute(route: string): route is SiteRoute {
 
 /** In-page anchors on the landing; `#how` style links open the landing and scroll to the section. */
 export const landingSections = {
-  scope: 'Every school gets its own sources',
   how: 'How an answer gets made',
-  roles: 'Built for everyone at a university',
   reads: 'What it reads',
+  scope: 'Every school gets its own sources',
+  roles: 'Built for everyone at a university',
   join: 'Bring noti.school to your university',
-  faq: 'Questions',
+  faq: 'Common questions',
 } as const;
 
 export type LandingSection = keyof typeof landingSections;

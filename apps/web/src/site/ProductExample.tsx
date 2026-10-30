@@ -36,7 +36,7 @@ export default function ProductExample() {
   return (
     <div class="site-example" data-testid="product-example">
       <div class="site-example-label">
-        <Badge tone="clay">Illustrative example</Badge>
+        <Badge>Illustrative example</Badge>
         <span>Synthetic collection, not university guidance</span>
       </div>
       <div class="site-example-questions" role="group" aria-label="Example questions">

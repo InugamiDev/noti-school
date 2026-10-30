@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { authErrors, authFields, authModes } from '../src/app/auth.ts';
+import { authErrors, authFields, authModes, availableAuthModes } from '../src/app/auth.ts';
 
 const empty = { email: '', name: '', password: '', token: '' };
 
@@ -11,6 +11,15 @@ test('each mode shows only its own fields', () => {
   assert.deepEqual(authFields('Verify email'), ['email']);
   assert.deepEqual(authFields('Reset password'), ['email', 'password', 'token']);
   assert.equal(authModes.length, 5);
+});
+
+test('signed-in visitors never get a sign-in form; redeeming an invitation needs a session', () => {
+  assert.deepEqual(availableAuthModes(false, false), ['Sign in', 'Create account', 'Verify email', 'Reset password']);
+  assert.deepEqual(availableAuthModes(true, false), ['Redeem invitation', 'Verify email']);
+  assert.deepEqual(availableAuthModes(true, true), ['Redeem invitation', 'Verify email', 'Reset password']);
+  for (const authenticated of [false, true])
+    for (const reset of [false, true]) assert.ok(availableAuthModes(authenticated, reset).every(m => authModes.includes(m)));
+  assert.ok(!availableAuthModes(true, true).includes('Sign in'));
 });
 
 test('sign in requires email and a 12 to 128 character password', () => {

@@ -1,7 +1,9 @@
 // intent: Clay site shell: dismissible pilot notice, sticky nav with search and account entry, mobile sheet, footer.
+//         Marketing routes show the marketing links; workspace routes (answer, sources, history, admin, account) show
+//         the workspace links instead, so Ask, Sources and History are one click apart. Admin appears for admins only.
 // status: done
-// next: workspace pages (sources, history, admin, auth) are linked from the footer and the command menu, not the top nav.
-//       While identity is unknown the account control is a placeholder of the same box, so nothing flips or reflows.
+// next: while identity is unknown the account control is a placeholder of the same box, so nothing flips or reflows.
+//       An identity outage shows a neutral "Account" control, never a "Sign in" call to action.
 // confidence: high
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Menu, Pause, Play, Search, X } from 'lucide-solid';
@@ -12,19 +14,32 @@ export { isSiteRoute, sitePages, type SiteRoute } from './routes';
 
 const PILOT_DISMISSED = 'pilot-dismissed';
 
-const navLinks = [
+type NavLink = readonly [label: string, href: string];
+
+const siteLinks: readonly NavLink[] = [
   ['How it works', '#how'],
   ['Who it’s for', '#roles'],
   ['For universities', '#/universities'],
   ['Help', '#/help'],
-] as const;
+];
 
-const current = (route: string, href: string) => (href === `#${route}` ? 'page' : undefined);
+const workspaceLinks: readonly NavLink[] = [
+  ['Ask', '#/'],
+  ['Sources', '#/sources'],
+  ['History', '#/history'],
+];
 
-export function PilotNotice() {
-  const [hidden, setHidden] = createSignal(localStore.get(PILOT_DISMISSED) === '1');
+/** Routes that belong to the signed-in workspace rather than the public site. */
+export const isWorkspaceRoute = (route: string) => /^\/(?:answer|sources|history|admin|auth)(?:\/|$|\?)/.test(route);
+
+// Sub-pages (a source, a conversation) keep their section highlighted.
+const current = (route: string, href: string) =>
+  href === `#${route}` || (href.length > 2 && route.startsWith(`${href.slice(1)}/`)) ? 'page' : undefined;
+
+export function PilotNotice(props: { hidden?: boolean }) {
+  const [dismissed, setDismissed] = createSignal(localStore.get(PILOT_DISMISSED) === '1');
   return (
-    <Show when={!hidden()}>
+    <Show when={!dismissed() && !props.hidden}>
       <aside class="site-pilot" aria-label="Pilot notice">
         <div class="site-wrap site-pilot-row">
           <p>
@@ -36,7 +51,7 @@ export function PilotNotice() {
             type="button"
             aria-label="Dismiss notice"
             onClick={() => {
-              setHidden(true);
+              setDismissed(true);
               localStore.set(PILOT_DISMISSED, '1');
             }}
           >
@@ -57,8 +72,14 @@ function Logo(props: { label?: string }) {
   );
 }
 
-export function SiteHeader(props: { route: string; session: SessionState; onSearch: () => void }) {
+export function SiteHeader(props: { route: string; session: SessionState; admin: boolean; onSearch: () => void }) {
   const signedIn = () => props.session === 'signed-in';
+  // Not knowing who you are is not the same as being signed out.
+  const known = () => props.session === 'signed-in' || props.session === 'unavailable';
+  const navLinks = (): readonly NavLink[] =>
+    isWorkspaceRoute(props.route)
+      ? [...workspaceLinks, ...(props.admin ? ([['Admin', '#/admin']] as const) : [])]
+      : siteLinks;
   const placeholder = createDelayedLoading(() => props.session === 'loading');
   const [open, setOpen] = createSignal(false);
   const [stuck, setStuck] = createSignal(false);
@@ -73,7 +94,7 @@ export function SiteHeader(props: { route: string; session: SessionState; onSear
       <div class="site-wrap site-nav-row">
         <Logo label="noti.school home" />
         <nav class="site-nav-links" aria-label="Main">
-          <For each={navLinks}>
+          <For each={navLinks()}>
             {([label, href]) => (
               <a href={href} aria-current={current(props.route, href)}>
                 {label}
@@ -84,7 +105,6 @@ export function SiteHeader(props: { route: string; session: SessionState; onSear
         <Button
           class="site-nav-search"
           variant="secondary"
-          size="sm"
           aria-keyshortcuts="Control+K Meta+K"
           onClick={() => props.onSearch()}
         >
@@ -106,18 +126,16 @@ export function SiteHeader(props: { route: string; session: SessionState; onSear
         >
           <Button
             class="site-nav-account reveal"
-            variant={signedIn() ? 'secondary' : 'primary'}
-            size="sm"
+            variant={known() ? 'secondary' : 'primary'}
             href="#/auth"
             aria-current={props.route.startsWith('/auth') ? 'page' : undefined}
           >
-            {signedIn() ? 'Account' : 'Sign in'}
+            {known() ? 'Account' : 'Sign in'}
           </Button>
         </Show>
         <Button
           class="site-nav-menu"
           variant="ghost"
-          size="sm"
           iconOnly
           aria-label="Open menu"
           aria-expanded={open()}
@@ -127,18 +145,31 @@ export function SiteHeader(props: { route: string; session: SessionState; onSear
           <Menu aria-hidden="true" />
         </Button>
       </div>
+      <Show when={isWorkspaceRoute(props.route)}>
+        <nav class="site-wrap site-subnav" aria-label="Workspace">
+          <For each={navLinks()}>
+            {([label, href]) => (
+              <a href={href} aria-current={current(props.route, href)}>
+                {label}
+              </a>
+            )}
+          </For>
+        </nav>
+      </Show>
       <Sheet open={open()} onOpenChange={setOpen} title="Menu">
         <nav class="site-sheet-links" aria-label="Menu">
-          <For each={navLinks}>
+          <For each={navLinks()}>
             {([label, href]) => (
               <a href={href} aria-current={current(props.route, href)} onClick={() => setOpen(false)}>
                 {label}
               </a>
             )}
           </For>
-          <a href="#join" onClick={() => setOpen(false)}>
-            Request your university
-          </a>
+          <Show when={!isWorkspaceRoute(props.route)}>
+            <a href="#join" onClick={() => setOpen(false)}>
+              Request your university
+            </a>
+          </Show>
         </nav>
         <Button
           class="site-sheet-search"
@@ -194,16 +225,18 @@ const footerGroups = [
   },
 ] as const;
 
-export function SiteFooter(props: { paused: boolean; reduced: boolean; toggle: () => void }) {
+export function SiteFooter(props: { route: string; paused: boolean; reduced: boolean; toggle: () => void }) {
+  // On workspace routes the header already carries the workspace links.
+  const groups = () => footerGroups.filter(group => group.title !== 'Workspace' || !isWorkspaceRoute(props.route));
   return (
     <footer class="site-footer">
       <div class="site-wrap">
         <div class="site-footer-top">
           <Logo />
-          <p>Independent project. Not affiliated with any university.</p>
+          <p>Independent project. Not an official service of any university.</p>
         </div>
         <div class="site-footer-groups">
-          <For each={footerGroups}>
+          <For each={groups()}>
             {group => (
               <nav aria-label={`${group.title} links`}>
                 <h2>{group.title}</h2>

@@ -1,9 +1,10 @@
 // intent: account page on the Clay kit: mode tabs, TextField inline errors, provider availability notices, loading
 //         buttons. Requests, bodies, headers, callback handling and messages are unchanged from the previous form.
+//         Signed in: the account card plus only the modes that apply to a session (never a sign-in form).
 // status: done
 // next: field rules live in app/auth.ts; keep both in step with the identity service.
 // confidence: high
-import { createSignal, Show, onCleanup } from 'solid-js';
+import { createEffect, createSignal, Show, onCleanup } from 'solid-js';
 import { z } from 'zod';
 import type { Schemas } from '@noti/contracts';
 import { CircleAlert, LogOut, Trash2 } from 'lucide-solid';
@@ -12,7 +13,7 @@ import { Button, cx, Tabs, TextField } from './ui';
 import {
   authErrors,
   authFields,
-  authModes,
+  availableAuthModes,
   type AuthErrors,
   type AuthField,
   type AuthMode,
@@ -39,9 +40,12 @@ export default function Auth(props: {
   const [resetToken, setResetToken] = createSignal(callback.token);
   const [deleteToken, setDeleteToken] = createSignal(callback.deletion);
   const [googleInvitation, setGoogleInvitation] = createSignal('');
-  const [mode, setMode] = createSignal<AuthMode>(
-    resetToken() ? 'Reset password' : 'Sign in',
-  );
+  const modes = () => availableAuthModes(props.authenticated, !!resetToken());
+  const [mode, setMode] = createSignal<AuthMode>(resetToken() ? 'Reset password' : modes()[0]!);
+  // A mode that no longer applies (signed in, reset finished) falls back to the first one that does.
+  createEffect(() => {
+    if (!modes().includes(mode())) setMode(modes()[0]!);
+  });
   const [busy, setBusy] = createSignal(false),
     [message, setMessage] = createSignal(callback.error ? 'Sign-in or recovery could not be completed. Please try again.' : '');
   const [email, setEmail] = createSignal(''),
@@ -268,6 +272,9 @@ export default function Auth(props: {
         </p>
       </Show>
       <div class={cx(page.card, styles.panel)}>
+        <Show when={props.authenticated}>
+          <h2 class={cx(page.h3, styles.panelTitle)}>Invitations and email</h2>
+        </Show>
         <Tabs
           aria-label="Account actions"
           class={styles.tabs}
@@ -277,7 +284,7 @@ export default function Auth(props: {
             setErrors({});
             setMessage('');
           }}
-          items={authModes.map((m) => ({
+          items={modes().map((m) => ({
             value: m,
             label: m,
             get content() {
@@ -290,18 +297,21 @@ export default function Auth(props: {
             <p class={styles.or}>
               <span>or</span>
             </p>
-            <label class={page.field} for="google-invitation">
-              Invitation token (new Google accounts)
-            </label>
-            <input
-              id="google-invitation"
-              class={page.input}
-              type="password"
-              autocomplete="off"
-              maxLength={256}
-              value={googleInvitation()}
-              onInput={(e) => setGoogleInvitation(e.currentTarget.value)}
-            />
+            {/* The invitation field belongs to Google sign-in and only shows when that sign-in is offered. */}
+            <Show when={googleReady()}>
+              <label class={page.field} for="google-invitation">
+                Invitation token (new Google accounts)
+              </label>
+              <input
+                id="google-invitation"
+                class={page.input}
+                type="password"
+                autocomplete="off"
+                maxLength={256}
+                value={googleInvitation()}
+                onInput={(e) => setGoogleInvitation(e.currentTarget.value)}
+              />
+            </Show>
             <Button
               class={styles.googleButton}
               disabled={busy() || !googleReady()}

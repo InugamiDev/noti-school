@@ -6,6 +6,16 @@
 export const authModes = ['Sign in', 'Create account', 'Redeem invitation', 'Verify email', 'Reset password'] as const;
 export type AuthMode = (typeof authModes)[number];
 
+/**
+ * Modes offered for the current session. Signed out: sign in, create an account (with an invitation token), or recover
+ * an email or password. Signed in: redeem an invitation (it needs a session) or verify the email; a reset link opened
+ * while signed in still gets its reset form. Never a sign-in form for someone who is already signed in.
+ */
+export function availableAuthModes(authenticated: boolean, resetToken: boolean): AuthMode[] {
+  if (!authenticated) return ['Sign in', 'Create account', 'Verify email', 'Reset password'];
+  return resetToken ? ['Redeem invitation', 'Verify email', 'Reset password'] : ['Redeem invitation', 'Verify email'];
+}
+
 export interface AuthValues {
   email: string;
   name: string;

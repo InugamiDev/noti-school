@@ -2,6 +2,7 @@
 // status: done
 // next: none
 // confidence: high
+@use 'sass:map';
 @use 'tokens' as *;
 
 :root {
@@ -13,6 +14,8 @@
   --faint: #636e75;
   --line: #dfe2dc;
   --line-strong: #c9cec6;
+  // Boundary of a text field, select or search box: 3.33:1 on surface, 3.04:1 on page (WCAG 1.4.11). Dividers keep --line.
+  --field-border: #868f89;
   --clay: #a8431f;
   --clay-hover: #8f3818;
   --clay-soft: #f6e6dc;
@@ -42,5 +45,13 @@
   --t-fast: 140ms;
   --t-med: 260ms;
   --max: 1200px;
+  // Gap between landing sections; tighter on phones so the page stays a few screens long.
+  --section: 64px;
   color-scheme: light;
+}
+
+@media (min-width: #{map.get($breakpoints, 'sm')}) {
+  :root {
+    --section: 96px;
+  }
 }
