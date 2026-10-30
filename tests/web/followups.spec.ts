@@ -307,7 +307,7 @@ test('a contracts chunk that fails once gives a visible error, and the next Ask 
   await fixture(page);
   let blocked = true, posts = 0;
   page.on('request', request => {
-    if (request.method() === 'POST' && request.url().endsWith('/api/v1/answers')) posts += 1;
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/answers')) posts += 1;
   });
   await page.route(/\/assets\/schemas-[^/]+\.js$/, route => (blocked ? route.abort() : route.fallback()));
   await page.goto('/');
