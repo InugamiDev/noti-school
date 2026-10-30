@@ -8,7 +8,8 @@ type Contracts = typeof import('@noti/contracts');
 let contracts: Promise<Contracts> | undefined;
 let loaded: Contracts | undefined;
 /** Contract schemas (and zod) load with the first API request, in parallel with it, not in the initial bundle. */
-// A failed chunk fetch (flaky network, or a deploy that removed the old hashed file) is forgotten so the next call retries.
+// A failed chunk fetch (flaky network, or a deploy that removed the old hashed file) is not cached here, but browsers keep a
+// failed module in their module map for the page's lifetime, so callers tell the user to reload rather than promise a retry.
 export const loadContracts = () =>
   (contracts ??= import('@noti/contracts').then(
     module => (loaded = module),
@@ -57,7 +58,7 @@ export async function request<T>(
   const owned = !['/api/v1/me', '/api/v1/capabilities', '/api/v1/institutions'].includes(path);
   const scope = scopeController.signal;
   const loading = loadContracts().catch(() => {
-    throw new RequestError('Connection unavailable. Please try again.');
+    throw new RequestError('Part of the app did not download. Check your connection, then reload the page.');
   });
   loading.catch(() => undefined); // awaited below; this only stops an early fetch failure leaving it unhandled
   // Asking loads the contracts first (App ask), so the answer request still starts synchronously.

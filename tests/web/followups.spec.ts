@@ -303,20 +303,21 @@ test('a route chunk that fails to load shows a reload notice, not an empty page'
   await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
 });
 
-test('a contracts chunk that fails once gives a visible error, and the next Ask retries it', async ({ page }) => {
+test('a contracts chunk that fails to load gives a visible reload message and sends nothing', async ({ page }) => {
   await fixture(page);
-  let blocked = true, posts = 0;
+  let posts = 0;
   page.on('request', request => {
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/answers')) posts += 1;
   });
-  await page.route(/\/assets\/schemas-[^/]+\.js$/, route => (blocked ? route.abort() : route.fallback()));
+  // Browsers cache a failed module for the page's lifetime, so the honest recovery is a reload, not an in-page retry.
+  await page.route(/\/assets\/schemas-[^/]+\.js$/, route => route.abort());
   await page.goto('/');
   await page.getByLabel('Your question').fill('Synthetic question');
   await page.getByRole('button', { name: 'Ask', exact: true }).click();
-  await expect(page.getByText(/temporarily unavailable|Connection unavailable/).first()).toBeVisible();
+  await expect(page.getByText('Part of the app did not download').first()).toBeVisible();
+  await expect(page.getByLabel('Your question')).toHaveValue('Synthetic question');
   expect(posts).toBe(0);
-  blocked = false;
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
-  await expect(page.getByRole('button', { name: /citation 1/i }).first()).toBeVisible();
-  expect(posts).toBe(1);
+  await page.unroute(/\/assets\/schemas-[^/]+\.js$/);
+  await page.reload();
+  await expect(page.getByLabel('Your question')).toHaveValue('Synthetic question');
 });

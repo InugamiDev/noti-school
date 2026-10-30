@@ -357,7 +357,7 @@ export default function App() {
     try {
       contracts = await loadContracts();
     } catch {
-      setError('Answers are temporarily unavailable. Check your connection and try again.');
+      setError('Part of the app did not download. Check your connection, then reload the page. Your question is kept.');
       setErrorCode('unavailable');
       return;
     }
