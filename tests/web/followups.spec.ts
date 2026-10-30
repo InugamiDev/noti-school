@@ -317,7 +317,4 @@ test('a contracts chunk that fails to load gives a visible reload message and se
   await expect(page.getByText('Part of the app did not download').first()).toBeVisible();
   await expect(page.getByLabel('Your question')).toHaveValue('Synthetic question');
   expect(posts).toBe(0);
-  await page.unroute(/\/assets\/schemas-[^/]+\.js$/);
-  await page.reload();
-  await expect(page.getByLabel('Your question')).toHaveValue('Synthetic question');
 });

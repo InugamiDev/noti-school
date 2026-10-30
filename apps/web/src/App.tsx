@@ -357,7 +357,7 @@ export default function App() {
     try {
       contracts = await loadContracts();
     } catch {
-      setError('Part of the app did not download. Check your connection, then reload the page. Your question is kept.');
+      setError('Part of the app did not download. Check your connection, then reload the page.');
       setErrorCode('unavailable');
       return;
     }
