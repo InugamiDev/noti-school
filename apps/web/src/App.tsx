@@ -10,13 +10,11 @@ import {
 import { createRemoteResource as createResource, accessScope, setAccessScope } from './resource';
 import {
   ArrowUp,
-  ArrowUpRight,
-  BookOpen,
+  ArrowRight,
   Pause,
   Play,
   School,
   X,
-  MessageSquare,
 } from 'lucide-solid';
 import {
   AskRequest,
@@ -29,7 +27,6 @@ import type { z } from 'zod';
 import {
   get,
   post,
-  request,
   readAnswer,
   errorText,
   loadDraft,
@@ -40,21 +37,54 @@ import {
   operationKey,
   clearOperations,
   retainOperations,
-  requestScope,
+  retireOperation,
+  forgetOperations,
+  isDefinitiveOutcome,
+  isAuthError,
 } from './api';
 import Archive from './Archive';
 import Sources from './Sources';
 import Auth from './Auth';
 import Admin from './Admin';
 import { isSiteRoute, sitePages, SiteHeader, SiteFooter } from './site/SiteShell';
+import { ScrollFx, Words, heroIntro } from './site/Flash';
+import { t } from './ui/i18n';
+import { style, setStyle, scrollTimeline } from './ui/style-flag';
+import './ui/glass.css';
 import MarketingPages from './site/MarketingPages';
 import { HomeSections } from './site/Sections';
 import './site/site.css';
-import Pagination, { pageSuffix } from './Pagination';
+import { pageSuffix } from './Pagination';
+import AnswerView from './AnswerView';
+import DocumentView from './DocumentView';
+import History from './History';
+import { Select } from './ui/Select';
+import type { Turn } from './Thread';
+import { detectLanguage, forgetQuestions, questionFor, rememberQuestion } from './questions';
 type Institution = z.infer<typeof Schemas.Institution>;
 const institutionPath = '/api/v1/institutions/{institution_id}';
 export const scoped = (institution: string, suffix: string, params: Record<string, string> = {}) =>
   endpoint(`${institutionPath}${suffix}`, { institution_id: institution, ...params });
+
+// The hash carries a path and an optional query: #/answer/<conversation>?c=<citation>.
+// Old or alternative addresses map onto their canonical route so saved links keep working.
+const canonical = (path: string) => {
+  if (path === '/account') return '/auth';
+  const oldDetail = path.match(/^\/history\/([^/]+)$/);
+  return oldDetail ? `/answer/${oldDetail[1]}` : path;
+};
+const readHash = () => {
+  const [raw = '/', query = ''] = location.hash.slice(1).split('?');
+  const path = canonical(raw || '/');
+  return { path, query, redirected: path !== (raw || '/'), fromHistory: /^\/history\/./.test(raw) };
+};
+const writeHash = (path: string, query: string) =>
+  window.history.replaceState(null, '', `#${path}${query ? `?${query}` : ''}`);
+const citationParam = (query: string) => {
+  const value = new URLSearchParams(query).get('c') ?? '';
+  return /^[0-9a-f-]{1,64}$/i.test(value) ? value : '';
+};
+type NavigateEvent = Event & { navigationType?: string };
 
 // intent: stable prompt-first HTML with truthful service state; status: implemented.
 export default function App() {
@@ -66,10 +96,31 @@ export default function App() {
   };
   // Scrub credentials before creating resources, so same-origin requests cannot carry them in Referer.
   const [authCallback, setAuthCallback] = createSignal(readCallback());
-  const [route, setRoute] = createSignal(location.hash.slice(1) || '/');
+  const initial = readHash();
+  if (initial.redirected) writeHash(initial.path, initial.query);
+  const [route, setRoute] = createSignal(initial.path);
+  const [query, setQuery] = createSignal(initial.query);
+  // Arriving from History gives the workspace an "All conversations" back link.
+  const [origin, setOrigin] = createSignal<'home' | 'history'>(initial.fromHistory ? 'history' : 'home');
+  const isAnswer = () => route() === '/answer' || route().startsWith('/answer/');
+  // Back/forward restores the list position you left; fresh navigation starts at the top.
+  const scrollMemory = new Map<string, number>();
+  let traversing = false;
+  let pendingScroll: number | undefined;
+  const navigation = (window as Window & { navigation?: EventTarget }).navigation;
+  const onNavigate = (event: NavigateEvent) => {
+    if (event.navigationType === 'traverse') traversing = true;
+  };
+  navigation?.addEventListener('navigate', onNavigate);
+  onCleanup(() => navigation?.removeEventListener('navigate', onNavigate));
   const hash = () => {
+    scrollMemory.set(route(), window.scrollY);
     setAuthCallback(readCallback());
-    setRoute(location.hash.slice(1) || '/');
+    const next = readHash();
+    if (next.redirected) writeHash(next.path, next.query);
+    if (next.fromHistory) setOrigin('history');
+    setRoute(next.path);
+    setQuery(next.query);
     void refreshCapabilities();
     void refreshMe();
     cancel(false);
@@ -77,17 +128,32 @@ export default function App() {
     setTransitioning(false);
     if (route() === '/') {
       setAnswer(undefined);
+      setTurns([]);
       setConversation(undefined);
       saveDraft(draft(), draftOwner);
     }
-    setHistoryCursor('');
+    setCitation(isAnswer() ? citationParam(next.query) : '');
   };
   window.addEventListener('hashchange', hash);
   onCleanup(() => window.removeEventListener('hashchange', hash));
+  // Keyboard: "/" jumps to the question box from anywhere outside a field.
+  const shortcuts = (event: KeyboardEvent) => {
+    if (event.key !== '/' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)) return;
+    event.preventDefault();
+    const box = document.getElementById('question');
+    if (box) box.focus();
+    else location.hash = '/';
+  };
+  document.addEventListener('keydown', shortcuts);
+  onCleanup(() => document.removeEventListener('keydown', shortcuts));
   const [capabilities, { refetch: refreshCapabilities }] = createResource(() =>
     get('/api/v1/capabilities', 'Capabilities'),
   );
-  const [institutions] = createResource(() => get('/api/v1/institutions', 'InstitutionPage'));
+  const [institutions, { refetch: reloadInstitutions }] = createResource(() =>
+    get('/api/v1/institutions', 'InstitutionPage'),
+  );
   const [me, { refetch: refreshMe, mutate: setMe }] = createResource(() => get('/api/v1/me', 'Me'));
   const revalidate = () => {
     if (document.visibilityState === 'visible') void refreshMe();
@@ -107,7 +173,42 @@ export default function App() {
     }
   });
   const selected = () => institutions()?.items.find((i) => i.id === institution());
+  // #/sources/<source>/versions/<version> opens the in-app document reader.
+  const documentRoute = () => {
+    const parts = route().split('/');
+    return parts[1] === 'sources' && parts[3] === 'versions' && parts[2] && parts[4]
+      ? { source: parts[2], version: parts[4] }
+      : undefined;
+  };
   const demo = () => capabilities()?.mode === 'mock' || selected()?.coverage === 'synthetic_demo';
+  // Server-reported answer availability. Unavailable blocks Ask; a failed read is shown but the
+  // server remains the authority, so asking stays possible.
+  const answerState = () => {
+    if (capabilities.error)
+      return { text: 'Answer availability could not be checked.', blocking: false };
+    const answers = capabilities()?.answers;
+    if (!answers || answers.state === 'available') return undefined;
+    const reasons: Partial<Record<typeof answers.reason, string>> = {
+      budget_exhausted: 'Answers are paused for this month.',
+      not_configured: 'Answers are not enabled yet.',
+      paid_calls_disabled: 'Answers are not enabled yet.',
+      pricing_missing: 'Answers are paused until pricing is confirmed.',
+      provider_failed: 'Answers are temporarily unavailable.',
+      core_failed: 'Answers are temporarily unavailable.',
+      no_approved_evidence: 'Answers are waiting for approved sources.',
+    };
+    return { text: reasons[answers.reason] || 'Answers are unavailable.', blocking: true };
+  };
+  const answersUnavailable = () => !!answerState()?.blocking;
+  const answerNotice = (extra = '') => (
+    <Show when={answerState()}>
+      {(state) => (
+        <p class={`answer-state ${extra}`} role="status">
+          <span class="unavailable">{state().text}</span> <a href="#/sources">Browse sources</a>
+        </p>
+      )}
+    </Show>
+  );
   createEffect(() => {
     if (institution()) writePreference('institution', institution());
   });
@@ -115,7 +216,13 @@ export default function App() {
   const updateDraft = (text: string) => {
     setDraft(text);
     saveDraft(text, draftOwner, conversation());
+    if (!languageChosen) {
+      const detected = detectLanguage(text);
+      if (detected) setLanguage(detected);
+    }
   };
+  // Set when the visitor picks a language by hand; reset after each question is sent.
+  let languageChosen = false;
   const [paused, setPaused] = createSignal(readPreference('motion-paused') === 'true'),
     [zoom, setZoom] = createSignal(0),
     [transitioning, setTransitioning] = createSignal(false);
@@ -128,7 +235,23 @@ export default function App() {
   const visibility = () => setVisible(document.visibilityState === 'visible');
   document.addEventListener('visibilitychange', visibility);
   onCleanup(() => document.removeEventListener('visibilitychange', visibility));
+  // Workspace pages get a quieter header and a slim footer.
+  const appRoute = () => !isSiteRoute(route());
   const siteMotion = () => !paused() && !reduced() && visible();
+  // Glass header: CSS scroll-driven animation frosts it where supported; elsewhere a top sentinel
+  // and an IntersectionObserver set data-scrolled. No scroll handler either way.
+  const [scrolled, setScrolled] = createSignal(false);
+  let sentinel: HTMLDivElement | undefined;
+  let sentinelObserver: IntersectionObserver | undefined;
+  createEffect(() => {
+    sentinelObserver?.disconnect();
+    sentinelObserver = undefined;
+    setScrolled(false);
+    if (style() !== 'glass' || scrollTimeline || !sentinel || typeof IntersectionObserver === 'undefined') return;
+    sentinelObserver = new IntersectionObserver(([entry]) => setScrolled(!entry?.isIntersecting), { threshold: 0 });
+    sentinelObserver.observe(sentinel);
+  });
+  onCleanup(() => sentinelObserver?.disconnect());
   createEffect(() => writePreference('motion-paused', String(paused())));
   createEffect(() => {
     if (paused() || reduced()) setTransitioning(false);
@@ -144,7 +267,7 @@ export default function App() {
           ? 'Account'
           : current.startsWith('/admin')
             ? 'Collection administration'
-            : current === '/answer'
+            : isAnswer()
               ? 'Your answer'
               : 'Page not found';
     document.title = `${marketing?.[0] || appTitle} — noti.school`;
@@ -154,22 +277,41 @@ export default function App() {
         'content',
         marketing?.[1] || 'Your noti.school workspace for questions, sources and account access.',
       );
+    const saved = traversing ? scrollMemory.get(current) : undefined;
+    traversing = false;
     queueMicrotask(() => {
       if (route() !== current) return;
       const heading = document.querySelector<HTMLElement>('main h1, main h2');
       heading?.setAttribute('tabindex', '-1');
       heading?.focus({ preventScroll: true });
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      // Lists load asynchronously; their saved position is applied once rows exist.
+      if (saved && current === '/history') pendingScroll = saved;
+      window.scrollTo({ top: saved && current !== '/history' ? saved : 0, left: 0, behavior: 'instant' });
     });
   });
   let transitionTimer: ReturnType<typeof setTimeout> | undefined;
   const [busy, setBusy] = createSignal(false),
-    [error, setError] = createSignal(''),
-    [answer, setAnswer] = createSignal<AnswerOutput>();
-  const [citation, setCitation] = createSignal('');
+    [error, setErrorText] = createSignal(''),
+    [authError, setAuthError] = createSignal(false),
+    [answer, setAnswer] = createSignal<AnswerOutput>(),
+    [turns, setTurns] = createSignal<Turn[]>([]),
+    [pendingLanguage, setPendingLanguage] = createSignal<'en' | 'vi'>('en');
+  // Only authentication/authorization failures offer sign-in as recovery.
+  const setError = (text: string, auth = false) => {
+    setErrorText(text);
+    setAuthError(auth);
+  };
+  const [citation, setCitation] = createSignal(isAnswer() ? citationParam(readHash().query) : '');
+  // The open citation lives in the URL (?c=) so a reload or shared link reopens the same passage.
+  const chooseCitation = (id: string) => {
+    setCitation(id);
+    if (!isAnswer()) return;
+    const next = id ? `c=${id}` : '';
+    setQuery(next);
+    window.history.replaceState(null, '', `#${route()}${next ? `?${next}` : ''}`);
+  };
   const [conversation, setConversation] = createSignal<{ id: string; institution: string }>();
-  const [historyCursor, setHistoryCursor] = createSignal('');
-  const [feedback, setFeedback] = createSignal(false),
+  const [feedback, setFeedback] = createSignal(''),
     [feedbackMessage, setFeedbackMessage] = createSignal('');
   const [listCursor, setListCursor] = createSignal('');
   const [history, { refetch: refreshHistory }] = createResource(
@@ -190,10 +332,52 @@ export default function App() {
     history()?.owner === me()?.identity.user_id && history()?.institution === institution()
       ? history()
       : undefined;
+  createEffect(() => {
+    if (!visibleHistory()?.items.length || pendingScroll === undefined) return;
+    const top = pendingScroll;
+    pendingScroll = undefined;
+    requestAnimationFrame(() => window.scrollTo({ top, left: 0, behavior: 'instant' }));
+  });
+  // A deep link or reload at #/answer/<conversation> rebuilds the thread from saved answers.
+  const answerConversation = () => (route().startsWith('/answer/') ? route().split('/')[2] : undefined);
+  const [restored] = createResource(
+    () =>
+      answerConversation() && !turns().length && !busy() && institution() && member()
+        ? { id: answerConversation()!, institution: institution(), owner: accessScope() }
+        : false,
+    async (key) => {
+      const page = await get(
+        scoped(key.institution, '/conversations/{conversation_id}/answers', { conversation_id: key.id }),
+        'AnswerPage',
+      );
+      if (page.items.some((a) => a.institution_id !== key.institution || a.conversation_id !== key.id))
+        throw new Error('Scope mismatch');
+      return page.items.map(readAnswer);
+    },
+  );
+  createEffect(() => {
+    const items = restored();
+    const last = items?.at(-1);
+    if (!last || untrack(turns).length) return;
+    setTurns(items!.map((a) => ({ key: a.id, question: questionFor(a.id), answer: a })));
+    setAnswer(last);
+    setConversation({ id: last.conversation_id, institution: last.institution_id });
+  });
+  const restoring = () =>
+    !!answerConversation() && !turns().length && !busy() && (restored.loading || (me.loading && !me()));
+  const restoreError = () => {
+    if (!answerConversation() || turns().length || busy() || restoring()) return '';
+    if (restored.error) return errorText(restored.error);
+    if (!member()) return 'Sign in with a member account to reopen this conversation.';
+    if (restored() && !restored()!.length) return 'This conversation has no answers or was deleted.';
+    return '';
+  };
   function member() {
     return me()?.memberships.some((m) => m.institution_id === institution());
   }
   let draftOwner = 'anonymous';
+  // Account a transient deletion callback is bound to; it survives only that account's scope changes.
+  let callbackUser: string | undefined;
   let initialized = false;
   let controller: AbortController | undefined;
   createComputed(() => {
@@ -216,29 +400,45 @@ export default function App() {
           ? draft()
           : '';
       const restoredConversation =
-        !initialized && route() === '/answer' ? loadDraftConversation(owner) : undefined;
+        !initialized && isAnswer() ? loadDraftConversation(owner) : undefined;
       if (initialized) {
         clearOperations();
-        clearAuthCallback();
-      } else retainOperations(scope);
+        // Keep a deletion callback through the first sign-in in this tab, bound to that account.
+        const keepDeletion =
+          !!user && (callbackUser === user || (!callbackUser && draftOwner.startsWith('anonymous')));
+        clearAuthCallback(keepDeletion);
+        callbackUser = keepDeletion ? user : undefined;
+      } else {
+        retainOperations(scope);
+        callbackUser = user;
+      }
+      const firstScope = !initialized;
       draftOwner = owner;
       initialized = true;
       setDraft(nextDraft);
       saveDraft(nextDraft, owner, restoredConversation);
       setAnswer(undefined);
+      setTurns([]);
       setConversation(restoredConversation);
-      setCitation('');
+      // A citation named in the URL survives the first scope; account changes clear it.
+      if (!firstScope) setCitation('');
       setError('');
-      setFeedback(false);
+      setFeedback('');
       setFeedbackMessage('');
       setListCursor('');
-      setHistoryCursor('');
+      forgetQuestions();
       setAccessScope(scope);
     });
   });
-  function clearAuthCallback() {
+  function clearAuthCallback(keepDeletion = false) {
     const callback = authCallback();
-    if (callback) setAuthCallback({ ...callback, token: '', deletion: '', error: false });
+    if (callback)
+      setAuthCallback({
+        ...callback,
+        token: '',
+        deletion: keepDeletion ? callback.deletion : '',
+        error: false,
+      });
   }
   function signedOut() {
     cancel(false);
@@ -246,14 +446,16 @@ export default function App() {
     setDraft('');
     setMe(undefined);
     clearAuthCallback();
+    callbackUser = undefined;
     setAnswer(undefined);
+      setTurns([]);
     setConversation(undefined);
     setCitation('');
-    setFeedback(false);
+    setFeedback('');
     setFeedbackMessage('');
     setError('');
     setListCursor('');
-    setHistoryCursor('');
+    forgetQuestions();
     draftOwner = `anonymous:${institution()}`;
     setAccessScope(JSON.stringify([draftOwner, institution()]));
   }
@@ -263,6 +465,10 @@ export default function App() {
       controller.abort();
       controller = undefined;
       setBusy(false);
+      // The unanswered question goes back into the box so it can be resubmitted.
+      const pending = turns().find((turn) => !turn.answer);
+      setTurns((list) => list.filter((turn) => turn.answer));
+      if (pending?.question && !draft()) updateDraft(pending.question);
       if (announce)
         setError(
           'Stopped waiting. Processing may continue. Submit the same question to check the same operation.',
@@ -275,10 +481,10 @@ export default function App() {
   });
   async function ask(event: SubmitEvent) {
     event.preventDefault();
-    if (busy() || accessScope() === 'initial') return;
+    if (busy() || accessScope() === 'initial' || answersUnavailable()) return;
     setError('');
-    setCitation('');
-    setFeedback(false);
+    chooseCitation('');
+    setFeedback('');
     if (!institution()) {
       setError('The institution list is unavailable. Please try again later.');
       return;
@@ -303,7 +509,11 @@ export default function App() {
       return;
     }
     setBusy(true);
+    const question = draft();
+    const sameConversation = previous?.institution === institution();
+    if (!sameConversation) setTurns([]);
     setAnswer(undefined);
+    setPendingLanguage(language());
     const active = new AbortController();
     controller = active;
     saveDraft(draft(), draftOwner, previous);
@@ -319,6 +529,13 @@ export default function App() {
       return;
     }
     if (active.signal.aborted || owner !== accessScope()) return;
+    // The question moves into the thread; the box is free for the next one. A failure puts it back.
+    const pendingTurn: Turn = { key: key, question };
+    setTurns((list) => [...list, pendingTurn]);
+    const followUp = turns().length > 1;
+    setDraft('');
+    saveDraft('', draftOwner, previous);
+    languageChosen = false;
     // The request starts before any visual transition. No automatic retries of paid work.
     const pending = post('/api/v1/answers', 'Answer', parsed.data, {
       signal: active.signal,
@@ -326,20 +543,50 @@ export default function App() {
     });
     setTransitioning(!matchMedia('(prefers-reduced-motion: reduce)').matches && !paused());
     setZoom((v) => v + 1);
-    setRoute('/answer');
-    historyReplace('/answer');
+    // Leaving home adds a history entry, so Back returns to the question box.
+    if (!isAnswer()) {
+      window.history.pushState(null, '', '#/answer');
+      setRoute('/answer');
+      setQuery('');
+      setOrigin('home');
+    }
     clearTimeout(transitionTimer);
     transitionTimer = setTimeout(() => setTransitioning(false), 600);
-    queueMicrotask(() => document.getElementById('answer-heading')?.focus());
+    queueMicrotask(() => {
+      if (!followUp) {
+        document.getElementById('answer-heading')?.focus();
+        return;
+      }
+      // A follow-up stays where the reader is: focus and reveal the new question, not the page top.
+      const bubble = document.querySelector<HTMLElement>('.turn:last-of-type .turn-question');
+      bubble?.focus({ preventScroll: true });
+      bubble?.scrollIntoView({ block: 'start', behavior: siteMotion() ? 'smooth' : 'instant' });
+    });
     try {
-      const result = readAnswer(await pending);
+      const response = await pending;
+      // A completed response is definitive: "New question" with the same text must not replay it.
+      retireOperation(key);
+      const result = readAnswer(response);
       if (active.signal.aborted || owner !== accessScope() || controller !== active) return;
       if (result.institution_id !== institution()) throw new Error('Scope mismatch');
       setAnswer(result);
+      rememberQuestion(result, question);
+      setTurns((list) => list.map((turn) => (turn === pendingTurn ? { ...turn, answer: result } : turn)));
       setConversation({ id: result.conversation_id, institution: result.institution_id });
+      // The address now names the conversation, so reload, Back/Forward and sharing reopen it.
+      const path = `/answer/${result.conversation_id}`;
+      if (isAnswer() && route() !== path) {
+        setRoute(path);
+        window.history.replaceState(null, '', `#${path}${query() ? `?${query()}` : ''}`);
+      }
     } catch (e) {
-      if (!active.signal.aborted && owner === accessScope() && controller === active)
-        setError(errorText(e));
+      // Ambiguous outcomes (stop, disconnect, timeout, conflict) keep the key for an explicit replay.
+      if (isDefinitiveOutcome(e)) retireOperation(key);
+      if (!active.signal.aborted && owner === accessScope() && controller === active) {
+        setError(errorText(e), isAuthError(e));
+        setTurns((list) => list.filter((turn) => turn !== pendingTurn));
+        if (!draft()) updateDraft(question);
+      }
     } finally {
       if (controller === active) {
         controller = undefined;
@@ -351,57 +598,49 @@ export default function App() {
     readPreference('language') === 'vi' ? 'vi' : 'en',
   );
   createEffect(() => writePreference('language', language()));
-  const [prior] = createResource(
-    () =>
-      /^\/history\/[^/]+$/.test(route()) && institution() && member()
-        ? {
-            id: route().split('/')[2]!,
-            cursor: historyCursor(),
-            institution: institution(),
-            owner: accessScope(),
-          }
-        : false,
-    async (key) => {
-      const page = await get(
-        scoped(key.institution, '/conversations/{conversation_id}/answers', {
-          conversation_id: key.id,
-        }) + pageSuffix(key.cursor),
-        'AnswerPage',
-      );
-      if (
-        page.items.some((a) => a.institution_id !== key.institution || a.conversation_id !== key.id)
-      )
-        throw new Error('Scope mismatch');
-      return { ...page, items: page.items.map(readAnswer) };
-    },
-  );
   const form = () => (
-    <form class="composer" onSubmit={ask}>
-      <label for="question">Your question</label>
+    <form class="composer" onSubmit={ask} lang={language()}>
+      <label for="question">{t(language(), 'yourQuestion')}</label>
       <textarea
         id="question"
         ref={composer}
         aria-describedby="question-limits"
         value={draft()}
         onInput={(e) => updateDraft(e.currentTarget.value)}
-        placeholder={
-          language() === 'vi' ? 'Bạn muốn tìm hiểu điều gì?' : 'What would you like to know?'
-        }
+        onKeyDown={(e) => {
+          // Enter asks; Shift+Enter keeps a new line. IME composition (Vietnamese input) is left alone.
+          if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.isComposing || e.keyCode === 229)
+            return;
+          e.preventDefault();
+          e.currentTarget.form?.requestSubmit();
+        }}
+        placeholder={t(language(), 'placeholder')}
         required
       />
       <span id="question-limits" class="sr-only">
-        Up to {QUESTION_MAX_CHARACTERS} Unicode characters and {QUESTION_MAX_BYTES} UTF-8 bytes.
-        Tabs and line breaks are allowed.
+        {QUESTION_MAX_CHARACTERS} / {QUESTION_MAX_BYTES} UTF-8. {t(language(), 'limits')}
       </span>
       <div class="composer-tools">
-        <select
-          aria-label="Answer language"
+        <span class="composer-hint" aria-hidden="true">
+          {t(language(), 'enterHint')}
+        </span>
+        <span class="answer-in" aria-hidden="true">
+          {t(language(), 'answerIn')}
+        </span>
+        <Select
+          label="Answer language"
+          hideLabel
+          class="language-select"
           value={language()}
-          onChange={(e) => setLanguage(e.currentTarget.value as 'en' | 'vi')}
-        >
-          <option value="en">English</option>
-          <option value="vi">Tiếng Việt</option>
-        </select>
+          onChange={(value) => {
+            languageChosen = true;
+            setLanguage(value as 'en' | 'vi');
+          }}
+          options={[
+            { value: 'en', label: 'English' },
+            { value: 'vi', label: 'Tiếng Việt' },
+          ]}
+        />
         <Show
           when={busy()}
           fallback={
@@ -409,14 +648,14 @@ export default function App() {
               class="primary"
               type="submit"
               title="Ask noti.school"
-              disabled={accessScope() === 'initial'}
+              disabled={accessScope() === 'initial' || answersUnavailable()}
             >
-              Ask <ArrowUp size={18} />
+              {t(language(), 'ask')} <ArrowUp size={18} />
             </button>
           }
         >
           <button type="button" onClick={() => cancel()}>
-            <X size={18} /> Stop waiting
+            <X size={18} /> {t(language(), 'stopWaiting')}
           </button>
         </Show>
       </div>
@@ -426,6 +665,7 @@ export default function App() {
     <div
       class="app-shell"
       data-motion={siteMotion() ? 'on' : 'off'}
+      data-scrolled={scrolled() ? 'true' : 'false'}
       onClick={(event) => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
           return;
@@ -451,11 +691,23 @@ export default function App() {
       >
         Skip to content
       </a>
-      <SiteHeader route={route()} signedIn={!!me()} />
+      <ScrollFx motion={siteMotion() && !appRoute()} home={route() === '/'} />
+      <Show when={style() === 'glass'}>
+        {/* Refraction source for the hero composer's backdrop (Chromium only, see style-flag.ts). */}
+        <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
+          <filter id="glass-refract" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.011 0.019" numOctaves="2" seed="7" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="12" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </svg>
+      </Show>
+      <SiteHeader route={route()} signedIn={!!me()} app={appRoute()} />
       <main id="main" tabIndex={-1}>
+        <div class="scroll-sentinel" ref={sentinel} aria-hidden="true" />
         <Show when={route() === '/' || transitioning()}>
           <div class="site-home" data-site-page="home">
             <section
+              ref={(node) => heroIntro(node)}
               class="hero"
               classList={{ leaving: route() !== '/' }}
               aria-hidden={route() !== '/'}
@@ -464,41 +716,50 @@ export default function App() {
               <Archive paused={paused()} zoom={zoom()} />
               <div class="hero-content">
                 <div class="institution">
-                  <School size={17} />
-                  <label class="sr-only" for="institution">
-                    Institution
-                  </label>
-                  <select
-                    id="institution"
-                    value={institution()}
-                    onChange={(e) => {
-                      cancel(false);
-                      setInstitution(e.currentTarget.value);
-                      setAnswer(undefined);
-                    }}
+                  <Show
+                    when={!(institutions.error && !institutions.loading)}
+                    fallback={
+                      <button type="button" class="institution-retry" onClick={() => void reloadInstitutions()}>
+                        <School size={17} aria-hidden="true" /> Couldn’t load institutions · Retry
+                      </button>
+                    }
                   >
-                    <Show
-                      when={institutions()?.items.length}
-                      fallback={<option value="">HCMIU · coverage unavailable</option>}
-                    >
-                      <For each={institutions()?.items}>
-                        {(item: Institution) => (
-                          <option value={item.id}>
-                            {item.name}
-                            {item.coverage === 'synthetic_demo' ? ' · Demo' : ''}
-                          </option>
-                        )}
-                      </For>
-                    </Show>
-                  </select>
+                    <Select
+                      id="institution"
+                      label="Institution"
+                      hideLabel
+                      icon={<School size={17} aria-hidden="true" />}
+                      value={institution()}
+                      placeholder={institutions.loading ? 'Loading institutions…' : 'Choose your institution'}
+                      onChange={(value) => {
+                        cancel(false);
+                        setInstitution(value);
+                        setAnswer(undefined);
+      setTurns([]);
+                      }}
+                      options={(institutions()?.items ?? []).map((item: Institution) => ({
+                        value: item.id,
+                        label: item.name + (item.coverage === 'synthetic_demo' ? ' · Demo' : ''),
+                      }))}
+                    />
+                  </Show>
                 </div>
-                <h1 tabIndex={-1}>noti.school</h1>
+                <h1 tabIndex={-1} aria-label="noti.school">
+                  <For each={[...'noti.school']}>
+                    {(c, i) => (
+                      <span class="ch" classList={{ dot: c === '.' }} style={{ '--i': i() }}>
+                        {c}
+                      </span>
+                    )}
+                  </For>
+                </h1>
                 <p class="promise">
-                  Your university questions,
-                  <br class="mobile-break" /> answered with sources.
+                  <Words text="Your university questions," />
+                  <br class="mobile-break" /> <Words class="shine" text="answered with sources." />
                 </p>
                 <Show when={route() === '/'}>{form()}</Show>
-                <div class="suggestions">
+                {answerNotice('suggestions')}
+                <div class="suggestions" hidden={!!answerState()}>
                   <span>Start with a question</span>
                   <For
                     each={[
@@ -515,18 +776,14 @@ export default function App() {
                         }}
                       >
                         {question}
-                        <ArrowUpRight size={15} />
+                        <ArrowRight size={15} />
                       </button>
                     )}
                   </For>
                 </div>
-                <p class="coverage">
-                  {selected()?.coverage === 'approved_sources'
-                    ? 'Approved sources available'
-                    : selected()?.coverage === 'synthetic_demo'
-                      ? 'Demo collection · synthetic examples only'
-                      : 'Pilot collection · source coverage not yet confirmed'}
-                </p>
+                <Show when={selected()?.coverage === 'synthetic_demo'}>
+                  <p class="coverage">Demo collection</p>
+                </Show>
                 <Show when={error()}>
                   <p role="alert" class="error">
                     {error()}
@@ -565,145 +822,59 @@ export default function App() {
         >
           {(page) => <MarketingPages route={page} motion={siteMotion()} />}
         </Show>
-        <Show when={route() === '/answer'}>
-          <div class="workspace">
-            <div class="answer-column">
-              <a href="#/" class="back">
-                ← New question
-              </a>
-              <h1 id="answer-heading" tabIndex={-1}>
-                Your answer
-              </h1>
-              <p class="muted">
-                {selected()?.name}
-                {demo() ? ' · Demo' : ''}
-              </p>
-              <Show when={busy()}>
-                <div role="status" class="loading">
-                  <span class="skeleton" />
-                  Finding an answer and its sources…
-                </div>
-              </Show>
-              <Show when={error()}>
-                <div class="notice" role="alert">
-                  <p>{error()}</p>
-                  <a href="#/auth">Sign in</a> · <a href="#/sources">Browse sources</a>
-                </div>
-              </Show>
-              <Show when={answer()}>
-                {(a) => (
-                  <>
-                    <p class="answer-status">
-                      {a().status === 'abstained'
-                        ? 'Not enough evidence'
-                        : a().status === 'qualified'
-                          ? 'Answer with limitations'
-                          : 'Answer with sources'}
-                    </p>
-                    <For each={a().claims}>
-                      {(claim) => (
-                        <p class="claim">
-                          {claim.text}
-                          <span class="citation-buttons">
-                            <For each={claim.evidence_ids}>
-                              {(id) => (
-                                <button
-                                  title="Open source citation"
-                                  onClick={() => setCitation(id)}
-                                >
-                                  <BookOpen size={14} />
-                                  {a().evidence.findIndex((e) => e.id === id) + 1}
-                                </button>
-                              )}
-                            </For>
-                          </span>
-                        </p>
-                      )}
-                    </For>
-                    <Show when={a().explanation}>
-                      <p class="notice">{a().explanation}</p>
-                    </Show>
-                    <button onClick={() => setFeedback((v) => !v)}>
-                      <MessageSquare size={16} />
-                      Report an issue
-                    </button>
-                    <Show when={feedback()}>
-                      <form
-                        class="stack"
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          const data = new FormData(e.currentTarget);
-                          const owner = requestScope();
-                          setFeedbackMessage('Sending…');
-                          try {
-                            await post(scoped(institution(), '/feedback'), 'Feedback', {
-                              answer_id: a().id,
-                              category: data.get('category'),
-                              comment: data.get('comment'),
-                            });
-                            if (!owner.aborted) setFeedbackMessage('Feedback received. Thank you.');
-                          } catch (err) {
-                            if (!owner.aborted) setFeedbackMessage(errorText(err));
-                          }
-                        }}
-                      >
-                        <label>
-                          Issue
-                          <select name="category">
-                            <option value="unsupported">Unsupported claim</option>
-                            <option value="incorrect">Incorrect</option>
-                            <option value="outdated">Outdated</option>
-                            <option value="other">Other</option>
-                          </select>
-                        </label>
-                        <label>
-                          Comment
-                          <textarea name="comment" maxLength={2000} />
-                        </label>
-                        <button type="submit">Send feedback</button>
-                        <p role="status">{feedbackMessage()}</p>
-                      </form>
-                    </Show>
-                  </>
-                )}
-              </Show>
-              <h2>Ask a follow-up</h2>
-              {form()}
-            </div>
-            <aside>
-              <h2>Supporting sources</h2>
-              <Show
-                when={answer()?.evidence.length}
-                fallback={<p class="muted">Sources will appear with the answer.</p>}
-              >
-                <For each={answer()?.evidence}>
-                  {(e) => (
-                    <button class="source-citation" onClick={() => setCitation(e.id)}>
-                      <BookOpen size={18} />
-                      <span>
-                        {e.title}
-                        <small>
-                          {e.version_label} ·{' '}
-                          {e.locator.page ? `Page ${e.locator.page}` : e.locator.section}
-                        </small>
-                      </span>
-                    </button>
-                  )}
-                </For>
-              </Show>
-              <Show when={citation()}>
-                <Show when={accessScope()} keyed>
-                  {(_scope) => <Sources institution={institution()} citation={citation()} />}
-                </Show>
-              </Show>
-            </aside>
-          </div>
+        <Show when={isAnswer()}>
+          <AnswerView
+            institution={institution()}
+            institutionName={selected()?.name}
+            demo={demo()}
+            busy={busy()}
+            restoring={restoring()}
+            restoreError={restoreError()}
+            error={error()}
+            authError={authError()}
+            pendingLanguage={pendingLanguage()}
+            turns={turns()}
+            citation={citation()}
+            setCitation={chooseCitation}
+            feedback={feedback()}
+            toggleFeedback={(id) => {
+              setFeedbackMessage('');
+              setFeedback((current) => (current === id ? '' : id));
+            }}
+            feedbackMessage={feedbackMessage()}
+            setFeedbackMessage={setFeedbackMessage}
+            origin={origin()}
+            conversationId={conversation()?.institution === institution() ? conversation()?.id : undefined}
+            canDelete={!!member()}
+            refreshHistory={refreshHistory}
+            deleted={(id) => {
+              // Fingerprints are one-way, so retained identities cannot be matched to this
+              // conversation; drop them all so no later ask replays into deleted history.
+              forgetOperations();
+              if (conversation()?.id === id) {
+                setConversation(undefined);
+                saveDraft(draft(), draftOwner);
+              }
+              setTurns([]);
+              setAnswer(undefined);
+            }}
+            notice={answerNotice()}
+            form={form()}
+          />
         </Show>
         <Show when={route().startsWith('/sources')}>
           <div class="page">
             <Show when={accessScope()} keyed>
               {(_scope) => (
-                <Sources institution={institution()} source={route().split('/')[2] || ''} />
+                <Show
+                  when={documentRoute()}
+                  keyed
+                  fallback={<Sources institution={institution()} source={route().split('/')[2] || ''} />}
+                >
+                  {(doc) => (
+                    <DocumentView institution={institution()} source={doc.source} version={doc.version} query={query()} />
+                  )}
+                </Show>
               )}
             </Show>
           </div>
@@ -716,11 +887,31 @@ export default function App() {
                   callback={authCallback()}
                   capabilities={capabilities()}
                   authenticated={!!me()}
+                  account={
+                    me()
+                      ? {
+                          userId: me()!.identity.user_id,
+                          memberships: me()!.memberships.map((m) => ({
+                            institution: institutions()?.items.find((i) => i.id === m.institution_id)?.name ?? 'Unknown institution',
+                            role: m.role,
+                          })),
+                        }
+                      : undefined
+                  }
                   refresh={() => {
                     void refreshMe();
                     void refreshCapabilities();
                   }}
+                  joined={(id) => {
+                    void reloadInstitutions();
+                    setInstitution(id);
+                  }}
                   signedOut={signedOut}
+                  deletionSpent={() => {
+                    // Mutate in place: replacing the keyed callback would remount and clear the result message.
+                    const callback = untrack(authCallback);
+                    if (callback) callback.deletion = '';
+                  }}
                 />
               )}
             </Show>
@@ -732,6 +923,7 @@ export default function App() {
               {(_scope) => (
                 <Admin
                   institution={institution()}
+                  signedIn={!!me()}
                   allowed={
                     me()?.memberships.some(
                       (m) => m.institution_id === institution() && m.role === 'admin',
@@ -743,118 +935,50 @@ export default function App() {
           </div>
         </Show>
         <Show when={route().startsWith('/history')}>
-          <div class="page">
-            <h1 tabIndex={-1}>Your conversations</h1>
-            <p class="muted">Saved conversations for this institution. Sign in to read them.</p>
-            <Show when={history.loading}>
-              <p role="status">Loading saved conversations…</p>
-            </Show>
-            <Show when={history.error}>
-              <p role="alert">{errorText(history.error)}</p>
-            </Show>
-            <For
-              each={visibleHistory()?.items}
-              fallback={
-                <Show when={!history.loading && !history.error}>
-                  <p>No saved conversations available.</p>
-                </Show>
-              }
-            >
-              {(row) => (
-                <a
-                  class="list-row"
-                  href={`#/history/${row.id}`}
-                  onClick={() => setInstitution(row.institution_id)}
-                >
-                  Open conversation <ArrowUpRight size={17} />
-                </a>
-              )}
-            </For>
-            <Pagination
-              cursor={listCursor()}
-              next={visibleHistory()?.next_cursor}
-              change={setListCursor}
-              label="History pages"
-            />
-            <Show when={prior.loading}>
-              <p role="status">Loading conversation…</p>
-            </Show>
-            <Show when={prior.error}>
-              <p role="alert">{errorText(prior.error)}</p>
-            </Show>
-            <For each={prior()?.items}>
-              {(a) => (
-                <button
-                  class="list-row"
-                  onClick={() => {
-                    setAnswer(readAnswer(a));
-                    setConversation({ id: a.conversation_id, institution: a.institution_id });
-                    location.hash = '/answer';
-                  }}
-                >
-                  View answer · {new Date(a.created_at).toLocaleDateString()}
-                </button>
-              )}
-            </For>
-            <Show when={prior()}>
-              <Pagination
-                cursor={historyCursor()}
-                next={prior()?.next_cursor}
-                change={setHistoryCursor}
-                label="Conversation pages"
-              />
-              <button
-                onClick={async () => {
-                  if (!confirm('Delete this conversation?')) return;
-                  const owner = requestScope(),
-                    path = route();
-                  try {
-                    await request(
-                      scoped(institution(), '/conversations/{conversation_id}', {
-                        conversation_id: route().split('/')[2]!,
-                      }),
-                      null,
-                      { method: 'DELETE' },
-                    );
-                    if (owner.aborted || path !== route()) return;
-                    await refreshHistory();
-                    if (owner.aborted || path !== route()) return;
-                    location.hash = '/history';
-                  } catch (e) {
-                    if (!owner.aborted && path === route()) setError(errorText(e));
-                  }
-                }}
-              >
-                Delete conversation
-              </button>
-              <Show when={error()}>
-                <p role="alert">{error()}</p>
-              </Show>
-            </Show>
-          </div>
+          <History
+            institution={institution()}
+            setInstitution={setInstitution}
+            historyLoading={history.loading}
+            historyError={history.error}
+            history={visibleHistory()}
+            listCursor={listCursor()}
+            setListCursor={setListCursor}
+            institutionName={(id) => institutions()?.items.find((i) => i.id === id)?.name}
+            opening={() => setOrigin('history')}
+          />
         </Show>
         <Show
           when={
             !isSiteRoute(route()) &&
-            !/^\/(?:$|answer$|sources(?:\/|$)|auth(?:\/|$)|admin(?:\/|$)|history(?:\/|$))/.test(
-              route().split('?')[0]!,
+            !/^\/(?:$|answer(?:\/|$)|sources(?:\/|$)|auth(?:\/|$)|admin(?:\/|$)|history(?:\/|$))/.test(
+              route(),
             )
           }
         >
-          <div class="page">
+          <div class="page not-found">
             <h1 tabIndex={-1}>Page not found</h1>
-            <a href="#/">Return to your question</a>
+            <p class="muted">There is nothing at this address. These places exist:</p>
+            <nav class="not-found-links" aria-label="Where to go instead">
+              <a class="primary" href="#/">Home</a>
+              <a href="#/sources">Sources</a>
+              <a href="#/history">History</a>
+              <Show when={draft().trim()}>
+                <a href="#/">Return to your question</a>
+              </Show>
+            </nav>
           </div>
         </Show>
       </main>
-      <SiteFooter paused={paused()} reduced={reduced()} toggle={() => setPaused((v) => !v)} />
+      <SiteFooter
+        paused={paused()}
+        reduced={reduced()}
+        toggle={() => setPaused((v) => !v)}
+        slim={appRoute()}
+        glass={{ on: style() === 'glass', toggle: () => setStyle(style() === 'glass' ? 'classic' : 'glass') }}
+      />
     </div>
   );
 }
-function historyReplace(path: string) {
-  window.history.replaceState(null, '', `#${path}`);
-}
-
 function readPreference(key: string) {
   try {
     return sessionStorage.getItem(`noti.${key}`) || '';

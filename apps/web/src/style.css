@@ -1,14 +1,59 @@
+/* intent: soft clay minimalism; one light theme, tokens below; status: implemented. */
 :root {
-  font-family: 'Aptos', 'Segoe UI', sans-serif;
-  color: #e7ebea;
-  background: #101314;
+  font-family:
+    ui-rounded, 'SF Pro Rounded', 'Nunito', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
   font-synthesis: none;
-  --muted: #a5b0b2;
-  --line: #354043;
-  --action: #d5ee78;
-  --cyan: #9bdde7;
-  --vermilion: #ee826d;
-  --panel: #191f21;
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  --bg: #efe8df;
+  --bg-deep: #e7ded2;
+  --surface: #f6f1ea;
+  --raised: #fbf8f3;
+  --ink: #2b2521;
+  --ink-soft: #4a413a;
+  --muted: #655b53;
+  --line: #e0d5c8;
+  --line-strong: #cdbfb0;
+  --action: #ef9a76;
+  --action-hover: #f4ab8b;
+  --action-ink: #2b1a12;
+  --action-deep: #a94b2b;
+  --cyan: #2a6f77;
+  --cyan-soft: #dcebe8;
+  --vermilion: #ac4029;
+  --vermilion-soft: #f7e0d7;
+  --sage-soft: #e2ecdd;
+  --sky-soft: #e0e9f2;
+  --butter-soft: #f6ecd2;
+  --lilac-soft: #e9e2f3;
+  --panel: var(--raised);
+  --r-sm: 12px;
+  --r-md: 20px;
+  --r-lg: 30px;
+  --r-pill: 999px;
+  --clay:
+    10px 14px 30px rgb(139 110 86 / 0.2), -8px -8px 22px rgb(255 255 255 / 0.78),
+    inset 1px 1px 0 rgb(255 255 255 / 0.75);
+  --clay-sm:
+    5px 7px 14px rgb(139 110 86 / 0.18), -4px -4px 11px rgb(255 255 255 / 0.82),
+    inset 1px 1px 0 rgb(255 255 255 / 0.7);
+  --clay-lift:
+    8px 11px 20px rgb(139 110 86 / 0.22), -5px -5px 14px rgb(255 255 255 / 0.85),
+    inset 1px 1px 0 rgb(255 255 255 / 0.75);
+  --clay-press: inset 3px 4px 9px rgb(139 110 86 / 0.22), inset -3px -3px 8px rgb(255 255 255 / 0.8);
+  --clay-well: inset 2px 3px 7px rgb(139 110 86 / 0.16), inset -3px -3px 7px rgb(255 255 255 / 0.85);
+  /* Motion system: one scale of durations, easings and a stagger step. CSS transitions use these
+     directly; ui/motion.ts mirrors them for scripted entrances. Nothing on the task path exceeds --dur-lg. */
+  --dur-xs: 120ms;
+  --dur-sm: 200ms;
+  --dur-md: 320ms;
+  --dur-lg: 420ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --stagger: 45ms;
 }
 * {
   box-sizing: border-box;
@@ -16,6 +61,10 @@
 }
 body {
   margin: 0;
+  background: var(--bg);
+}
+::selection {
+  background: #f6c9b4;
 }
 button,
 input,
@@ -42,39 +91,63 @@ button,
 input,
 select,
 textarea {
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: #191f21;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+}
+input,
+select,
+textarea {
+  background: var(--surface);
+  box-shadow: var(--clay-well);
+  border-color: rgb(255 255 255 / 0.5);
+}
+input::placeholder,
+textarea::placeholder {
+  color: #766b62;
 }
 button {
   min-height: 44px;
-  padding: 10px 16px;
+  padding: 10px 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  border-radius: var(--r-pill);
+  border-color: rgb(255 255 255 / 0.65);
+  box-shadow: var(--clay-sm);
+  font-weight: 560;
   transition:
-    background 0.18s,
-    border-color 0.18s;
+    background var(--dur-sm) var(--ease-out),
+    box-shadow var(--dur-sm) var(--ease-out),
+    color var(--dur-sm) var(--ease-out),
+    transform var(--dur-sm) var(--ease-out);
 }
+/* Generic buttons lift through shadow only; rows, cards and chips add a 1px transform lift. */
 button:hover {
-  background: #293235;
-  border-color: #8a9c9f;
+  background: #fffdfa;
+  box-shadow: var(--clay-lift);
+}
+button:active {
+  box-shadow: var(--clay-press);
 }
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+  box-shadow: var(--clay-well);
 }
 button[aria-pressed='true'] {
-  border-color: var(--action);
-  color: var(--action);
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  box-shadow: var(--clay-press);
 }
 a {
   color: inherit;
   text-decoration: none;
+  transition: color var(--dur-sm) var(--ease-out);
 }
 a:hover {
-  color: var(--action);
+  color: var(--action-deep);
 }
 a,
 button {
@@ -90,7 +163,7 @@ svg {
 input,
 textarea,
 select {
-  padding: 12px;
+  padding: 12px 14px;
   min-width: 0;
   width: 100%;
 }
@@ -110,20 +183,25 @@ h3,
 p {
   overflow-wrap: anywhere;
 }
+h1,
+h2 {
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
 h1 {
   font-size: 40px;
-  font-weight: 500;
+  font-weight: 650;
   line-height: 1.1;
   margin: 0 0 24px;
 }
 h2 {
   font-size: 27px;
-  font-weight: 500;
+  font-weight: 640;
   line-height: 1.25;
 }
 h3 {
   font-size: 19px;
-  font-weight: 500;
+  font-weight: 620;
 }
 p {
   line-height: 1.65;
@@ -142,8 +220,8 @@ header {
   justify-content: space-between;
   position: relative;
   z-index: 3;
-  border-bottom: 1px solid #ffffff12;
-  background: #101314;
+  background: rgb(239 232 223 / 0.86);
+  backdrop-filter: blur(14px);
 }
 header nav {
   display: flex;
@@ -155,16 +233,43 @@ nav a {
   align-items: center;
   gap: 9px;
   font-size: 14px;
+  font-weight: 540;
+  color: var(--ink-soft);
 }
 .wordmark {
   font-size: 23px;
-  font-weight: 600;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
 .wordmark span:not(.brand-dot) {
   display: none;
 }
 .brand-dot {
-  color: var(--action);
+  color: var(--action-deep);
+}
+/* Header mark: the favicon's "n." tile, drawn from site tokens. */
+.brand-mark {
+  display: block;
+  width: 38px;
+  height: 38px;
+}
+.brand-mark rect {
+  fill: var(--ink);
+}
+.brand-mark path {
+  fill: none;
+  stroke: #fbf8f3;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.brand-mark circle {
+  fill: #ef9a76;
+}
+.wordmark {
+  display: inline-flex;
+  border-radius: 12px;
 }
 .hero {
   position: relative;
@@ -178,7 +283,7 @@ nav a {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: #101314;
+  background: var(--bg);
   overflow: hidden;
 }
 .archive img,
@@ -192,16 +297,17 @@ nav a {
 }
 .archive img {
   object-fit: cover;
-  opacity: 0.5;
+  opacity: 0.9;
   transform: scale(1.04);
 }
 .scene {
   transition: opacity 0.6s;
 }
+/* A soft clearing behind the composer; the clay archive stays readable at the edges. */
 .archive-shade {
   background:
-    linear-gradient(90deg, transparent 0%, #101314d9 31%, #101314de 69%, transparent),
-    linear-gradient(0deg, #101314 0%, transparent 25%, transparent 85%, #10131488);
+    radial-gradient(ellipse 34% 52% at 50% 52%, rgb(239 232 223 / 0.92), rgb(239 232 223 / 0.62) 60%, rgb(239 232 223 / 0) 100%),
+    linear-gradient(0deg, var(--bg) 0%, rgb(239 232 223 / 0) 22%, rgb(239 232 223 / 0) 86%, rgb(239 232 223 / 0.55));
 }
 .fallback .scene {
   display: none;
@@ -215,55 +321,65 @@ nav a {
 .institution {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   max-width: 100%;
-  color: #ced7d7;
+  padding: 2px;
+  border-radius: var(--r-pill);
+  background: rgb(251 248 243 / 0.82);
+  box-shadow: var(--clay-sm);
+  color: var(--ink-soft);
   font-size: 13px;
-}
-.institution select {
-  max-width: 340px;
-  padding: 8px 24px 8px 4px;
-  border: 0;
-  background: transparent;
 }
 .hero h1 {
   font-size: 100px;
-  line-height: 1.08;
+  line-height: 1.04;
   margin: 25px 0 16px;
-  font-weight: 500;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  text-shadow:
+    0 2px 0 rgb(255 255 255 / 0.65),
+    0 14px 30px rgb(139 110 86 / 0.18);
 }
 .promise {
   font-size: 22px;
   line-height: 1.4;
-  color: #cbd2d3;
+  color: var(--ink-soft);
   margin: 0 0 30px;
 }
 .mobile-break {
   display: none;
 }
 .composer {
-  background: #1b2224;
-  border: 1px solid #687779;
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--raised);
+  border: 1px solid rgb(255 255 255 / 0.8);
+  border-radius: var(--r-lg);
+  padding: 16px 18px 14px;
   text-align: left;
-  box-shadow: 0 8px 36px #0003;
+  box-shadow: var(--clay);
+  transition: box-shadow var(--dur-sm) var(--ease-out);
+}
+.composer:focus-within {
+  box-shadow:
+    var(--clay),
+    0 0 0 4px rgb(239 154 118 / 0.28);
 }
 .composer > label {
   font-size: 12px;
-  color: #acb7b9;
+  font-weight: 600;
+  color: var(--muted);
+  padding-left: 4px;
 }
 .composer textarea {
-  padding: 8px 0 10px;
+  padding: 8px 4px 10px;
   min-height: 76px;
   background: transparent;
   border: 0;
+  box-shadow: none;
   resize: vertical;
   font-size: 18px;
   max-height: 220px;
 }
 .composer textarea:focus-visible {
-  outline-offset: 2px;
+  outline: none;
 }
 .composer-tools {
   display: flex;
@@ -271,29 +387,54 @@ nav a {
   align-items: center;
   gap: 16px;
 }
-.composer-tools select {
-  font-size: 13px;
-  width: 125px;
-  padding: 8px;
-  background: transparent;
-  border: 0;
+/* Keyboard hint for pointer-and-keyboard devices only; touch keyboards have their own send key. */
+/* Row order: "Answer in" + language on the left, then the hint and Ask pinned to the right edge. */
+.composer-tools > * {
+  order: 2;
+}
+.composer-tools > .answer-in {
+  order: 1;
+}
+.composer-hint {
+  display: none;
+  order: 3;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.composer-tools > :last-child {
+  order: 4;
+}
+@media (hover: hover) and (min-width: 701px) {
+  .composer-hint {
+    display: inline;
+  }
+  /* The visible hint takes the free space, so Ask sits right after it at the edge. */
+  .composer-tools > .composer-hint ~ :last-child {
+    margin-left: 0;
+  }
 }
 .primary {
   background: var(--action);
-  color: #19200d;
-  border-color: var(--action);
-  font-weight: 600;
+  color: var(--action-ink);
+  border-color: rgb(255 255 255 / 0.45);
+  font-weight: 680;
+  box-shadow:
+    6px 8px 16px rgb(208 108 72 / 0.28),
+    -4px -4px 10px rgb(255 255 255 / 0.7),
+    inset 2px 2px 0 rgb(255 255 255 / 0.35),
+    inset -2px -3px 6px rgb(176 84 52 / 0.25);
 }
 .primary:hover {
-  background: #e3f6a1;
-  color: #19200d;
+  background: var(--action-hover);
+  color: var(--action-ink);
 }
 .suggestions {
   margin-top: 20px;
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 .suggestions > span {
   width: 100%;
@@ -304,14 +445,29 @@ nav a {
 .suggestions button {
   font-size: 12px;
   min-height: 34px;
-  padding: 7px 9px;
-  background: #101314bd;
-  border-color: #3e494b;
+  padding: 7px 14px;
+  background: rgb(251 248 243 / 0.9);
   text-align: left;
+  font-weight: 520;
+}
+.suggestions[hidden] {
+  display: none;
+}
+.answer-state {
+  font-size: 13px;
+}
+.answer-state a {
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.answer-state .unavailable,
+.suggestions > span.unavailable {
+  color: var(--vermilion);
 }
 .coverage {
   font-size: 12px;
-  color: #aebbbc;
+  color: var(--muted);
   margin-top: 20px;
 }
 .motion-control {
@@ -327,7 +483,6 @@ nav a {
   gap: 40px;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid var(--line);
 }
 .section-number {
   font-size: 12px;
@@ -348,9 +503,8 @@ nav a {
   min-height: 44px;
 }
 .university {
-  border-top: 1px solid var(--line);
   padding: 64px 7%;
-  background: #171d1f;
+  background: var(--surface);
 }
 .university h2 {
   font-size: 38px;
@@ -367,7 +521,6 @@ nav a {
 }
 footer {
   padding: 28px 5%;
-  border-top: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
   gap: 20px;
@@ -387,50 +540,151 @@ footer a {
   margin: auto;
   padding: 55px 32px 80px;
 }
+/* Thread on the left, sources pinned beside it, the follow-up composer under the thread. On phones
+   the same three areas stack in reading order: answer, its sources, then the next question. */
 .workspace {
   max-width: 1440px;
   min-height: 75vh;
   margin: auto;
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'thread sources'
+    'followup sources';
+  gap: 0 8px;
+  padding: 0 24px 24px;
 }
 .answer-column {
-  padding: 48px 7% 70px;
+  grid-area: thread;
+  padding: 48px 6% 8px;
+}
+.followup {
+  grid-area: followup;
+  padding: 0 6% 70px;
 }
 .answer-column h1 {
   margin-top: 30px;
 }
-.answer-column h2 {
-  margin-top: 42px;
+.followup h2 {
+  margin-top: 36px;
   font-size: 20px;
 }
 .workspace aside {
-  border-left: 1px solid var(--line);
-  padding: 40px 28px;
-  background: #151a1c;
+  grid-area: sources;
+  align-self: start;
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-top: 32px;
+  padding: 32px 28px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--clay);
+}
+/* Page enter: a short rise, shared by every workspace page. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.page,
+.answer-column,
+.workspace aside {
+  animation: page-in var(--dur-md) var(--ease-out) backwards;
+}
+/* The composer only fades: its box never moves, so it is clickable from the first frame. */
+.followup {
+  animation: fade-in var(--dur-md) var(--ease-out) backwards;
+}
+/* List stagger: rows set --i; delays cap at eight rows so long lists never feel slow. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.stagger-in {
+  animation: rise var(--dur-md) var(--ease-out) backwards;
+  animation-delay: calc(min(var(--i, 0), 8) * var(--stagger));
 }
 .workspace aside h2 {
   font-size: 20px;
 }
 .back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   color: var(--muted);
 }
 .muted {
   color: var(--muted);
 }
+/* Top-of-page sentinel for the glass header; takes no space. */
+.scroll-sentinel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 24px;
+  pointer-events: none;
+}
+/* Not found: the places that do exist, with the draft's home first. */
+.not-found-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  margin-top: 8px;
+}
+.not-found-links a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.not-found-links a.primary {
+  padding: 10px 20px;
+  border-radius: var(--r-pill);
+  text-decoration: none;
+}
 .notice {
-  padding: 16px 0 16px 18px;
-  border-left: 2px solid var(--vermilion);
+  padding: 16px 20px;
+  border-radius: var(--r-md);
+  background: var(--vermilion-soft);
+  box-shadow: var(--clay-well);
   line-height: 1.6;
   margin: 24px 0;
 }
 .notice a {
   color: var(--cyan);
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .error {
-  color: #ffa48e;
+  color: var(--vermilion);
 }
 .claim {
   font-size: 18px;
@@ -443,38 +697,72 @@ footer a {
 }
 .citation-buttons {
   display: inline-flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: 8px;
 }
 .citation-buttons button {
-  min-height: 32px;
-  padding: 4px 8px;
+  min-height: 30px;
+  min-width: 30px;
+  padding: 4px 9px;
   font-size: 12px;
+  font-weight: 680;
   color: var(--cyan);
+  background: var(--cyan-soft);
+  transition:
+    background var(--dur-sm) var(--ease-out),
+    color var(--dur-sm) var(--ease-out),
+    box-shadow var(--dur-sm) var(--ease-out),
+    transform var(--dur-sm) var(--ease-spring);
+}
+.citation-buttons button:hover,
+.citation-buttons button[data-hot='true'] {
+  background: #c7dfdb;
+  transform: translateY(-1px);
+}
+.citation-buttons button:not(:disabled):active {
+  transform: scale(0.94);
 }
 .source-citation {
   width: 100%;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
+  border-radius: var(--r-md);
   text-align: left;
   justify-content: flex-start;
-  background: transparent;
-  padding: 18px 0;
+  background: var(--raised);
+  padding: 16px 18px;
+  margin-bottom: 12px;
   align-items: flex-start;
+  font-weight: 500;
 }
 .list-row {
   display: flex;
   align-items: center;
   gap: 16px;
   width: 100%;
-  padding: 22px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
+  padding: 18px 22px;
+  margin-bottom: 12px;
+  border-radius: var(--r-md);
+  border: 1px solid rgb(255 255 255 / 0.7);
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
   text-align: left;
   justify-content: flex-start;
   line-height: 1.5;
+  font-weight: 500;
+  transition:
+    box-shadow var(--dur-sm) var(--ease-out),
+    transform var(--dur-sm) var(--ease-out);
+}
+a.list-row:hover,
+button.list-row:hover {
+  color: inherit;
+  box-shadow: var(--clay-lift);
+  transform: translateY(-1px);
+}
+a.list-row:hover > svg:last-child {
+  color: var(--cyan);
+}
+.list-row > svg:first-child {
+  color: var(--cyan);
 }
 .version-row {
   padding: 20px 0;
@@ -488,24 +776,29 @@ footer a {
 .reader a {
   display: inline-flex;
   gap: 8px;
+  margin-right: 20px;
   align-items: center;
   min-height: 44px;
   color: var(--cyan);
 }
 .reader {
-  animation: reveal 0.18s ease-out;
+  animation: reveal var(--dur-md) var(--ease-out);
   padding-top: 22px;
   overflow-wrap: anywhere;
 }
 .reader h3 {
   line-height: 1.5;
 }
+/* The cited passage lands a beat after the reader frame, so the eye travels chip → card → quote. */
 .reader blockquote {
-  border-left: 2px solid var(--cyan);
   margin: 20px 0;
-  padding: 0 0 0 16px;
+  padding: 18px 20px;
+  border-radius: var(--r-md);
+  background: var(--cyan-soft);
+  box-shadow: var(--clay-well);
   line-height: 1.8;
   white-space: pre-wrap;
+  animation: reveal var(--dur-md) var(--ease-out) 90ms backwards;
 }
 .reader summary {
   cursor: pointer;
@@ -514,18 +807,32 @@ footer a {
 .passage {
   white-space: pre-wrap;
 }
-.auth {
-  max-width: 640px;
-  margin: auto;
-}
 .tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin: 28px 0;
+  padding: 6px;
+  border-radius: 26px;
+  background: var(--bg-deep);
+  box-shadow: var(--clay-well);
+  width: fit-content;
+  max-width: 100%;
 }
 .tabs button {
   font-size: 13px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.tabs button:hover {
+  background: rgb(251 248 243 / 0.6);
+  box-shadow: none;
+}
+.tabs button[aria-pressed='true'] {
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: var(--clay-sm);
 }
 .stack {
   display: flex;
@@ -538,15 +845,13 @@ footer a {
   flex-direction: column;
   gap: 8px;
   font-size: 14px;
+  font-weight: 560;
 }
 .stack button {
   align-self: flex-start;
 }
 .stack textarea {
   min-height: 90px;
-}
-.google {
-  width: 100%;
 }
 .form-row {
   display: grid;
@@ -581,7 +886,9 @@ dd {
   display: block;
   width: 100%;
   height: 60px;
-  background: #253033;
+  border-radius: var(--r-md);
+  background: var(--bg-deep);
+  box-shadow: var(--clay-well);
   margin: 12px 0;
   animation: pulse 1.6s ease-in-out infinite;
 }
@@ -591,15 +898,16 @@ dd {
   top: -100px;
   z-index: 10;
   background: var(--action);
-  color: #101314;
-  padding: 12px;
+  color: var(--action-ink);
+  border-radius: var(--r-pill);
+  padding: 12px 18px;
 }
 .skip:focus {
   top: 10px;
 }
 :focus-visible {
-  outline: 2px solid var(--action);
-  outline-offset: 4px;
+  outline: 3px solid var(--cyan);
+  outline-offset: 3px;
 }
 h1:focus,
 h2:focus {
@@ -624,7 +932,7 @@ h2:focus {
 @keyframes reveal {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -657,8 +965,9 @@ h2:focus {
   nav svg {
     display: none;
   }
-  .wordmark {
-    font-size: 21px;
+  .brand-mark {
+    width: 34px;
+    height: 34px;
   }
   .hero {
     min-height: min(650px, calc(100svh - 140px));
@@ -681,23 +990,21 @@ h2:focus {
   .institution {
     font-size: 12px;
   }
-  .institution select {
-    max-width: 290px;
-  }
   .composer {
-    padding: 13px;
+    padding: 13px 14px 12px;
+    border-radius: 26px;
   }
   .composer textarea {
     font-size: 16px;
     min-height: 85px;
   }
   .suggestions {
-    gap: 7px;
+    gap: 8px;
   }
   .suggestions button {
     font-size: 11px;
     min-height: 38px;
-    padding: 7px 9px;
+    padding: 7px 12px;
   }
   .coverage {
     font-size: 11px;
@@ -705,8 +1012,8 @@ h2:focus {
   }
   .archive-shade {
     background:
-      linear-gradient(90deg, #10131444, #101314d9 20%, #101314d9 80%, #10131444),
-      linear-gradient(0deg, #101314, transparent 25%);
+      radial-gradient(ellipse 72% 40% at 50% 52%, rgb(239 232 223 / 0.88), rgb(239 232 223 / 0.45) 70%, rgb(239 232 223 / 0.1)),
+      linear-gradient(0deg, var(--bg), rgb(239 232 223 / 0) 25%);
   }
   .motion-control {
     bottom: 13px;
@@ -743,15 +1050,30 @@ h2:focus {
     font-size: 32px;
   }
   .workspace {
-    display: block;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas:
+      'thread'
+      'sources'
+      'followup';
+    padding: 0 12px 16px;
   }
   .workspace aside {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-    padding: 24px;
+    position: static;
+    max-height: none;
+    overflow: visible;
+    margin-top: 0;
+    padding: 24px 20px;
+    border-radius: 26px;
   }
   .answer-column {
-    padding: 30px 22px;
+    padding: 30px 10px 20px;
+  }
+  .followup {
+    padding: 8px 10px 30px;
+  }
+  .followup h2 {
+    margin-top: 16px;
   }
   .admin-grid {
     grid-template-columns: 1fr;
@@ -764,10 +1086,13 @@ h2:focus {
     gap: 6px;
   }
   .tabs button {
-    padding: 8px 11px;
+    padding: 8px 12px;
   }
   .claim {
     font-size: 16px;
+  }
+  .list-row {
+    padding: 16px 16px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

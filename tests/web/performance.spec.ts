@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../apps/web/node_modules/@playwright/test/index.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 
@@ -42,7 +43,7 @@ test('actual WebGL draw calls per rendered frame', async ({ page, browser }) => 
   expect(counts.length).toBeGreaterThan(2);
   const baseline = process.env.MOTION_BASELINE === '1';
   if (!baseline) expect(Math.max(...counts)).toBeLessThanOrEqual(160);
-  const artifacts = new URL('./artifacts/', import.meta.url).pathname;
+  const artifacts = fileURLToPath(new URL('./artifacts/',import.meta.url));
   await mkdir(artifacts, { recursive: true });
   const label = baseline ? 'before' : 'after';
   await page.getByRole('button', { name: 'Pause animation' }).click();

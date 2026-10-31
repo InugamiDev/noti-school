@@ -1,7 +1,6 @@
 import { createSignal, For, Show } from 'solid-js';
 import {
   ArrowRight,
-  ArrowUpRight,
   BookOpen,
   FileText,
   Languages,
@@ -11,13 +10,14 @@ import {
 import { Band } from './Band';
 import ProductExample from './ProductExample';
 import CollectionPreview from '../CollectionPreview';
+import { Kinetic, Marquee, Story } from './Flash';
 
 export const questions = [
   {
     category: 'Answers',
     question: 'Can I ask in Vietnamese?',
     answer:
-      'Yes. Choose Tiếng Việt in the question composer. English is also available. Bilingual answer quality still needs evaluation against approved sources.',
+      'Yes. Choose Tiếng Việt in the question composer, or English. You can switch for any question.',
     href: '#/',
     action: 'Go to the question composer',
   },
@@ -25,7 +25,7 @@ export const questions = [
     category: 'Sources',
     question: 'Does noti.school have all HCMIU documents?',
     answer:
-      'No coverage is promised. The pilot targets HCMIU, but access depends on the approved documents available to your account. Check the source library and each document’s version before relying on an answer.',
+      'Not yet. The collection grows as documents are reviewed and published. The source library shows every document available to your account, with its version.',
     href: '#/sources',
     action: 'Check source availability',
   },
@@ -33,7 +33,7 @@ export const questions = [
     category: 'Answers',
     question: 'What if there is no supported answer?',
     answer:
-      'Keep your question specific and check the source library. Missing, conflicting or unavailable evidence should produce a limitation, not a guessed rule. Contact the relevant university office for a decision.',
+      'noti.school tells you so instead of guessing. Try a more specific question, browse the source library, or ask the responsible university office.',
     href: '#/sources',
     action: 'Look for a source',
   },
@@ -41,7 +41,7 @@ export const questions = [
     category: 'Accounts',
     question: 'How do I join the pilot?',
     answer:
-      'Access is invitation-bound. Sign in if you already have access, or contact the project owner to discuss participation. Availability of Google sign-in and email recovery depends on configuration.',
+      'The pilot is invitation-only. If you have an invitation, create your account or sign in with Google. Otherwise, get in touch and we will follow up.',
     href: '#/auth',
     action: 'Open your account',
   },
@@ -57,7 +57,7 @@ export const questions = [
     category: 'Pilot',
     question: 'Is this an official university service?',
     answer:
-      'No official affiliation is claimed. noti.school is an independent project in development. Its answers help you find and inspect information; the original source and responsible office remain the places to confirm an important decision.',
+      'No. noti.school is an independent service and is not affiliated with any university. For important decisions, confirm with the original document and the responsible office.',
     href: '#/about',
     action: 'About the project',
   },
@@ -65,7 +65,7 @@ export const questions = [
     category: 'Accounts',
     question: 'Why can’t I sign in or reset my password?',
     answer:
-      'Read the availability message on the account page. If email or sign-in is unavailable, repeating the request will not enable it. Keep your question draft in this tab and contact the owner for access help.',
+      'The account page shows when sign-in or email is temporarily unavailable. Your question draft stays in this tab, so you can come back to it. Contact us if it keeps happening.',
     href: '#/contact',
     action: 'Get access help',
   },
@@ -73,7 +73,7 @@ export const questions = [
     category: 'Answers',
     question: 'Why did my answer stop or become unavailable?',
     answer:
-      'An interrupted request may still be processing. Follow the message in the answer workspace; submitting the same question can check the same operation. Do not assume a stopped request means the server cancelled it.',
+      'A stopped request may still finish in the background. Ask the same question again and noti.school picks up the same request instead of starting over.',
     href: '#/answer',
     action: 'Return to the answer workspace',
   },
@@ -104,7 +104,7 @@ export function FAQ(props: { compact?: boolean }) {
             <summary>{item.question}</summary>
             <p>{item.answer}</p>
             <a class="site-inline-link" href={item.href}>
-              {item.action} <ArrowUpRight size={15} />
+              {item.action} <ArrowRight size={15} />
             </a>
           </details>
         )}
@@ -202,7 +202,7 @@ export function DocumentRows() {
     <div class="site-document-rows">
       <For each={rows}>
         {(item) => (
-          <div>
+          <div class="fx-card">
             <item.icon size={23} />
             <h3>{item.title}</h3>
             <p>{item.detail}</p>
@@ -221,11 +221,11 @@ export function Closing(props: { motion: boolean }) {
         <h2>Start with what you need to know.</h2>
       </div>
       <div class="site-actions">
-        <a class="primary" href="#/">
-          Ask a question <ArrowUpRight size={18} />
+        <a class="primary fx-magnet" href="#/">
+          Ask a question <ArrowRight size={18} />
         </a>
         <a href="#/contact">
-          Discuss an institutional pilot <ArrowUpRight size={17} />
+          Discuss an institutional pilot <ArrowRight size={17} />
         </a>
       </div>
     </Band>
@@ -249,6 +249,8 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
         </div>
         <ProductExample />
       </Band>
+      <Story motion={props.motion} />
+      <Marquee />
       <Band motion={props.motion}>
         <div class="site-section-heading">
           <div>
@@ -260,15 +262,14 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
             </h2>
           </div>
           <p>
-            Designed for the documents university life runs on. Availability depends on reviewed
-            sources, not the size of the promise.
+            Built for the documents university life runs on, from handbooks to the forms you
+            need this week.
           </p>
         </div>
         <DocumentRows />
         <div class="site-collection-note">
-          <p>These are supported information categories, not a claim of current HCMIU coverage.</p>
           <a class="site-inline-link" href="#/sources">
-            Explore sources <ArrowUpRight size={18} />
+            Explore sources <ArrowRight size={18} />
           </a>
         </div>
         <CollectionPreview institution={props.institution} />
@@ -287,7 +288,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
             question to the right office.
           </p>
           <a class="site-inline-link" href="#/students">
-            Explore the student experience <ArrowUpRight size={18} />
+            Explore the student experience <ArrowRight size={18} />
           </a>
         </div>
         <div>
@@ -303,7 +304,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
             are asking.
           </p>
           <a class="site-inline-link" href="#/universities">
-            Explore the institutional pilot <ArrowUpRight size={18} />
+            Explore the institutional pilot <ArrowRight size={18} />
           </a>
         </div>
       </Band>
@@ -321,6 +322,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
         </div>
         <Workflow />
       </Band>
+      <Kinetic motion={props.motion} />
       <Band motion={props.motion} class="site-trust-band">
         <h2>
           Know what an answer
@@ -328,18 +330,18 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
           can—and cannot—tell you.
         </h2>
         <div class="site-trust-rows">
-          <div>
+          <div class="fx-card">
             <h3>Trace a claim</h3>
             <p>Open its source passage, document version and page or section locator.</p>
           </div>
-          <div>
+          <div class="fx-card">
             <h3>Keep the limits visible</h3>
             <p>
               Missing or conflicting evidence needs a clear limitation. An unavailable service must
               not become a made-up answer.
             </p>
           </div>
-          <div>
+          <div class="fx-card">
             <h3>Stay within your access</h3>
             <p>
               Source visibility follows your institution and account. Feedback gives you a way to
@@ -347,7 +349,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
             </p>
           </div>
           <a class="site-inline-link" href="#/security">
-            Read about trust and security <ArrowUpRight size={17} />
+            Read about trust and security <ArrowRight size={17} />
           </a>
         </div>
       </Band>
@@ -359,15 +361,15 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
           Careful enough to question.
         </h2>
         <p>
-          HCMIU is the initial focus. Approved source coverage and real-world answer quality are
-          still being established. Access is limited; public prices have not been set.
+          noti.school is starting with HCMIU students, in English and Vietnamese. Access is by
+          invitation while the collection grows.
         </p>
         <div class="site-actions">
           <a class="site-inline-link" href="#/pricing">
-            Pilot access & pricing <ArrowUpRight size={18} />
+            Pilot access & pricing <ArrowRight size={18} />
           </a>
           <a class="site-inline-link" href="#/contact">
-            Talk to the project owner <ArrowUpRight size={18} />
+            Get in touch <ArrowRight size={18} />
           </a>
         </div>
       </Band>
@@ -376,7 +378,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
           <span class="site-label">Before you ask</span>
           <h2>A few useful answers.</h2>
           <a class="site-inline-link" href="#/help">
-            Visit Help <ArrowUpRight size={17} />
+            Visit Help <ArrowRight size={17} />
           </a>
         </div>
         <FAQ compact />

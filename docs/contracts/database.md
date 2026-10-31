@@ -74,4 +74,10 @@ requires authoritative usage or proof of no charge. Outstanding prior-month rese
 the current month's available cap. Dispatch across UTC rollover is rejected and must be re-reserved.
 For a matching recoverable stage, the API holds root/stage ownership locks followed by the global accounting lock. It may atomically release a proven never-dispatched prior-month `reserved` receipt and reserve a new current-month attempt using current dated prices. Already safely `released` receipts also permit a new attempt; all historical receipts remain, with the existing maximum of three attempts. A failed replacement reservation rolls back the release, preserving funds. Same-month reserved recovery keeps the original receipt and exact plan. Dispatched, uncertain and settled-without-result stage/root receipts remain fenced; no automatic paid request is retried. Settlement takes ownership locks before the accounting lock to match recovery and avoid inverted lock ordering.
 Late settlement is charged to the reservation month; coordinator reconciles provider billing attribution
-before clearing cross-month uncertainty. Pure estimate tests are not proof of SQL concurrency correctness.
+before clearing cross-month uncertainty. `product.reconcile_ai(id, actual_micro_usd, reason)` (0006,
+owner/migrator only, no HTTP route) settles one `dispatched`/`uncertain` reservation to an operator
+amount in `[0, reserved]`, charging the reservation month and recording an immutable
+`product.ai_reconciliations` row. Migration 0005 removes runtime DELETE on evidence, graph, job, answer
+and citation tables (conversation-cascade deletes still run as owner), adds BEFORE DELETE fences on
+versions/chunks/edges, expires invitations on membership revocation, and keeps a hashed
+`product.deleted_identities` tombstone indefinitely so redemption cannot recreate a deleted user. Pure estimate tests are not proof of SQL concurrency correctness.

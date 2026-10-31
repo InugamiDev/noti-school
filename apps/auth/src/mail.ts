@@ -60,13 +60,22 @@ const boundedTransport: TransportFactory = options => {
     close() { closed = true; socket?.destroy(); transport.close(); },
   };
 };
-export function createMailer(config: Config, factory: TransportFactory = boundedTransport): Mailer {
-  let failed = false;
+// A permanent RCPT rejection is about one recipient, not the transport.
+function recipientRejected(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const { code, command, responseCode } = error as { code?: unknown; command?: unknown; responseCode?: unknown };
+  return code === 'EENVELOPE' && command === 'RCPT TO' && typeof responseCode === 'number' && responseCode >= 500 && responseCode < 600;
+}
+export const MAIL_FAILURE_THRESHOLD = 3, MAIL_COOLDOWN_MS = 60_000;
+export function createMailer(config: Config, factory: TransportFactory = boundedTransport, clock: () => number = Date.now): Mailer {
+  // Circuit opens for a bounded cooldown after consecutive transport failures; any success closes it.
+  let failures = 0, openUntil = 0;
+  const open = () => clock() < openUntil;
   const enabled = config.configured.email;
   return {
-    enabled, get failed() { return failed; },
+    enabled, get failed() { return open(); },
     async send(mail) {
-      if (!enabled || failed) throw new Error('Email unavailable');
+      if (!enabled || open()) throw new Error('Email unavailable');
       const url = safeMailURL(mail.url, config.env.APP_ORIGIN);
       const transport = factory(smtpOptions(config));
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -79,8 +88,14 @@ export function createMailer(config: Config, factory: TransportFactory = bounded
           }),
           new Promise<never>((_, reject) => { timer = setTimeout(() => { transport.close(); reject(new Error('Mail timeout')); }, 8000); }),
         ]);
-        if (!result.accepted?.length || result.rejected?.length) throw new Error('Mail rejected');
-      } catch { failed = true; throw new Error('Email unavailable'); }
+        if (result.rejected?.length) throw Object.assign(new Error('Mail rejected'), { recipient: true });
+        if (!result.accepted?.length) throw new Error('Mail not accepted');
+        failures = 0;
+      } catch (error) {
+        const recipient = recipientRejected(error) || (error instanceof Error && 'recipient' in error);
+        if (!recipient && ++failures >= MAIL_FAILURE_THRESHOLD) openUntil = clock() + MAIL_COOLDOWN_MS;
+        throw new Error('Email unavailable');
+      }
       finally { clearTimeout(timer); transport.close(); }
     },
     close() {},

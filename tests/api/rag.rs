@@ -668,26 +668,38 @@ pub(super) async fn runtime(
         if m == 19 {
             assert!(start.elapsed() < Duration::from_secs(18));
         }
-        let dispatched:i64=sqlx::query_scalar("SELECT count(*) FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state='dispatched'").bind(key).fetch_one(pool).await.unwrap();
+        // A-01: no rejected stage leaks a 'dispatched' hold. Validated usage settles (fenced,
+        // uncached); only untrusted usage or timeouts retain the full hold as 'uncertain'.
+        let states: Vec<String> = sqlx::query_scalar("SELECT r.state FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state NOT IN ('settled','released')").bind(key).fetch_all(pool).await.unwrap();
         assert_eq!(
-            dispatched, 1,
-            "malformed/ambiguous stage {m} retains its reservation"
+            states,
+            if matches!(m, 16 | 19) {
+                vec!["uncertain".to_owned()]
+            } else {
+                vec![]
+            },
+            "malformed/ambiguous stage {m} must settle validated usage or become uncertain"
+        );
+        // A-03: content-level rejection fails this request only; provider faults start cooldown.
+        assert_eq!(
+            s.providers.admit(s.config.evidence_provider).is_ok(),
+            matches!(m, 10 | 11 | 12 | 21 | 22 | 25),
+            "mode {m} cooldown classification"
         );
         let after = hits.load(Ordering::SeqCst);
         assert!(after > before);
-        assert_eq!(
-            call(
-                &s,
-                "POST",
-                "/api/v1/answers",
-                student,
-                ask.clone(),
-                Some(key)
-            )
-            .await
-            .0,
-            409
-        );
+        // A-10: an exact replay reports the stored failure without another provider call.
+        let (replay_status, replay) = call(
+            &s,
+            "POST",
+            "/api/v1/answers",
+            student,
+            ask.clone(),
+            Some(key),
+        )
+        .await;
+        assert_eq!(replay_status, 503);
+        assert_eq!(replay["error"]["code"], "provider_unavailable");
         assert_eq!(hits.load(Ordering::SeqCst), after);
     }
     s.providers.expire_cooldown();
@@ -1103,11 +1115,22 @@ pub(super) async fn ambiguous_json(
                 .await
                 .unwrap();
         assert_eq!(after, before, "raw duplicate mode {m} persisted citations");
-        let retained: (i64,i64) = sqlx::query_as("SELECT count(*),coalesce(sum(r.reserved_micro_usd),0)::bigint FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state='dispatched'").bind(key).fetch_one(pool).await.unwrap();
-        assert_eq!(retained.0, 1);
-        assert!(retained.1 > 0);
-        let failed_stage: String = sqlx::query_scalar("SELECT p.stage FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state='dispatched'")
+        let leaked: i64 = sqlx::query_scalar("SELECT count(*) FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state='dispatched'").bind(key).fetch_one(pool).await.unwrap();
+        assert_eq!(leaked, 0, "raw duplicate mode {m} leaked a dispatched hold");
+        // The rejected stage is the latest receipt. Duplicate keys inside a valid envelope still
+        // have validated usage (settled, uncached); envelope/usage ambiguity stays uncertain.
+        let (failed_stage, failed_state, reserved): (String, String, i64) = sqlx::query_as("SELECT p.stage,r.state,r.reserved_micro_usd FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 ORDER BY r.created_at DESC,r.id LIMIT 1")
             .bind(key).fetch_one(pool).await.unwrap();
+        assert!(reserved > 0);
+        assert_eq!(
+            failed_state,
+            if (50..=53).contains(&m) {
+                "settled"
+            } else {
+                "uncertain"
+            },
+            "raw duplicate mode {m}"
+        );
         assert_eq!(
             failed_stage,
             match m {
@@ -1122,14 +1145,14 @@ pub(super) async fn ambiguous_json(
             call(s, "POST", "/api/v1/answers", student, ask, Some(key))
                 .await
                 .0,
-            409
+            503
         );
         assert_eq!(hits.load(Ordering::SeqCst), calls);
     }
     mode.store(0, Ordering::SeqCst);
     s.providers.expire_cooldown();
     println!(
-        "PASS raw duplicate JSON runtime (jev={jev}): six malformed responses, no answers/citations, positive dispatched funds retained, replay fenced without HTTP"
+        "PASS raw duplicate JSON runtime (jev={jev}): six malformed responses, no answers/citations, no leaked dispatched holds (validated usage settled, ambiguity uncertain), replay reports stored failure without HTTP"
     );
 }
 
@@ -1265,8 +1288,13 @@ async fn confirmed_citations(
                 citations_after, citations_before,
                 "invalid support must never persist citations"
             );
-            let dispatched:i64=sqlx::query_scalar("SELECT count(*) FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state='dispatched'").bind(key).fetch_one(pool).await.unwrap();
-            assert_eq!(dispatched, 1);
+            // Rejected support content has validated usage: settle it uncached, keep the fence.
+            let support_state: String = sqlx::query_scalar("SELECT r.state FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND p.stage='claim_support' AND p.result IS NULL").bind(key).fetch_one(pool).await.unwrap();
+            assert_eq!(support_state, "settled", "mode {m}");
+            assert!(
+                s.providers.admit(s.config.evidence_provider).is_ok(),
+                "content-level support rejection {m} must not start the shared cooldown"
+            );
         }
     }
     mode.store(0, Ordering::SeqCst);

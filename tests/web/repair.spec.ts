@@ -1,4 +1,6 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs';
+import { choose } from './choose';
 const institution = '11111111-1111-4111-8111-111111111111';
 const sourceId = '22222222-2222-4222-8222-222222222222';
 const versionId = '33333333-3333-4333-8333-333333333333';
@@ -48,8 +50,8 @@ async function refreshIdentity(page: Page) {
   await me;
 }
 async function ask(page: Page, question = 'PRIVATE A QUESTION') {
-  await page.getByLabel('Your question').fill(question);
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill(question);
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();
 }
 
 test('R3-01 same tab: detail only on exact route, account switch clears cached history and draft', async ({ page }) => {
@@ -57,15 +59,20 @@ test('R3-01 same tab: detail only on exact route, account switch clears cached h
   await page.goto('/'); await ask(page); await expect(page.locator('.claim')).toContainText('PRIVATE A ANSWER');
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await page.getByRole('link', { name: 'Open conversation' }).click();
-  await expect(page.getByRole('button', { name: /View answer/ })).toBeVisible();
+  // History rows open the same conversation workspace as a live answer.
+  expect(new URL(page.url()).hash).toMatch(/^#\/answer\//);
+  await expect(page.locator('.claim')).toContainText('PRIVATE A ANSWER');
+  await expect(page.getByRole('link', { name: /^← (All conversations|Tất cả cuộc trò chuyện)$/ })).toBeVisible();
   await page.getByRole('link', { name: 'History', exact: true }).click();
-  await expect(page.getByRole('button', { name: /View answer|Delete conversation/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Continue this conversation|Delete conversation/ })).toHaveCount(0);
   state.user = 'B'; await refreshIdentity(page);
   await expect(page.getByRole('link', { name: 'Open conversation' })).toHaveCount(0);
   await page.evaluate(() => { location.hash = '/history/11111111-1111-4111-8111-111111111111'; });
-  await expect(page.getByRole('button', { name: /View answer/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).hash).toMatch(/^#\/answer\//);
+  await expect(page.locator('.claim')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Delete conversation' })).toHaveCount(0);
   await page.locator('.wordmark').click();
-  await expect(page.getByLabel('Your question')).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('');
   await expect(page.getByText('PRIVATE SOURCE A', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify(sessionStorage))).not.toContain('PRIVATE A');
 });
@@ -76,43 +83,44 @@ test('R3-01 delayed history and answer cannot repopulate after account or member
   const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/conversations/*/answers*', async route => { if (state.user !== 'A') return route.fulfill({ status: 403, json: error() }); await gate; await route.fulfill({ json: { items: [answer()], next_cursor: null } }).catch(() => {}); });
   await page.goto(`/#/history/${institution}`);
-  await expect(page.getByText('Loading conversation…')).toBeVisible();
+  await expect(page.getByText('Reopening this conversation…')).toBeVisible();
   state.user = 'B'; await refreshIdentity(page); release();
-  await expect(page.getByRole('button', { name: /View answer/ })).toHaveCount(0);
+  await expect(page.locator('.claim')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Delete conversation' })).toHaveCount(0);
   await page.locator('.wordmark').click();
   let finish!: () => void;
   const answerGate = new Promise<void>(resolve => { finish = resolve; });
   await page.route('**/api/v1/answers', async route => { await answerGate; await route.fulfill({ json: answer('STALE DELAYED ANSWER') }).catch(() => {}); });
-  await ask(page, 'B OWNED DRAFT'); await expect(page.getByRole('button', { name: 'Stop waiting' })).toBeVisible();
+  await ask(page, 'B OWNED DRAFT'); await expect(page.getByRole('button', { name: /^(Stop waiting|Dừng chờ)$/ })).toBeVisible();
   state.member = false; await refreshIdentity(page); finish();
-  await expect(page.getByRole('button', { name: 'Stop waiting' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^(Stop waiting|Dừng chờ)$/ })).toHaveCount(0);
   await expect(page.getByText('STALE DELAYED ANSWER')).toHaveCount(0);
-  await expect(page.getByLabel('Your question')).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('');
 });
 
 for (const action of ['sign-out', 'delete-user']) test(`R2-04 ${action} clears owned text immediately and after reload`, async ({ page }) => {
-  await fixture(page); await page.goto('/'); await page.getByLabel('Your question').fill('PRIVATE LOGOUT TEXT');
+  await fixture(page); await page.goto('/'); await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('PRIVATE LOGOUT TEXT');
   await page.evaluate(action => { location.hash = action === 'delete-user' ? '/auth?delete_token=synthetic' : '/auth'; }, action);
   page.on('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: action === 'sign-out' ? 'Sign out' : 'Confirm account deletion', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome to noti.school' })).toBeVisible();
   await expect(page.getByText('Sign in to the account before confirming deletion.', { exact: false })).toHaveCount(0);
-  await page.locator('.wordmark').click(); await expect(page.getByLabel('Your question')).toHaveValue('');
-  await page.reload(); await expect(page.getByLabel('Your question')).toHaveValue('');
+  await page.locator('.wordmark').click(); await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('');
+  await page.reload(); await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('');
   expect(await page.evaluate(() => JSON.stringify(sessionStorage))).not.toContain('PRIVATE LOGOUT TEXT');
 });
 
 test('R2-04 intentional anonymous first-login draft survives, subsequent account change clears it', async ({ page }) => {
   const state = await fixture(page, false, null); await page.goto('/');
   await expect(page.getByRole('link', { name: 'Sign in', exact: true }).first()).toBeVisible();
-  await page.getByLabel('Your question').fill('ANONYMOUS FIRST DRAFT');
+  await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('ANONYMOUS FIRST DRAFT');
   await page.getByRole('link', { name: 'Sign in', exact: true }).first().click();
   await page.getByLabel('Email', { exact: true }).fill('synthetic@example.test');
   await page.getByLabel('Password', { exact: true }).fill('synthetic-password');
   await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
-  await page.locator('.wordmark').click(); await expect(page.getByLabel('Your question')).toHaveValue('ANONYMOUS FIRST DRAFT');
-  state.user = 'C'; await refreshIdentity(page); await expect(page.getByLabel('Your question')).toHaveValue('');
+  await page.locator('.wordmark').click(); await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('ANONYMOUS FIRST DRAFT');
+  state.user = 'C'; await refreshIdentity(page); await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('');
 });
 
 test('R3-03 real 46.5 second response succeeds within frozen 155 second allowance', async ({ page }) => {
@@ -134,21 +142,21 @@ test('R3-03 stop, disconnect, conflict and reload reuse key; changed question an
   });
   await page.goto('/'); await ask(page, 'Exact pending question ');
   await expect.poll(() => keys.length).toBe(1);
-  await page.getByRole('button', { name: 'Stop waiting' }).click();
+  await page.getByRole('button', { name: /^(Stop waiting|Dừng chờ)$/ }).click();
   await expect(page.getByRole('alert')).toContainText('Processing may continue');
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();
   await expect(page.getByRole('alert')).toContainText('Processing may continue');
   release(); await expect(page.getByText('OBSOLETE RESULT')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();
   await expect(page.getByRole('alert')).toContainText('already being processed');
-  await page.reload(); await expect(page.getByLabel('Your question')).toHaveValue('Exact pending question ');
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await page.reload(); await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('Exact pending question ');
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();
   await expect.poll(() => keys.length).toBe(4);
   expect(new Set(keys).size).toBe(1);
-  await expect(page.getByRole('button', { name: 'Ask', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Ask|Hỏi)$/ })).toBeVisible();
   await ask(page, 'Exact pending question'); await expect.poll(() => keys.length).toBe(5);
   expect(keys[4]).not.toBe(keys[0]);
-  state.user = 'B'; await refreshIdentity(page); await expect(page.getByLabel('Your question')).toHaveValue('');
+  state.user = 'B'; await refreshIdentity(page); await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('');
   await ask(page, 'Exact pending question '); await expect.poll(() => keys.length).toBe(6);
   expect(keys[5]).not.toBe(keys[0]);
 });
@@ -168,11 +176,12 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   await page.setViewportSize(viewport); const state = await fixture(page, true);
   const requests: string[] = []; page.on('request', req => { if (req.url().includes('/api/')) requests.push(req.url()); });
   await page.goto('/#/admin');
-  await page.getByLabel('Select source').selectOption(sourceId);
+  await choose(page.getByLabel('Select source'), source.title);
   await page.getByRole('button', { name: 'Review passages' }).click();
   await expect(page.getByText('FIRST EXTRACTED PAGE <script>bad()</script>', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Evidence chunk ID', { exact: true }).first()).toHaveValue(institution);
-  await expect(page.getByRole('link', { name: 'Open original file' })).toHaveAttribute('href', `/api/v1/institutions/${institution}/versions/${versionId}/file`);
+  await expect(page.getByRole('link', { name: 'Open this version in the document reader' })).toHaveAttribute('href', `#/sources/${sourceId}/versions/${versionId}`);
+  expect(await page.locator('a[href*="/api/"]').count()).toBe(0);
   await page.getByLabel('Passage pages').getByRole('button', { name: 'Next page' }).click();
   await expect(page.getByText('SECOND EXTRACTED PAGE')).toBeVisible();
   await expect(page.getByText('FIRST EXTRACTED PAGE', { exact: false })).toHaveCount(0);
@@ -186,7 +195,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   expect(state.mutations).toEqual([]);
   expect(requests.some(url => url.includes('/conversations/') || url.endsWith('/api/v1/answers'))).toBe(false);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: new URL(`./artifacts/repair-admin-${viewport.width}.png`, import.meta.url).pathname, fullPage: true });
+  await page.screenshot({ path: fileURLToPath(new URL(`./artifacts/repair-admin-${viewport.width}.png`,import.meta.url)), fullPage: true });
   await page.getByRole('button', { name: 'Mark reviewed' }).click(); await expect.poll(() => state.mutations.length).toBe(1);
   state.admin = false; await refreshIdentity(page);
   await expect(page.getByText('PRIVATE REPORTED QUESTION', { exact: false })).toHaveCount(0);
@@ -196,7 +205,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
 
 test('R3-04 R1-04 empty extraction and missing context remain explicit and unresolved', async ({ page }) => {
   const state = await fixture(page, true); state.emptyChunks = true; state.contextFails = true;
-  await page.goto('/#/admin'); await page.getByLabel('Select source').selectOption(sourceId);
+  await page.goto('/#/admin'); await choose(page.getByLabel('Select source'), source.title);
   await page.getByRole('button', { name: 'Review passages' }).click();
   await expect(page.getByText('No extracted text on this page.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Review report context' }).click();
@@ -214,11 +223,11 @@ test('independent regression: stopped follow-up reload preserves conversation, l
     return route.fulfill({ status: 409, json: error('conflict') });
   });
   await page.goto('/'); await ask(page, 'First question'); await expect(page.locator('.claim')).toContainText('FIRST ANSWER');
-  await page.getByLabel('Answer language').selectOption('vi');
+  await choose(page.getByLabel('Answer language'), 'Tiếng Việt');
   await ask(page, 'Câu hỏi tiếp theo\n'); await expect(page.getByRole('alert')).toContainText('already being processed');
   expect(attempts[1]!.body).toMatchObject({ conversation_id: institution, language: 'vi', question: 'Câu hỏi tiếp theo\n' });
-  await page.reload(); await expect(page.getByLabel('Your question')).toHaveValue('Câu hỏi tiếp theo\n');
-  await page.getByRole('button', { name: 'Ask', exact: true }).click(); await expect.poll(() => attempts.length).toBe(3);
+  await page.reload(); await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue('Câu hỏi tiếp theo\n');
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click(); await expect.poll(() => attempts.length).toBe(3);
   expect(attempts[2]).toEqual(attempts[1]);
 });
 
@@ -237,10 +246,10 @@ test('independent regression: obsolete callback cannot overwrite or stop a newer
     await route.fulfill({ json: answer(index === 1 ? 'OBSOLETE' : 'CURRENT OPERATION') });
   });
   await page.goto('/'); await ask(page, 'Old operation'); await expect.poll(() => count).toBe(1);
-  await page.getByRole('button', { name: 'Stop waiting' }).click();
+  await page.getByRole('button', { name: /^(Stop waiting|Dừng chờ)$/ }).click();
   await ask(page, 'New operation'); await expect.poll(() => count).toBe(2);
   first(); await page.waitForTimeout(100);
-  await expect(page.getByRole('button', { name: 'Stop waiting' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Stop waiting|Dừng chờ)$/ })).toBeVisible();
   await expect(page.locator('.claim')).toHaveCount(0);
   second(); await expect(page.locator('.claim')).toContainText('CURRENT OPERATION');
   await expect(page.getByText('OBSOLETE', { exact: false })).toHaveCount(0);
@@ -260,4 +269,76 @@ test('independent regression: delayed admin context and form drafts are discarde
   await expect(page.getByLabel('Document title')).toHaveValue('');
   await expect(page.getByText('DELAYED PRIVATE REPORT')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Mark resolved' })).toBeDisabled();
+});
+
+test('R6-01 A-10 completed and definitive answers retire the key; ambiguous keys end with deletion', async ({ page }) => {
+  await fixture(page); const keys: string[] = []; let outcome = 'answer';
+  await page.route('**/api/v1/answers', async route => {
+    keys.push(route.request().headers()['idempotency-key']!);
+    if (outcome === 'answer') return route.fulfill({ json: answer('FRESH ANSWER') });
+    if (outcome === 'unauthenticated') return route.fulfill({ status: 401, json: error('unauthenticated') });
+    return route.fulfill({ status: outcome === 'conflict' ? 409 : 503, json: error(outcome) });
+  });
+  await page.route('**/api/v1/institutions/*/conversations/*', route => route.request().method() === 'DELETE' ? route.fulfill({ status: 204 }) : route.fallback());
+  const alert = page.locator('.notice[role="alert"]');
+  await page.goto('/'); await ask(page, 'Same question'); await expect(page.locator('.claim')).toContainText('FRESH ANSWER');
+  await page.getByRole('link', { name: '← New question' }).click();
+  await ask(page, 'Same question'); await expect.poll(() => keys.length).toBe(2);
+  expect(keys[1]).not.toBe(keys[0]);
+  outcome = 'provider_unavailable'; await page.getByRole('link', { name: '← New question' }).click();
+  await ask(page, 'Same question'); await expect(alert).toContainText('temporarily unavailable');
+  await expect(alert.getByRole('link', { name: 'Sign in', exact: true })).toHaveCount(0);
+  await expect(alert.getByRole('link', { name: 'Browse sources', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click(); await expect.poll(() => keys.length).toBe(4);
+  expect(keys[3]).not.toBe(keys[2]);
+  outcome = 'unauthenticated'; await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();
+  await expect(alert.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
+  outcome = 'conflict'; await page.getByRole('link', { name: '← New question' }).click();
+  await ask(page, 'Ambiguous question'); await expect(alert).toContainText('already being processed');
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click(); await expect.poll(() => keys.length).toBe(7);
+  expect(keys[6]).toBe(keys[5]);
+  await page.evaluate(id => { location.hash = `/history/${id}`; }, institution);
+  await page.getByText('Remove from history').click();
+  await page.getByRole('button', { name: 'Delete conversation' }).click();
+  // Confirmation is inline; nothing is deleted until it is confirmed.
+  await expect(page.getByRole('button', { name: 'Keep' })).toBeFocused();
+  await page.getByRole('button', { name: 'Delete permanently' }).click();
+  await expect(page.getByRole('button', { name: 'Delete conversation' })).toHaveCount(0);
+  await page.locator('.wordmark').click(); await ask(page, 'Ambiguous question'); await expect.poll(() => keys.length).toBe(8);
+  expect(keys[7]).not.toBe(keys[5]);
+});
+
+test('R6-02 deletion callback survives the initial sign-in and clears on account switch', async ({ page }) => {
+  const state = await fixture(page, false, null);
+  await page.goto('/#/auth?delete_token=synthetic-delete');
+  expect(page.url()).not.toContain('synthetic-delete');
+  await expect(page.getByText('Sign in to the account before confirming deletion.', { exact: false })).toBeVisible();
+  await page.getByLabel('Email', { exact: true }).fill('synthetic@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('synthetic-password');
+  await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Confirm account deletion', exact: true })).toBeVisible();
+  state.user = 'C'; await refreshIdentity(page);
+  await page.getByText('Delete account', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Request account deletion', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Confirm account deletion', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.stringify(sessionStorage))).not.toContain('synthetic-delete');
+});
+
+test('A-09 unavailable answers are visible and block Ask; failed capability reads are shown', async ({ page }) => {
+  await fixture(page); let calls = 0, failing = false;
+  await page.route('**/api/v1/answers', route => { calls++; return route.fulfill({ json: answer() }); });
+  await page.route('**/api/v1/capabilities', route => {
+    if (failing) return route.fulfill({ status: 503, json: error('core_unavailable') });
+    const cap = { state: 'available', reason: 'ready' };
+    return route.fulfill({ json: { mode: 'live', answers: { state: 'unavailable', reason: 'budget_exhausted' }, indexing: cap, discovery: cap, google: cap, email: cap, identity: cap } });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('status').filter({ hasText: 'Answers are paused for this month.' })).toBeVisible();
+  await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('Blocked question');
+  await expect(page.getByRole('button', { name: /^(Ask|Hỏi)$/ })).toBeDisabled();
+  expect(calls).toBe(0);
+  failing = true; await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: 'Answer availability could not be checked.' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Ask|Hỏi)$/ })).toBeEnabled();
 });

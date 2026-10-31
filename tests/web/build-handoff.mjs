@@ -1,8 +1,9 @@
+import { fileURLToPath } from 'node:url';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-const root=resolve(new URL('../../',import.meta.url).pathname);
+const root=resolve(fileURLToPath(new URL('../../',import.meta.url)));
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 async function walk(path){const paths=[];for(const entry of await readdir(path,{withFileTypes:true})){if(['node_modules','dist','.cache','runs'].includes(entry.name))continue;const file=path+'/'+entry.name;if(entry.isDirectory())paths.push(...await walk(file));else paths.push(file);}return paths;}
 const loaded=[

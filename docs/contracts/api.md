@@ -49,7 +49,8 @@ Invitation integration: custom public `POST /api/auth/invitations/redeem` accept
 verified session and CSRF validation. Auth calls Rust `POST /internal/invitations/redeem` with internal
 bearer secret and `{token,user_id,email,email_verified:true}`. Rust atomically consumes a SHA256 token
 hash once, matches invitation email HMAC (INTERNAL_AUTH_SECRET), expiry and unredeemed status, and
-creates membership using the stored invitation role. Response Membership; no client role/institution
+creates membership using the stored invitation role; redemption never demotes an active admin, never
+restores a revoked membership (403) and refuses deleted identities. Response Membership; no client role/institution
 override. An auth before-create hook must call `POST /internal/invitations/check` with `{token,email}`
 and internal bearer before either password or Google account creation; 200 `{valid:true}` or generic
 403 ApiError. OAuth pending invitation must be in server-side state bound to the browser OAuth state,
@@ -98,7 +99,8 @@ unavailable; intentionally missing configuration marks disabled. Configuration p
 Provider dispatch: no automatic retries. Embeddings have 30s, reranking/evidence/support calls 15s each, generation 45s, within the existing 140s overall work allowance. Reserve each paid stage before dispatch; auxiliary OpenAI stages use the configured OPENAI_CHAT_MODEL, strict Responses schemas, store:false and no tools.
 Answer persistence holds membership/source/graph mutation locks and bounds SQL lock waits to five seconds. All potentially blocking persistence writes precede the final identity introspection and current evidence/graph-seed/ownership/expiry checks on the held transaction. Failure rolls back answer and citations. These checks immediately precede commit, but identity is a separate service: this is not an atomic cross-service authorization transaction, nor a guarantee against revocation after the last observation.
 Persist dispatched state before HTTP; cancellation, disconnect, malformed usage or ambiguous timeout
-retains reservation. No retry on schema-invalid replies unless explicitly budgeted. Jev pinned version
+retains reservation (`uncertain`); a validated-usage reply rejected on content settles that usage. A
+replay of a definitively failed key returns the stored error code without dispatch. No retry on schema-invalid replies unless explicitly budgeted. Jev pinned version
 `jev-1.13.0`; validate expected question IDs exactly and finite probabilities in [0,1]. Never send auth
 secrets or treat retrieved instructions as authority. English and Vietnamese need separate live evaluation.
 

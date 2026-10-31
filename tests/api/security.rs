@@ -347,3 +347,82 @@ async fn static_root_api_fallback_and_symlink_escape() {
     }
     std::fs::remove_dir_all(directory).unwrap();
 }
+#[test]
+fn deprecated_6to4_relay_range_denied_with_exact_boundaries() {
+    for ip in ["192.88.99.0", "192.88.99.1", "192.88.99.255"] {
+        assert!(!ssrf::public_ip(ip.parse().unwrap()), "{ip}");
+    }
+    for ip in ["192.88.98.255", "192.88.100.0", "192.31.196.1"] {
+        assert!(ssrf::public_ip(ip.parse().unwrap()), "{ip}");
+    }
+}
+#[test]
+fn session_cookie_shape_is_checked_before_identity_call() {
+    let signed =
+        "__Secure-better-auth.session_token=AbCdEf0123456789AbCdEf0123456789.c2lnbmF0dXJl%2B%2F%3D";
+    assert!(auth::plausible_session_cookie(signed.as_bytes(), true));
+    assert!(auth::plausible_session_cookie(
+        format!("theme=dark; {signed}").as_bytes(),
+        true
+    ));
+    for malformed in [
+        "",
+        "theme=dark",
+        "__Secure-better-auth.session_token=",
+        "__Secure-better-auth.session_token=unsigned-token",
+        "__Secure-better-auth.session_token=.signature",
+        "__Secure-better-auth.session_token=token.sig\"nature",
+        "better-auth.session_tokenx=token.signature",
+    ] {
+        assert!(
+            !auth::plausible_session_cookie(malformed.as_bytes(), true),
+            "{malformed}"
+        );
+    }
+    // Plain-http loopback development keeps only the generic visible-ASCII bound.
+    assert!(auth::plausible_session_cookie(
+        b"session=synthetic-cookie",
+        false
+    ));
+    assert!(!auth::plausible_session_cookie(b"", false));
+    assert!(!auth::plausible_session_cookie(
+        "synthetic\u{7f}".as_bytes(),
+        false
+    ));
+}
+#[tokio::test]
+async fn identity_capability_probe_is_cached_for_bounded_ttl() {
+    let s = state();
+    let cached = serde_json::json!({"identity":{"state":"available","reason":"ready"}});
+    *s.identity_probe.lock().await = Some((std::time::Instant::now(), Some(cached.clone())));
+    // No identity secret is configured, so a real probe would fail; a fresh entry is reused.
+    assert_eq!(auth::capabilities(&s).await.unwrap(), cached);
+    *s.identity_probe.lock().await = Some((
+        std::time::Instant::now() - std::time::Duration::from_secs(6),
+        Some(cached),
+    ));
+    assert_eq!(
+        auth::capabilities(&s).await.unwrap_err().0,
+        "core_unavailable"
+    );
+    let (at, value) = s.identity_probe.lock().await.clone().unwrap();
+    assert!(value.is_none() && at.elapsed() < std::time::Duration::from_secs(5));
+}
+#[tokio::test]
+async fn saturated_product_slots_keep_health_and_static_paths_available() {
+    let s = state();
+    let _held = s.slots.clone().acquire_many_owned(8).await.unwrap();
+    let app = router(s);
+    for (path, limited) in [("/healthz", false), ("/", false), ("/api/v1/me", true)] {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status() == StatusCode::TOO_MANY_REQUESTS,
+            limited,
+            "{path}"
+        );
+    }
+}

@@ -1,0 +1,218 @@
+/* Source collection, source detail and citation reader. Uses the clay tokens from style.css. */
+
+.sources h1 {
+  overflow-wrap: anywhere;
+}
+
+/* List rows: title on top, edition / validity / format underneath. */
+.source-row-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.source-row-title {
+  overflow-wrap: anywhere;
+}
+.source-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--muted);
+}
+.source-row-pending {
+  opacity: 0.7;
+}
+.source-row > svg:last-child {
+  flex: none;
+  color: var(--muted);
+}
+.format-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 9px;
+  border-radius: var(--r-pill);
+  background: var(--butter-soft);
+  color: var(--ink-soft, var(--ink));
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Search and format filters over the loaded page. */
+.source-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 20px;
+  margin: 24px 0 20px;
+}
+.source-search {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.source-search-label {
+  font-size: 14px;
+  font-weight: 560;
+}
+.source-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.source-search-field svg {
+  position: absolute;
+  left: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.source-search-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px 10px 42px;
+}
+.format-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip-button {
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+.source-filter-hint,
+.source-count {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.source-count {
+  margin-bottom: 12px;
+}
+.source-empty {
+  padding: 22px 24px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--clay-well);
+  color: var(--muted);
+}
+.source-empty p {
+  margin: 0 0 12px;
+}
+.source-empty p:last-child {
+  margin-bottom: 0;
+}
+
+/* Detail page. */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 14px;
+  color: var(--cyan);
+}
+.source-title {
+  margin-top: 4px;
+  line-height: 1.3;
+}
+.source-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+.source-facts a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--cyan);
+}
+.versions-heading {
+  margin: 28px 0 14px;
+  font-size: 18px;
+}
+/* Editions are raised cards; the current one reads first, superseded ones sit pressed into the page. */
+.sources .version-row {
+  padding: 18px 22px;
+  margin-bottom: 12px;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+}
+.sources .version-row p {
+  margin: 8px 0 0;
+}
+.sources .version-row a {
+  margin-top: 6px;
+}
+.version-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.version-head h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.version-note {
+  font-style: italic;
+}
+.sources .version-old {
+  background: var(--surface);
+  border-color: transparent;
+  box-shadow: var(--clay-well);
+}
+.version-old h3 {
+  color: var(--ink-soft);
+  font-weight: 560;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.chip-current {
+  background: var(--sage-soft);
+  color: var(--cyan);
+}
+.chip-old {
+  background: var(--bg-deep, var(--surface));
+  color: var(--muted);
+  box-shadow: var(--clay-well);
+}
+
+/* Citation reader. */
+.reader-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.reader-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 4px;
+}
+.reader details {
+  margin-bottom: 8px;
+}

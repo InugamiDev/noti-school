@@ -29,7 +29,22 @@ pub struct IdentityCapabilities {
     google: Capability,
     email: Capability,
 }
+pub type ProbeCache = tokio::sync::Mutex<Option<(std::time::Instant, Option<serde_json::Value>)>>;
+const PROBE_TTL: std::time::Duration = std::time::Duration::from_secs(5);
+// intent: holding the async mutex across the bounded (2s) probe coalesces concurrent callers into
+// one identity request; success and failure are both reused for PROBE_TTL.
 pub async fn capabilities(s: &AppState) -> Result<serde_json::Value> {
+    let mut cached = s.identity_probe.lock().await;
+    if let Some((at, value)) = cached.as_ref()
+        && at.elapsed() < PROBE_TTL
+    {
+        return value.clone().ok_or(Error("core_unavailable"));
+    }
+    let value = probe_capabilities(s).await.ok();
+    *cached = Some((std::time::Instant::now(), value.clone()));
+    value.ok_or(Error("core_unavailable"))
+}
+async fn probe_capabilities(s: &AppState) -> Result<serde_json::Value> {
     let response = s
         .identity
         .post("http://127.0.0.1:3811/internal/capabilities")
@@ -106,6 +121,39 @@ pub fn internal(headers: &HeaderMap, secret: Option<&str>) -> Result<()> {
     }
     Ok(())
 }
+// intent: reject obviously unusable cookies locally so anonymous traffic does not consume the identity
+// service's internal session quota. Better Auth signs `<token>.<signature>` (URL-encoded base64) under
+// `better-auth.session_token`, prefixed `__Secure-` when NODE_ENV=production (which requires https).
+// Plain-http loopback development keeps only the generic shape check; identity remains authoritative.
+pub fn plausible_session_cookie(header: &[u8], https: bool) -> bool {
+    if header.is_empty() || header.iter().any(|b| !(0x20..=0x7e).contains(b)) {
+        return false;
+    }
+    if !https {
+        return true;
+    }
+    let Ok(header) = std::str::from_utf8(header) else {
+        return false;
+    };
+    header.split(';').any(|pair| {
+        let Some((name, value)) = pair.trim().split_once('=') else {
+            return false;
+        };
+        let signed = value
+            .split_once('.')
+            .is_some_and(|(token, signature)| !token.is_empty() && !signature.is_empty());
+        [
+            "__Secure-better-auth.session_token",
+            "better-auth.session_token",
+        ]
+        .contains(&name)
+            && value.len() <= 1024
+            && signed
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-%+/=".contains(&b))
+    })
+}
 pub async fn session(state: &AppState, headers: &HeaderMap) -> Result<Session> {
     let secret = state
         .config
@@ -114,7 +162,13 @@ pub async fn session(state: &AppState, headers: &HeaderMap) -> Result<Session> {
         .ok_or(Error("core_unavailable"))?;
     state.pool()?;
     let cookie = headers.get("cookie").ok_or(Error("unauthenticated"))?;
-    if cookie.as_bytes().len() > 8192 || headers.get_all("cookie").iter().count() != 1 {
+    if cookie.as_bytes().len() > 8192
+        || headers.get_all("cookie").iter().count() != 1
+        || !plausible_session_cookie(
+            cookie.as_bytes(),
+            state.config.origin.starts_with("https://"),
+        )
+    {
         return Err(Error("unauthenticated"));
     }
     let response = state

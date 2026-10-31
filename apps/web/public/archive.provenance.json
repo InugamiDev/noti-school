@@ -1,8 +1,8 @@
 {
-  "source": "/home/inu/.ultrathink/campaigns/noti-school-pilot-20260925/assets/noti-school-archive-background.png",
-  "source_sha256": "3f21acc149cd3c9b75e9a06ab08f0a3939969a92b17021f2850a777b965dd63d",
-  "output_sha256": "1e3f5175ef6515284617135eb610c1d3b493738c065588fd100fef9bc25d340d",
-  "bytes": 123988,
+  "source": "Rendered from apps/web/src/scene.ts (reduced-motion frame, 1680x1000 viewport) in headless Chromium / ANGLE SwiftShader",
+  "source_sha256": "16f9a2dd586eab9906d9481713c090b6ecbf20b0eb39fa589291634ae877411b",
+  "output_sha256": "bd2e814f69a2251060063d63d9eae5fc4abc19486e9701c06136474c6ef4625d",
+  "bytes": 18166,
   "operation": "sharp 0.35.4, width 1680 without enlargement, WebP quality 78 effort 6",
-  "use": "Approved illustrative fallback only; not institutional evidence"
+  "use": "Illustrative fallback only; not institutional evidence"
 }

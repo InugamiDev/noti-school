@@ -84,6 +84,11 @@ async fn index_one(s: &AppState, i: Uuid, version: Uuid, job: Uuid, user: &str) 
     Ok(ready)
 }
 
+// Bounded sweep of expired keys that no longer root recoverable or financially relevant work.
+pub(crate) async fn reclaim_keys(db: &sqlx::PgPool) -> Result<u64> {
+    Ok(sqlx::query(sqlx::AssertSqlSafe(format!("WITH selected AS MATERIALIZED (SELECT k.operation_id FROM product.idempotency_keys k WHERE {reclaimable} ORDER BY k.expires_at,k.operation_id LIMIT 100 FOR UPDATE OF k SKIP LOCKED) DELETE FROM product.idempotency_keys k USING selected WHERE k.operation_id=selected.operation_id", reclaimable=crate::ingestion::RECLAIMABLE_KEY))).execute(db).await?.rows_affected())
+}
+
 pub async fn run(s: AppState) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
     loop {
@@ -91,6 +96,7 @@ pub async fn run(s: AppState) {
         let _ = tick(&s).await;
         if let Some(db) = &s.db {
             let _ = crate::accounts::retain(&s).await;
+            let _ = reclaim_keys(db).await;
             let _ = sqlx::query("UPDATE product.idempotency_keys SET state='failed',response='{}' WHERE operation_id IN (SELECT operation_id FROM product.idempotency_keys WHERE state='pending' AND created_at<now()-interval '5 minutes' ORDER BY created_at LIMIT 100)").execute(db).await;
             let _ = sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE product.pipeline_stages SET result=NULL WHERE id IN (SELECT p.id FROM product.pipeline_stages p JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.expires_at<now() AND p.result IS NOT NULL AND NOT {recoverable} ORDER BY p.created_at LIMIT 100)", recoverable=crate::budget::RECOVERABLE_EMBEDDING))).execute(db).await;
             let _ = sqlx::query("WITH failed AS (UPDATE product.ingestion_jobs SET state='failed',error_code='not_found',updated_at=now() WHERE id IN (SELECT j.id FROM product.ingestion_jobs j JOIN product.idempotency_keys k ON k.operation_id=j.id WHERE j.state IN ('queued','running') AND j.updated_at<now()-interval '2 minutes' AND (k.expires_at<now() OR NOT EXISTS(SELECT 1 FROM product.memberships m WHERE m.institution_id=j.institution_id AND m.user_id=k.user_id AND m.role='admin' AND m.revoked_at IS NULL)) ORDER BY j.updated_at LIMIT 100) RETURNING institution_id,version_id) UPDATE product.source_versions v SET indexing='failed' FROM failed f WHERE v.institution_id=f.institution_id AND v.id=f.version_id AND v.indexing IN ('pending','running')").execute(db).await;

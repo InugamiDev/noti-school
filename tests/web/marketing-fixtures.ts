@@ -34,24 +34,24 @@ export const artifactRoot = fileURLToPath(
 // Independent expected text, read from the synthetic design example; never import the component as its own oracle.
 export const exampleEvidence = [
   {
-    question: "Where is the practice handbook?",
+    question: "How do I request an official transcript?",
     answer:
-      "In this example, open the Sample Library and choose “Practice handbook”. The document index identifies the current example version.",
-    title: "Sample Library guide",
-    locator: "Section 1 · Finding a document",
-    version: "Example version A",
+      "Request it from the Student Services portal under “Records”, then collect the stamped copy from the Registry desk.",
+    title: "Student Services Handbook",
+    locator: "Section 4.2 · Transcripts",
+    version: "2026–27 edition",
     passage:
-      "The Sample Library lists the Practice handbook in its document index. Select “Practice handbook” to open it. The index marks the current example version beside the title.",
+      "Official transcripts are requested through the Student Services portal under “Records”. Stamped copies are collected in person from the Registry desk.",
   },
   {
-    question: "Which version of the sample form should I use?",
+    question: "Which course change form should I use?",
     answer:
-      "Use version B of the Practice request form in this fictional collection. Version A is archived and is kept only for reference.",
-    title: "Practice request form — version note",
-    locator: "Section 2 · Version history",
-    version: "Example version B",
+      "Use form CC-2. It replaced CC-1, which is kept in the archive for reference and is no longer accepted.",
+    title: "Academic Forms Index",
+    locator: "Page 3 · Course changes",
+    version: "Revised edition",
     passage:
-      "Practice request form, version B, replaces version A in this sample collection. Version A is archived for reference and should not be used for a new practice request.",
+      "Form CC-2 replaces CC-1 for all course changes. CC-1 remains in the archive for reference and is no longer accepted.",
   },
 ] as const;
 

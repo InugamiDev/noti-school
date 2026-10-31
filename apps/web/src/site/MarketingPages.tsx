@@ -1,5 +1,5 @@
 import { For, Match, Switch, type JSX } from 'solid-js';
-import { ArrowUpRight, BookOpen, Languages } from 'lucide-solid';
+import { ArrowUpRight, BookOpen, Languages, ArrowRight } from 'lucide-solid';
 import { Band } from './Band';
 import { Closing, DocumentRows, Workflow } from './Sections';
 import ProductExample from './ProductExample';
@@ -25,42 +25,42 @@ const introductions = {
   '/pricing': [
     'Pricing',
     'Start with a conversation, not a checkout.',
-    'The current pilot is limited and invitation-bound. Public prices and paid plans have not been set.',
+    'noti.school is in an invitation-only pilot. Public pricing has not been published yet.',
   ],
   '/about': [
     'About',
     'Information is useful when people can reach it.',
-    'noti.school is an independent project in development, exploring a more accountable way to answer university questions.',
+    'noti.school answers university questions and shows you exactly where each answer comes from.',
   ],
   '/help': [
     'Help',
     'Find your next step.',
-    'Practical answers about using the pilot, checking sources and recovering when something is unavailable.',
+    'Answers about asking questions, reading sources and managing your account.',
   ],
   '/contact': [
     'Contact',
     'Let’s make the question clearer.',
-    'Discuss pilot access, institutional documents or a concern with the person building noti.school.',
+    'Ask about access, bring your institution’s documents or report a problem.',
   ],
   '/security': [
     'Security',
     'Trust needs boundaries.',
-    'Source approval, account access and visible limitations are part of the product’s design. They are not a claim of certification or complete security.',
+    'How noti.school controls access to accounts, documents and answers.',
   ],
   '/privacy': [
     'Privacy',
     'Know what you are sharing.',
-    'A readable draft notice for the pilot. This material needs review before public release and is not a finalized privacy policy.',
+    'How noti.school handles your questions, account and documents. This notice is a draft ahead of public release.',
   ],
   '/terms': [
     'Terms',
     'A guide to using the pilot responsibly.',
-    'Draft pilot terms for discussion and release review. This page is not presented as a reviewed public legal agreement.',
+    'The rules for using noti.school during the pilot. These terms are a draft ahead of public release.',
   ],
   '/changelog': [
     'Changelog',
     'A clearer view of the current pilot.',
-    'An undated account of the product’s current scope. Included features and remaining evaluation are described separately.',
+    'What noti.school can do today.',
   ],
 } as const;
 
@@ -108,10 +108,6 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 response. If the evidence cannot support the question, the useful next step may be a
                 source to read or an office to ask.
               </p>
-              <p>
-                The pilot’s live answer quality is still under evaluation. A working citation link
-                alone does not prove that a claim is supported.
-              </p>
             </TextSection>
             <TextSection title="Keep the conversation grounded">
               <p>
@@ -120,7 +116,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 needs review.
               </p>
               <a class="site-inline-link" href="#/">
-                Ask your own question <ArrowUpRight size={17} />
+                Ask your own question <ArrowRight size={17} />
               </a>
             </TextSection>
           </Band>
@@ -132,8 +128,8 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 Several ways in.
               </h2>
               <p>
-                Document coverage depends on what has been approved and made available to your
-                account.
+                Every document is reviewed before it can support an answer, and you see the ones
+                your account can access.
               </p>
             </div>
             <DocumentRows />
@@ -153,7 +149,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 document you mean. A focused question is easier to check against a source.
               </p>
               <a class="primary" href="#/">
-                Ask a question <ArrowUpRight size={17} />
+                Ask a question <ArrowRight size={17} />
               </a>
             </div>
             <div class="site-question-notes">
@@ -161,7 +157,6 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
               <p>“Where can I find the student handbook?”</p>
               <p>“Which document explains this procedure?”</p>
               <p lang="vi">“Tôi có thể tìm quy chế học vụ ở đâu?”</p>
-              <small>Question ideas, not statements about available coverage.</small>
             </div>
           </Band>
           <Band motion={props.motion} class="site-reading">
@@ -182,7 +177,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 a substitute for an official decision.
               </p>
               <a class="site-inline-link" href="#/sources">
-                Browse available documents <ArrowUpRight size={17} />
+                Browse available documents <ArrowRight size={17} />
               </a>
             </TextSection>
             <TextSection title="Keep personal records out of the question">
@@ -192,7 +187,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 personal student cases.
               </p>
               <a class="site-inline-link" href="#/privacy">
-                Read the pilot privacy notice <ArrowUpRight size={17} />
+                Read the pilot privacy notice <ArrowRight size={17} />
               </a>
             </TextSection>
           </Band>
@@ -225,10 +220,6 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 extracted text, document version and source status before publication. Restricted
                 material requires an explicit access decision.
               </p>
-              <p>
-                Administration is account- and membership-bound. Institutional interest does not
-                automatically grant administrator access.
-              </p>
             </TextSection>
             <TextSection title="Learn from what students cannot find">
               <p>
@@ -236,7 +227,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 reports to improve the source material, not to automate academic decisions.
               </p>
               <a class="site-inline-link" href="#/security">
-                Review the security boundaries <ArrowUpRight size={17} />
+                Review the security boundaries <ArrowRight size={17} />
               </a>
             </TextSection>
           </Band>
@@ -247,11 +238,11 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
               Start a conversation.
             </h2>
             <p>
-              No university partnership or deployment is implied by this website. Contact the owner
-              to discuss source permission, review responsibilities and pilot access.
+              Tell us which documents your students need and who reviews them. We will help you
+              plan a pilot around them.
             </p>
             <a class="primary" href="#/contact">
-              Discuss a pilot <ArrowUpRight size={18} />
+              Discuss a pilot <ArrowRight size={18} />
             </a>
           </Band>
         </Match>
@@ -265,27 +256,26 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 with a defined scope.
               </h2>
               <p>
-                There is no public checkout or published subscription. Access, source coverage and
-                service availability need to be confirmed before you rely on the pilot.
+                During the pilot, students join through an invitation and institutions work with us
+                directly on their collection.
               </p>
             </div>
             <dl>
               <div>
                 <dt>Student access</dt>
                 <dd>
-                  By invitation. Existing participants can use their account when sign-in is
-                  available.
+                  By invitation. Sign in with your pilot account or Google.
                 </dd>
               </div>
               <div>
                 <dt>Institutional participation</dt>
                 <dd>
-                  Discuss document scope, approval ownership and evaluation with the project owner.
+                  Plan your document collection, reviewers and rollout with us.
                 </dd>
               </div>
               <div>
                 <dt>Public pricing</dt>
-                <dd>Not announced. No unlimited usage or future price is promised.</dd>
+                <dd>Not published yet.</dd>
               </div>
             </dl>
           </Band>
@@ -293,21 +283,19 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
             <div>
               <h2>Already invited?</h2>
               <p>
-                Use the account page to sign in. If a required service is unavailable, the page will
-                explain what can be used.
+                Sign in to pick up your questions and saved conversations.
               </p>
               <a class="site-inline-link" href="#/auth">
-                Sign in to your account <ArrowUpRight size={18} />
+                Sign in to your account <ArrowRight size={18} />
               </a>
             </div>
             <div>
               <h2>Evaluating a pilot?</h2>
               <p>
-                Tell us what information you want students to find and who can approve the sources.
-                Start with scope before discussing access.
+                Tell us what your students need to find and who approves the sources.
               </p>
               <a class="primary" href="#/contact">
-                Contact about access <ArrowUpRight size={18} />
+                Contact about access <ArrowRight size={18} />
               </a>
             </div>
           </Band>
@@ -320,16 +308,16 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
               <br />a question and its source.
             </h2>
             <p>
-              University information is often spread across handbooks, procedures and course
-              documents. The project explores whether a source-grounded assistant can make that
-              information easier to use without hiding where it came from.
+              University information is spread across handbooks, procedures and course documents.
+              noti.school brings it into one place to ask, and every answer leads back to the
+              original document.
             </p>
           </Band>
           <Band motion={props.motion} class="site-reading">
             <TextSection title="An independent project">
               <p>
-                noti.school is built by the project owner, InugamiDev. It is in development and
-                claims no official university affiliation, partnership or endorsement.
+                noti.school is built independently by InugamiDev. It is not affiliated with or
+                endorsed by any university.
               </p>
               <a class="site-inline-link" href="https://github.com/InugamiDev">
                 Visit the owner’s public profile <ArrowUpRight size={17} />
@@ -337,19 +325,16 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
             </TextSection>
             <TextSection title="A focused starting point">
               <p>
-                The first pilot targets HCMIU and English/Vietnamese questions. Approved source
-                coverage, human evaluation and operational readiness still need to be established
-                before a wider release.
+                The first pilot serves HCMIU students, with questions in English and Vietnamese.
               </p>
             </TextSection>
-            <TextSection title="What we want to learn">
+            <TextSection title="What we care about">
               <p>
-                Can students find the right source more easily? Can they recognize an answer’s
-                limits? Can a document owner correct information without losing its version history?
-                These are questions for evaluation, not results claimed here.
+                Students should find the right source quickly and see an answer’s limits. Document
+                owners should be able to correct information without losing its version history.
               </p>
               <a class="site-inline-link" href="#/product">
-                Explore the product <ArrowUpRight size={17} />
+                Explore the product <ArrowRight size={17} />
               </a>
             </TextSection>
           </Band>
@@ -388,21 +373,13 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 unavailable state. An attractive answer is not a reason to bypass those limits.
               </p>
             </TextSection>
-            <TextSection title="What remains to be verified">
-              <p>
-                This is a pilot under development, with known application issues still awaiting
-                resolution. There is no certification, uptime guarantee or claim of production
-                readiness. Live service behavior, source quality and release reviews remain separate
-                verification work.
-              </p>
-            </TextSection>
             <TextSection title="Report a concern carefully">
               <p>
                 Contact the owner to arrange an appropriate private channel. Do not post
                 credentials, private documents or exploitable account details in public.
               </p>
               <a class="site-inline-link" href="#/contact">
-                Contact about a concern <ArrowUpRight size={17} />
+                Contact about a concern <ArrowRight size={17} />
               </a>
             </TextSection>
           </Band>
@@ -452,12 +429,12 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 promise a retention period or deletion deadline.
               </p>
               <a class="site-inline-link" href="#/contact">
-                Contact about privacy <ArrowUpRight size={17} />
+                Contact about privacy <ArrowRight size={17} />
               </a>
             </TextSection>
             <TextSection title="This website’s example">
               <p>
-                The illustrative answer/source example uses fictional text stored with the website.
+                The interactive example uses fictional text stored with the website.
                 Selecting a sample question does not send it to an answer service. The marketing
                 pages add no external analytics or advertising scripts.
               </p>
@@ -506,14 +483,14 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 unavailable, use the original source or contact the responsible office.
               </p>
               <a class="site-inline-link" href="#/contact">
-                Ask about these pilot notes <ArrowUpRight size={17} />
+                Ask about these pilot notes <ArrowRight size={17} />
               </a>
             </TextSection>
           </Band>
         </Match>
         <Match when={props.route === '/changelog'}>
           <Band motion={props.motion} class="site-changelog">
-            <span class="site-label">Current pilot · undated</span>
+            <span class="site-label">In noti.school today</span>
             <For
               each={[
                 [
@@ -522,15 +499,15 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 ],
                 [
                   'Accounts and collections',
-                  'The application includes invitation-bound account flows, conversation history, document review and administration. Service availability and membership still govern access.',
+                  'Invitation-based accounts with Google sign-in, saved conversations, document review and collection administration.',
                 ],
                 [
                   'Product website and example',
-                  'Product, student and institutional guides sit alongside pilot access, help and trust notices. A synthetic interactive example lets visitors inspect matching answer and source text.',
+                  'Guides for students and universities, searchable help, and an interactive example that shows an answer beside its source.',
                 ],
                 [
                   'Accessible archive motion',
-                  'The archive supports pause, system reduced motion and a bitmap fallback. Lightweight page reveals and evidence transitions follow the same motion preference.',
+                  'The 3D archive can be paused, follows your system’s reduced-motion setting and falls back to a still image when 3D is unavailable.',
                 ],
               ]}
             >
@@ -542,14 +519,10 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
               )}
             </For>
             <div class="site-changelog-pending">
-              <h2>Still under evaluation</h2>
-              <p>
-                Approved HCMIU coverage, live provider operation, human-reviewed English/Vietnamese
-                answer quality and public-release readiness. Known application issues remain; this
-                website update does not clear them.
-              </p>
-              <a class="site-inline-link" href="#/product">
-                Explore the current product <ArrowUpRight size={17} />
+              <h2>Try it with your own question</h2>
+              <p>Ask in English or Vietnamese and open the source behind the answer.</p>
+              <a class="site-inline-link" href="#/">
+                Ask a question <ArrowRight size={17} />
               </a>
             </div>
           </Band>

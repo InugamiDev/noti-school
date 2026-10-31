@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -11,7 +12,7 @@ test('compiled production entry boots without secrets on loopback, fails closed,
     socket.once('error', () => resolve(false));
   });
   assert.equal(occupied, false, 'Port 3811 occupied; refusing to interfere with another listener');
-  const child = spawn(process.execPath, [new URL('../../apps/auth/dist/server.js', import.meta.url).pathname], {
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../../apps/auth/dist/server.js', import.meta.url))], {
     env: { NODE_ENV: 'production', APP_ORIGIN: 'https://noti.school' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';

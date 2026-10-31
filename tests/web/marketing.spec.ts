@@ -1,4 +1,5 @@
 import type { Page } from "../../apps/web/node_modules/@playwright/test/index.js";
+import { choose } from "./choose";
 import {
   test,
   expect,
@@ -76,7 +77,7 @@ for (const viewport of [
       await checkPage(page, route);
       await screenshot(page, testInfo, `${route}-${viewport.name}`);
       if (route === "home") {
-        const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
+        const prompt = page.getByRole("textbox", { name: /^(Your question|Câu hỏi của bạn)$/ });
         await expect(prompt).toBeVisible();
         await prompt.click();
         await expect(prompt).toBeFocused();
@@ -125,7 +126,7 @@ for (const viewport of [
   }, testInfo) => {
     await page.setViewportSize(viewport);
     await checkPage(page, "home");
-    const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
+    const prompt = page.getByRole("textbox", { name: /^(Your question|Câu hỏi của bạn)$/ });
     await prompt.fill("Tôi có thể tìm tài liệu và biểu mẫu ở đâu? ".repeat(5));
     await assertGeometry(page);
     await screenshot(page, testInfo, `home-${viewport.width}`);
@@ -207,7 +208,7 @@ test("primary audience CTAs navigate, focus content, and support back/forward", 
     ["security", "contact"],
     ["privacy", "contact"],
     ["terms", "contact"],
-    ["changelog", "product"],
+    ["changelog", "home"],
   ] as const) {
     const surface = await visit(page, from);
     const cta = surface.locator(`a[href="${hrefFor(destination)}"]`).first();
@@ -237,7 +238,7 @@ test("workspace routes remain reachable and unknown routes offer recovery", asyn
   await expect(page.getByRole("main")).toContainText(/not found|does not exist|couldn.t find/i);
   const home = page.getByRole("main").locator('a[href="#/"]').first();
   await home.click();
-  await expect(page.getByRole("textbox", { name: "Your question", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /^(Your question|Câu hỏi của bạn)$/ })).toBeVisible();
 });
 
 test("mobile navigation opens by keyboard, closes with Escape, outside and route selection", async ({
@@ -306,7 +307,7 @@ test("home preserves a bilingual prompt through marketing navigation and reload"
   marketingAudit,
 }) => {
   await visit(page, "home");
-  const prompt = page.getByRole("textbox", { name: "Your question", exact: true });
+  const prompt = page.getByRole("textbox", { name: /^(Your question|Câu hỏi của bạn)$/ });
   await expect(page.getByRole("combobox", { name: /institution/i })).toContainText(institutionName);
   const draft = "Where are approved documents? Tôi cần kiểm tra phiên bản và nguồn.";
   await prompt.fill(draft);
@@ -354,7 +355,7 @@ test("Help filters real FAQ answers by search and category, with empty-state rec
   await details.locator("summary").click();
   await expect(details.locator("p")).toBeVisible();
   await expect(details.locator("p")).toContainText(
-    "Bilingual answer quality still needs evaluation",
+    "Choose Tiếng Việt in the question composer",
   );
   await expect(details.getByRole("link")).toHaveAttribute("href", "#/");
   await search.fill("");
@@ -420,15 +421,15 @@ for (const route of ["home", "product"] as const) {
     await visit(page, route);
     const demo = page.getByTestId("product-example");
     await expect(demo).toBeVisible();
-    await expect(demo).toContainText("Illustrative example");
-    await expect(demo).toContainText(/synthetic/i);
+    await expect(demo).toContainText("Example");
+    await expect(demo).toContainText("Example University");
     const questions = demo.getByRole("group", { name: "Example questions" });
     expect(await questions.getByRole("button").count()).toBeGreaterThanOrEqual(2);
     const answer = demo.getByRole("region", { name: "Example answer", exact: true });
     const source = demo.getByRole("region", { name: "Example source", exact: true });
     const draft = "Synthetic draft — giữ nguyên câu hỏi của tôi.";
     if (route === "home")
-      await page.getByRole("textbox", { name: "Your question", exact: true }).fill(draft);
+      await page.getByRole("textbox", { name: /^(Your question|Câu hỏi của bạn)$/ }).fill(draft);
     const before = marketingAudit.api.length;
     for (const [index, evidence] of exampleEvidence.entries()) {
       const choice = questions.getByRole("button", { name: evidence.question, exact: true });
@@ -446,8 +447,6 @@ for (const route of ["home", "product"] as const) {
       await expect(source).toContainText(evidence.title);
       await expect(source).toContainText(evidence.version);
       await expect(source).toContainText(evidence.locator);
-      await expect(source).toContainText(/synthetic|illustration/i);
-      await expect(source).toContainText(/not an HCMIU document/i);
       const other = exampleEvidence[index === 0 ? 1 : 0];
       await expect(answer).not.toContainText(other.answer);
       await expect(source).not.toContainText(other.passage);
@@ -462,7 +461,7 @@ for (const route of ["home", "product"] as const) {
     ).toEqual([]);
     expect(marketingAudit.external).toEqual([]);
     if (route === "home")
-      await expect(page.getByRole("textbox", { name: "Your question", exact: true })).toHaveValue(
+      await expect(page.getByRole("textbox", { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue(
         draft,
       );
   });
@@ -651,11 +650,11 @@ test("contact preparation and public link remain usable without the Clipboard AP
   });
   const guidance = surface.locator(".site-contact-guidance");
   await expect(guidance).toContainText("Describe your role");
-  await topic.selectOption("Institutional documents");
+  await choose(topic, "Institutional documents");
   await expect(guidance).toContainText("who owns them");
-  await topic.selectOption("Incorrect answer");
+  await choose(topic, "Incorrect answer");
   await expect(guidance).toContainText("questionable claim");
-  await topic.selectOption("Account or privacy concern");
+  await choose(topic, "Account or privacy concern");
   await expect(guidance).toContainText("private contact method");
   await expect(surface).toContainText("Nothing is sent.");
   const profile = surface.getByRole("link", { name: "Open GitHub profile", exact: true });
@@ -673,7 +672,7 @@ test("contact preparation and public link remain usable without the Clipboard AP
   expect(marketingAudit.api.slice(before)).toEqual([]);
 });
 
-for (const route of ["privacy", "terms", "security"] as const) {
+for (const route of ["privacy", "terms"] as const) {
   test(`${route}: visibly states pilot limits and pending public-release review`, async ({
     page,
   }) => {

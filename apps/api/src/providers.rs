@@ -160,15 +160,29 @@ impl<'de> Deserialize<'de> for UniqueJson {
     }
 }
 
-pub fn validate_response(bytes: &[u8], model: &str) -> Result<(Value, Vec<u64>)> {
-    let v = serde_json::from_slice::<UniqueJson>(bytes)
-        .map_err(|_| Error("provider_unavailable"))?
-        .0;
-    if v["model"] != model
-        || v["status"] != "completed"
-        || !v["error"].is_null()
-        || !v["incomplete_details"].is_null()
-    {
+// Validated usage of a rejected dispatched reply is settled; None leaves the hold uncertain.
+pub fn validated_jev_usage(bytes: &[u8]) -> Option<Vec<u64>> {
+    let v = serde_json::from_slice::<UniqueJson>(bytes).ok()?.0;
+    let usage: Usage = serde_json::from_value(v.get("usage")?.clone()).ok()?;
+    (v["model"] == JEV_MODEL
+        && usage.input_tokens > 0
+        && usage.input_tokens <= 64000
+        && usage.output_tokens <= 64000)
+        .then(|| vec![usage.input_tokens, usage.output_tokens])
+}
+pub fn validated_embedding_usage(bytes: &[u8]) -> Option<u64> {
+    let v = serde_json::from_slice::<UniqueJson>(bytes).ok()?.0;
+    let tokens = v["usage"]["prompt_tokens"]
+        .as_u64()
+        .filter(|n| *n > 0 && *n <= 8192)?;
+    (v["model"] == "text-embedding-3-small" && v["usage"]["total_tokens"].as_u64() == Some(tokens))
+        .then_some(tokens)
+}
+pub fn validated_response_usage(bytes: &[u8], model: &str) -> Option<Vec<u64>> {
+    response_usage(&serde_json::from_slice::<UniqueJson>(bytes).ok()?.0, model).ok()
+}
+fn response_usage(v: &Value, model: &str) -> Result<Vec<u64>> {
+    if v["model"] != model {
         return Err(Error("provider_unavailable"));
     }
     let input = v["usage"]["input_tokens"]
@@ -192,6 +206,16 @@ pub fn validate_response(bytes: &[u8], model: &str) -> Result<(Value, Vec<u64>)>
             return Err(Error("provider_unavailable"));
         }
     }
+    Ok(vec![input, output])
+}
+pub fn validate_response(bytes: &[u8], model: &str) -> Result<(Value, Vec<u64>)> {
+    let v = serde_json::from_slice::<UniqueJson>(bytes)
+        .map_err(|_| Error("provider_unavailable"))?
+        .0;
+    if v["status"] != "completed" || !v["error"].is_null() || !v["incomplete_details"].is_null() {
+        return Err(Error("provider_unavailable"));
+    }
+    let usage = response_usage(&v, model)?;
     let mut texts = Vec::new();
     for item in v["output"]
         .as_array()
@@ -223,10 +247,14 @@ pub fn validate_response(bytes: &[u8], model: &str) -> Result<(Value, Vec<u64>)>
     let result = serde_json::from_str::<UniqueJson>(texts[0])
         .map_err(|_| Error("provider_unavailable"))?
         .0;
-    Ok((result, vec![input, output]))
+    Ok((result, usage))
 }
 pub fn validate_generation(bytes: &[u8], model: &str) -> Result<(Generated, Vec<u64>)> {
     let (value, usage) = validate_response(bytes, model)?;
+    Ok((generated(value)?, usage))
+}
+// Content of a valid envelope; rejection here is request-specific, not a provider outage.
+pub fn generated(value: Value) -> Result<Generated> {
     let generated: Generated =
         serde_json::from_value(value).map_err(|_| Error("provider_unavailable"))?;
     if generated.claims.len() > 10
@@ -240,7 +268,7 @@ pub fn validate_generation(bytes: &[u8], model: &str) -> Result<(Generated, Vec<
     {
         return Err(Error("provider_unavailable"));
     }
-    Ok((generated, usage))
+    Ok(generated)
 }
 // Evidence IDs alone are insufficient: every atomic claim needs a separate Jev support result.
 pub fn validate_claims(

@@ -160,6 +160,15 @@ impl Run<'_> {
     }
 }
 
+// Cached Jev answers bypass validate_jev's exact-ID check; a missing answer fails closed.
+pub(crate) fn noul(response: &providers::JevResponse, id: &str) -> Result<f64> {
+    response
+        .answers
+        .get(id)
+        .map(|a| a.noul)
+        .ok_or(Error("internal_error"))
+}
+
 pub fn stage_identity(provider: &str, body: &Value) -> Result<Vec<u8>> {
     let bytes =
         serde_json::to_vec(&json!({"provider":provider,"version":rag::VERSION,"request":body}))
@@ -318,14 +327,15 @@ pub async fn execute(
                         questions,
                     )
                     .await?;
-                let conflict = selected.answers["conflict"].noul > 0.1;
-                let sufficient = selected.answers["sufficient"].noul >= 0.9 && !conflict;
-                evidence = evidence
-                    .into_iter()
-                    .enumerate()
-                    .filter(|(n, _)| selected.answers[&format!("passage_{n}")].noul >= 0.9)
-                    .map(|(_, e)| e)
-                    .collect();
+                let conflict = noul(&selected, "conflict")? > 0.1;
+                let sufficient = noul(&selected, "sufficient")? >= 0.9 && !conflict;
+                let mut kept = Vec::new();
+                for (n, e) in evidence.into_iter().enumerate() {
+                    if noul(&selected, &format!("passage_{n}"))? >= 0.9 {
+                        kept.push(e);
+                    }
+                }
+                evidence = kept;
                 (sufficient, conflict)
             }
         };

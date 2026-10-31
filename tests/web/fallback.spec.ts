@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs';
 import { createHash } from 'node:crypto';
 
@@ -13,7 +14,7 @@ async function fixture(page: Page, disable = true) {
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
     const capability = { state: 'disabled', reason: 'not_configured' };
-    if (path.endsWith('/capabilities')) return route.fulfill({ json: { mode: 'disabled', answers: capability,
+    if (path.endsWith('/capabilities')) return route.fulfill({ json: { mode: 'disabled', answers: { state: 'available', reason: 'ready' },
       indexing: capability, discovery: capability, google: capability, email: capability, identity: capability } });
     if (path.endsWith('/institutions')) return route.fulfill({ json: { items: [{ id, slug: 'demo',
       name: 'Synthetic university', coverage: 'synthetic_demo' }], next_cursor: null } });
@@ -24,7 +25,7 @@ async function fixture(page: Page, disable = true) {
 const transform = (page: Page) => page.locator('.archive img').evaluate(el => getComputedStyle(el).transform);
 async function pixels(page: Page, name: string) {
   const style = await page.addStyleTag({ content: '.hero-content,.motion-control,.archive-shade{visibility:hidden!important}' });
-  const shot = await page.locator('.archive').screenshot({ animations: 'allow', path: new URL(`./artifacts/fallback-${name}.png`, import.meta.url).pathname });
+  const shot = await page.locator('.archive').screenshot({ animations: 'allow', path: fileURLToPath(new URL(`./artifacts/fallback-${name}.png`,import.meta.url)) });
   await style.evaluate(el => el.remove());
   return createHash('sha256').update(shot).digest('hex');
 }
@@ -138,8 +139,8 @@ test('submit during a failing lazy import keeps one immediate request and pendin
   await page.route('**/assets/scene-*.js', async route => { await gate; await route.abort(); });
   let calls = 0;
   page.on('request', request => { if (request.url().endsWith('/api/v1/answers')) calls++; });
-  await page.goto('/'); await page.getByLabel('Your question').fill('Synthetic early submit');
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await page.goto('/'); await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('Synthetic early submit');
+  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();
   await expect.poll(() => calls).toBe(1);
   release();
   await expect(page.locator('.archive')).toHaveClass(/fallback/);
@@ -161,8 +162,8 @@ test('fallback submit dispatches immediately once; return home does not replay z
   page.on('request', request => { if (request.url().endsWith('/api/v1/answers')) calls++; });
   await page.goto('/'); await expect(page.locator('.archive')).toHaveClass(/fallback/);
   for (let cycle = 1; cycle <= 2; cycle++) {
-    await page.getByLabel('Your question').fill('Synthetic fallback question');
-    await page.getByRole('button', { name: 'Ask', exact: true }).click();
+    await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('Synthetic fallback question');
+    await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();
     await expect.poll(() => calls).toBe(cycle);
     const delay = await page.evaluate(() => performance.getEntriesByName('test-request').at(-1)!.startTime - performance.getEntriesByName('test-submit').at(-1)!.startTime);
     expect(delay).toBeGreaterThanOrEqual(0); expect(delay).toBeLessThan(100);

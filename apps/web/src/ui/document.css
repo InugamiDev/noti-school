@@ -1,0 +1,188 @@
+/* In-app document reader, downloads and inline confirmations. */
+.document {
+  max-width: 860px;
+}
+.document-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.document-bar-title {
+  display: none;
+}
+.document-nav .back-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+.document-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.document-edition {
+  font-weight: 620;
+  color: var(--ink);
+}
+.document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  margin-bottom: 28px;
+}
+.document-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--cyan);
+}
+.document-skeleton {
+  margin: 12px 0;
+}
+.document-note {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.document-page {
+  margin-bottom: 28px;
+  outline: none;
+}
+.document-page h2 {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 10px;
+  padding: 8px 0;
+  background: var(--bg);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+}
+.document-passage,
+.document-cited {
+  margin: 0 0 12px;
+  padding: 16px 20px;
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+  transition: box-shadow var(--dur-sm) var(--ease-out);
+}
+.document-passage .passage,
+.document-cited .passage {
+  margin: 0;
+  line-height: 1.75;
+}
+.document-locator {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cyan);
+}
+/* The passage an answer cites: the teal well the reader already uses for quotes, plus a ring. */
+.document-passage.is-cited,
+.document-cited {
+  background: var(--cyan-soft);
+  box-shadow:
+    var(--clay-well),
+    0 0 0 3px rgb(42 111 119 / 0.35);
+}
+.document-cited {
+  margin-bottom: 24px;
+}
+.document-cited h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: var(--cyan);
+}
+.document-passage:focus,
+.document-cited:focus {
+  outline: none;
+}
+
+/* Download: a quiet button that fetches with credentials and saves under a readable name. */
+.download {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.download-button {
+  min-height: 40px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.download-error {
+  font-size: 13px;
+  color: var(--vermilion);
+}
+.version-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  margin-top: 8px;
+}
+.version-actions a {
+  margin: 0;
+}
+
+/* Inline confirmation replaces the native dialog. */
+.confirm-row {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--vermilion-soft);
+  box-shadow: var(--clay-well);
+}
+.confirm-row p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+@media (max-width: 700px) {
+  /* Compact sticky bar: the back action and the title stay reachable while reading. */
+  .document-nav {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: -36px -22px 12px;
+    padding: 10px 16px;
+    background: rgb(239 232 223 / 0.94);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 1px 0 var(--line);
+  }
+  .document-nav .back-link {
+    flex: none;
+    min-height: 40px;
+  }
+  .document-bar-title {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 620;
+    color: var(--ink);
+  }
+  .document-page h2 {
+    top: 60px;
+  }
+  .document-passage,
+  .document-cited {
+    padding: 14px 16px;
+  }
+}

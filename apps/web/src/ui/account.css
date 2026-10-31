@@ -1,0 +1,183 @@
+/* Account page (signed-in Auth view). Loaded before style.css/ui.css, so selectors are scoped under .auth to win. */
+.auth .account-identity {
+  display: grid;
+  gap: 18px;
+  padding: 0 0 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.auth .account-who {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.auth .account-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  box-shadow: var(--clay-sm);
+}
+.auth .account-who-text {
+  min-width: 0;
+}
+.auth .account-eyebrow {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.auth .account-id {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 620;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.auth .account-id.muted {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.auth .account-none {
+  margin: 0;
+  font-size: 14px;
+}
+.auth .account-memberships {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.auth .account-memberships li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 10px 8px 14px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow: var(--clay-well);
+  color: var(--ink-soft);
+}
+.auth .account-institution {
+  flex: 1;
+  min-width: 0;
+  font-weight: 560;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.auth .account-role {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--sage-soft);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+.auth .account-role.account-role-admin {
+  background: var(--butter-soft);
+  color: var(--action-deep);
+}
+.auth .account-identity .auth-account-actions {
+  gap: 12px;
+}
+/* Return link reads as a secondary pill button next to Sign out. */
+.auth a.account-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: var(--r-pill);
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border: 1px solid rgb(255 255 255 / 0.65);
+  box-shadow: var(--clay-sm);
+  font-weight: 600;
+  transition:
+    background 0.18s,
+    box-shadow 0.18s;
+}
+.auth a.account-pill:hover {
+  background: #e6f2ef;
+  color: var(--cyan);
+  box-shadow: var(--clay-lift);
+}
+.auth a.account-pill:active {
+  box-shadow: var(--clay-press);
+}
+.auth a.account-pill:focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 3px;
+}
+.auth .account-section .auth-back {
+  margin-bottom: 12px;
+}
+/* Danger zone: quiet, collapsed at the bottom of the card. */
+.auth .account-danger {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.auth .account-danger summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+}
+.auth .account-danger summary::-webkit-details-marker {
+  display: none;
+}
+.auth .account-danger summary:hover {
+  color: var(--vermilion);
+}
+.auth .account-danger summary:focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 2px;
+}
+.auth .account-danger .account-chevron {
+  margin-left: auto;
+  transition: transform 0.18s;
+}
+.auth .account-danger[open] .account-chevron {
+  transform: rotate(180deg);
+}
+.auth .account-danger-body {
+  display: grid;
+  gap: 12px;
+  padding: 6px 0 0;
+}
+.auth .account-danger-body > p.muted {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.auth .account-danger-body .danger-quiet {
+  justify-self: start;
+  background: var(--vermilion-soft);
+  color: var(--vermilion);
+}
+.auth .account-danger-body .notice {
+  margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth .account-danger .account-chevron,
+  .auth a.account-pill {
+    transition: none;
+  }
+}

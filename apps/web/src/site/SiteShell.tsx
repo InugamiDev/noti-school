@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
-import { ArrowUpRight, ChevronDown, Menu, Pause, Play, X } from 'lucide-solid';
+import { ArrowUpRight, ChevronDown, Menu, Pause, Play, Sparkles, X } from 'lucide-solid';
 
 export const sitePages = {
   '/': [
@@ -32,11 +32,11 @@ export const sitePages = {
   ],
   '/contact': [
     'Contact',
-    'Contact the project owner about pilot access, source issues or product questions.',
+    'Get in touch about access, your institution’s documents or a problem with an answer.',
   ],
   '/security': [
     'Security',
-    'Understand source approval, account boundaries and current verification limits.',
+    'How noti.school controls access to accounts, documents and answers.',
   ],
   '/privacy': [
     'Pilot privacy notice',
@@ -48,7 +48,7 @@ export const sitePages = {
   ],
   '/changelog': [
     'Changelog',
-    'What is included in the current pilot and what remains under evaluation.',
+    'What noti.school can do today.',
   ],
 } as const;
 
@@ -72,7 +72,7 @@ const resourceLinks = [
 ] as const;
 
 // intent: preserve direct workspace entry while expanding product navigation; status: implemented.
-export function SiteHeader(props: { route: string; signedIn: boolean }) {
+export function SiteHeader(props: { route: string; signedIn: boolean; app?: boolean }) {
   const [open, setOpen] = createSignal(false);
   const [resources, setResources] = createSignal(false);
   let header!: HTMLElement;
@@ -111,6 +111,7 @@ export function SiteHeader(props: { route: string; signedIn: boolean }) {
   return (
     <header
       class="site-header"
+      classList={{ 'site-header-app': !!props.app }}
       ref={(node) => {
         header = node;
       }}
@@ -119,7 +120,11 @@ export function SiteHeader(props: { route: string; signedIn: boolean }) {
       }}
     >
       <a class="wordmark" href="#/" aria-label="noti.school home">
-        noti<span class="brand-dot">.</span>
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <rect width="64" height="64" rx="16" />
+          <path d="M17 49V21M17 33q0-12 11-12t11 12v16" />
+          <circle cx="51" cy="44.5" r="5.5" />
+        </svg>
       </a>
       <nav class="site-desktop" aria-label="Product navigation">
         <For each={productLinks}>
@@ -244,9 +249,17 @@ const footerGroups = [
   },
 ] as const;
 
-export function SiteFooter(props: { paused: boolean; reduced: boolean; toggle: () => void }) {
+export function SiteFooter(props: {
+  paused: boolean;
+  reduced: boolean;
+  toggle: () => void;
+  slim?: boolean;
+  /** Glass is the default style; this switches to classic and back. */
+  glass?: { on: boolean; toggle: () => void } | undefined;
+}) {
   return (
-    <footer class="site-footer">
+    <footer class="site-footer" classList={{ 'site-footer-slim': !!props.slim }}>
+      <Show when={!props.slim}>
       <div class="site-footer-top">
         <div class="site-footer-intro">
           <a class="site-footer-brand" href="#/">
@@ -257,9 +270,9 @@ export function SiteFooter(props: { paused: boolean; reduced: boolean; toggle: (
             <br />A source you can return to.
           </p>
           <p class="site-fine">
-            Independent HCMIU pilot.
+            An independent project.
             <br />
-            No official affiliation claimed.
+            Not affiliated with any university.
           </p>
         </div>
         <For each={footerGroups}>
@@ -278,11 +291,22 @@ export function SiteFooter(props: { paused: boolean; reduced: boolean; toggle: (
           )}
         </For>
       </div>
+      </Show>
       <div class="site-footer-bottom">
-        <a href="#/admin">
-          For institutions <ArrowUpRight size={16} />
-        </a>
-        <a href="#/contact">Pilot enquiries</a>
+        <Show
+          when={!props.slim}
+          fallback={
+            <>
+              <a class="site-footer-mini-brand" href="#/">noti.school</a>
+              <a href="#/help">Help</a>
+              <a href="#/privacy">Privacy</a>
+              <a href="#/terms">Terms</a>
+            </>
+          }
+        >
+          <a href="#/admin">For institutions</a>
+          <a href="#/contact">Pilot enquiries</a>
+        </Show>
         <button disabled={props.reduced} aria-pressed={props.paused} onClick={props.toggle}>
           {props.paused || props.reduced ? <Play size={14} /> : <Pause size={14} />}
           {props.reduced
@@ -291,6 +315,14 @@ export function SiteFooter(props: { paused: boolean; reduced: boolean; toggle: (
               ? 'Resume site motion'
               : 'Pause site motion'}
         </button>
+        <Show when={props.glass}>
+          {(glass) => (
+            <button class="glass-switch" aria-pressed={glass().on} onClick={glass().toggle} title="Switch between the glass and classic styles">
+              <Sparkles size={14} />
+              Glass style
+            </button>
+          )}
+        </Show>
       </div>
     </footer>
   );

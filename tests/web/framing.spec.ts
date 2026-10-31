@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../apps/web/node_modules/@playwright/test/index.mjs';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -30,6 +31,6 @@ for (const [width, height] of [[1440, 900], [1920, 1080], [1583, 805], [1366, 76
     expect(measured.prompt.left).toBeGreaterThanOrEqual(0);
     expect(measured.prompt.right).toBeLessThanOrEqual(width!);
     expect(measured.prompt.bottom).toBeLessThanOrEqual(height!);
-    await page.screenshot({ path: new URL(`./artifacts/framing-${width}x${height}.png`, import.meta.url).pathname });
+    await page.screenshot({ path: fileURLToPath(new URL(`./artifacts/framing-${width}x${height}.png`,import.meta.url)) });
   });
 }

@@ -38,7 +38,10 @@ test('custom CSRF, credential header rejection, body limits and bounded rate tab
   assert.equal((await f.request('/sign-in/email', { oversized: 'x'.repeat(17000) })).status, 413);
   const limits = new RateLimit(1, 10, 1);
   assert.equal(limits.allow('a', 0), true); assert.equal(limits.allow('a', 0), false);
-  assert.equal(limits.allow('b', 0), false); assert.equal(limits.allow('b', 11), true);
+  // A full table evicts its oldest window instead of refusing every new key.
+  assert.equal(limits.allow('b', 0), true); assert.equal(limits.allow('b', 0), false);
+  assert.equal(limits.allow('a', 0), true); assert.equal(limits.allow('a', 11), true);
+  assert.equal(limits.blocked('a', 11), true); assert.equal(limits.has('a', 22), false);
 });
 
 test('fixed config, certificate verification, safe mail origins and core unavailable', async () => {

@@ -50,18 +50,24 @@ values, so the coordinator must start from a clean environment. No populated env
   appear in this response. Failure is 401 or dependency failure 503; responses are no-store.
 - Limits: 16 KiB headers/body, 8 KiB URL, 100 connections, bounded request/header/socket timeouts,
   48 active public requests and a separate 16 active internal requests. Route/method, header, CSRF,
-  body size and JSON-object checks precede public flow quota consumption. Internal authenticated paths
-  each allow 600/min. Public paths each allow 120/min per verified user or signed anonymous admission;
-  email login allows 10/min, signup/reset-request/verification-resend 5/min. Those four email paths also
-  enforce a normalized target-email quota, so rotating anonymous cookies does not bypass password or
-  mail abuse limits. A user's other sessions share their account quota. Callback, reset-token links,
+  body size and JSON-object checks precede public flow quota consumption. Internal capability probes
+  allow 600/min. Session introspection is limited per SHA256 session-token key (300/min); only failed
+  lookups charge a shared 600/min bucket, and tokens seen valid in the last ten minutes bypass it, so
+  invalid-cookie floods cannot exhaust verified users. Public paths each allow 120/min per verified user or signed anonymous admission;
+  email login allows 10/min, signup/reset-request/verification-resend 5/min per (client, normalized
+  target email). Those four email paths also enforce an absolute per-email ceiling (50/min login,
+  10/min mail paths), so rotating anonymous cookies does not bypass password or mail abuse limits and
+  one client cannot alone lock out a victim. A user's other sessions share their account quota. Callback, reset-token links,
   session reads and unrelated paths have separate buckets; reset-token URL variations share one bucket.
-  Each quota table has at most 4096 entries, expires entries after 60 seconds and rejects new keys when
-  full. Anonymous and verified-user maps are separate. Better Auth's peer-IP limiter is replaced by
+  Each quota table has at most 4096 entries, expires entries after 60 seconds and evicts the oldest
+  window when full instead of refusing new keys. The 8.5-second enumeration floor runs after the public
+  slot is released; at most 256 padded responses wait at once (503 beyond). Anonymous and verified-user maps are separate. Better Auth's peer-IP limiter is replaced by
   these `createService` limits; the raw library handler must never be exposed outside this boundary.
 - Anonymous admission uses a server-random ID, HMAC signature and ten-minute expiry in a host-only,
-  HttpOnly, SameSite=Lax cookie scoped to `/api/auth` (Secure in production). New issuance is globally
-  capped at 120/min; valid existing admissions and verified sessions bypass that issuance bucket.
+  HttpOnly, SameSite=Lax cookie scoped to `/api/auth` (Secure in production). Issuance is stateless;
+  first presentation of a signed admission activates it against a global 120/min budget, so cookie
+  stripping cannot drain it. Cookieless or over-budget requests share one quota key; activated
+  admissions and verified sessions keep their own buckets.
   The process-local signing key rotates on restart. The cookie grants no account or tenant access;
   Better Auth still validates callback state, tokens and sessions. Forwarded IP headers are stripped
   at the listener and are never used to establish quota identity. The loopback peer is not a student ID.
@@ -110,8 +116,9 @@ creates invitation material in a private file; it does not send mail or grant a 
 SMTP credentials stay server-side. STARTTLS is required in `starttls` mode; `implicit` uses TLS from
 connect. Certificates are verified with TLS >=1.2. The configured `SMTP_FROM` is the fixed sender.
 Mail links and callback URLs must remain on the approved application origin. Network timeouts and an
-absolute eight-second delivery deadline bound sends and destroy the owned TCP socket; transport errors open a process-local mail failure
-circuit until restart. Accepted SMTP delivery is still not proof of inbox delivery or DNS authentication.
+absolute eight-second delivery deadline bound sends and destroy the owned TCP socket; three consecutive transport errors open a
+process-local mail failure circuit for 60 seconds; a success resets it and recipient rejections do not
+count. Accepted SMTP delivery is still not proof of inbox delivery or DNS authentication.
 
 Better Auth 1.7.6 catches mail callback errors internally. Request-local AsyncLocalStorage tracks
 verification-send failure so signup returns 503 after that failure. It holds no user/role context.

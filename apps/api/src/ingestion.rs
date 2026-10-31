@@ -51,8 +51,56 @@ pub async fn fetch(
     .fetch_optional(s.pool()?)
     .await?
     .ok_or(Error("not_found"))?;
+    // A replay or reused key is answered before any outbound request.
+    let hash = request_hash(source, &b, None)?;
+    if let Some(job) = replay(
+        &mut *s.pool()?.acquire().await?,
+        i,
+        &user.user_id,
+        key,
+        &hash,
+    )
+    .await?
+    {
+        return Ok((StatusCode::ACCEPTED, Json(job)));
+    }
     let (mime, bytes) = crate::ssrf::fetch(&url, &crate::ssrf::allowed_hosts(&s, i).await?).await?;
     ingest(&s, i, source, &user.user_id, key, b, &mime, &bytes, true).await
+}
+// Mirrors operator retention: an expired key may be reused or swept only once it no longer roots an
+// unfinished job, a paid stage or a reservation that recovery or reconciliation could still need.
+pub(crate) const RECLAIMABLE_KEY: &str = "k.expires_at<=now() AND k.state IN ('completed','failed') AND NOT EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state<>'succeeded') AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id) AND NOT EXISTS(SELECT 1 FROM product.ai_reservations r WHERE r.operation_id=k.operation_id)";
+// A fetch is identified by its source and metadata, not by remote bytes, so replay never refetches.
+fn request_hash(source: Uuid, b: &Metadata, upload: Option<&[u8]>) -> Result<String> {
+    let mut hash = Sha256::new();
+    hash.update(source.as_bytes());
+    hash.update(serde_json::to_vec(b).map_err(crate::error::invalid)?);
+    hash.update(upload.unwrap_or(b"fetch".as_slice()));
+    Ok(format!("{:x}", hash.finalize()))
+}
+// Returns a completed replay, Err(conflict) for a live mismatched/pending key, or None when the key
+// is unused (reclaiming a safely expired one first).
+async fn replay(
+    db: &mut sqlx::PgConnection,
+    i: Uuid,
+    user: &str,
+    key: Uuid,
+    hash: &str,
+) -> Result<Option<Value>> {
+    sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM product.idempotency_keys k WHERE k.institution_id=$1 AND k.user_id=$2 AND k.key=$3 AND {RECLAIMABLE_KEY}")))
+        .bind(i).bind(user).bind(key).execute(&mut *db).await?;
+    let Some(row) = sqlx::query("SELECT request_sha256,state,response,expires_at>now() AS valid FROM product.idempotency_keys WHERE institution_id=$1 AND user_id=$2 AND key=$3 FOR UPDATE")
+        .bind(i).bind(user).bind(key).fetch_optional(&mut *db).await?
+    else {
+        return Ok(None);
+    };
+    if !row.try_get::<bool, _>("valid")?
+        || row.try_get::<String, _>("request_sha256")? != hash
+        || row.try_get::<String, _>("state")? != "completed"
+    {
+        return Err(Error("conflict"));
+    }
+    Ok(Some(row.try_get("response")?))
 }
 fn required_nullable_time<'de, D: serde::Deserializer<'de>>(
     d: D,
@@ -178,40 +226,44 @@ pub(crate) async fn ingest(
         return Err(Error("payload_too_large"));
     }
     let sha = format!("{:x}", Sha256::digest(bytes));
-    let mut hash = Sha256::new();
-    hash.update(source.as_bytes());
-    hash.update(serde_json::to_vec(&b).map_err(crate::error::invalid)?);
-    hash.update(bytes);
-    let request_hash = format!("{:x}", hash.finalize());
-    let mut tx = s.pool()?.begin().await?;
-    let source_kind:Option<String>=sqlx::query_scalar("SELECT s.kind FROM product.sources s JOIN product.memberships m ON m.institution_id=s.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE s.institution_id=$1 AND s.id=$2 FOR SHARE OF m FOR UPDATE OF s")
-        .bind(i).bind(source).bind(user).fetch_optional(&mut *tx).await?;
-    if source_kind.as_deref()
-        != Some(if fetched {
-            "url"
-        } else if mime == "application/pdf" {
-            "pdf"
-        } else {
-            "text"
-        })
-    {
+    let request_hash = request_hash(source, &b, (!fetched).then_some(bytes))?;
+    let kind = if fetched {
+        "url"
+    } else if mime == "application/pdf" {
+        "pdf"
+    } else {
+        "text"
+    };
+    // Unlocked prechecks avoid writing and parsing for replays, wrong sources and known duplicates;
+    // every condition is re-checked under the transaction's locks below.
+    let source_kind: Option<String> =
+        sqlx::query_scalar("SELECT kind FROM product.sources WHERE institution_id=$1 AND id=$2")
+            .bind(i)
+            .bind(source)
+            .fetch_optional(s.pool()?)
+            .await?;
+    if source_kind.as_deref() != Some(kind) {
         return Err(Error("not_found"));
     }
-    let operation = Uuid::new_v4();
-    let inserted=sqlx::query("INSERT INTO product.idempotency_keys(institution_id,user_id,key,request_sha256,operation_id,state) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
-        .bind(i).bind(user).bind(key).bind(&request_hash).bind(operation).execute(&mut *tx).await?.rows_affected();
-    if inserted == 0 {
-        let row=sqlx::query("SELECT request_sha256,state,response FROM product.idempotency_keys WHERE institution_id=$1 AND user_id=$2 AND key=$3 AND expires_at>now() FOR UPDATE").bind(i).bind(user).bind(key).fetch_optional(&mut *tx).await?.ok_or(Error("conflict"))?;
-        if row.try_get::<String, _>("request_sha256")? != request_hash
-            || row.try_get::<String, _>("state")? != "completed"
-        {
-            return Err(Error("conflict"));
-        }
-        return Ok((StatusCode::ACCEPTED, Json(row.try_get("response")?)));
+    if let Some(job) = replay(
+        &mut *s.pool()?.acquire().await?,
+        i,
+        user,
+        key,
+        &request_hash,
+    )
+    .await?
+    {
+        return Ok((StatusCode::ACCEPTED, Json(job)));
     }
-    let duplicate: bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM product.source_versions WHERE institution_id=$1 AND source_id=$2 AND sha256=$3)")
-        .bind(i).bind(source).bind(&sha).fetch_one(&mut *tx).await?;
-    if duplicate {
+    let duplicate = "SELECT EXISTS(SELECT 1 FROM product.source_versions WHERE institution_id=$1 AND source_id=$2 AND sha256=$3)";
+    let known: bool = sqlx::query_scalar(duplicate)
+        .bind(i)
+        .bind(source)
+        .bind(&sha)
+        .fetch_one(s.pool()?)
+        .await?;
+    if known {
         return Err(Error("conflict"));
     }
     let version = Uuid::new_v4();
@@ -249,6 +301,8 @@ pub(crate) async fn ingest(
         .mode(0o600)
         .open(&path)
         .map_err(|_| Error("core_unavailable"))?;
+    // Armed before any write and alive until COMMIT: every early return, replay, conflict or
+    // cancellation below removes this request's original.
     let mut original = OriginalGuard(Some(path.clone()));
     let mut output = tokio::fs::File::from_std(output);
     output
@@ -260,6 +314,7 @@ pub(crate) async fn ingest(
         .await
         .map_err(|_| Error("core_unavailable"))?;
     drop(output);
+    // Parsing runs before the transaction so its bounded child process never holds row locks.
     if mime == "application/pdf" || mime == "text/html" {
         // Parse failures and scans retain the original in quarantine, with no evidence chunks.
         let extracted = if mime == "application/pdf" {
@@ -301,6 +356,31 @@ pub(crate) async fn ingest(
     }
     let enabled = s.config.ai_keys().is_ok() && !chunks.is_empty();
     let indexing = if enabled { "pending" } else { "disabled" };
+    let mut tx = s.pool()?.begin().await?;
+    let source_kind:Option<String>=sqlx::query_scalar("SELECT s.kind FROM product.sources s JOIN product.memberships m ON m.institution_id=s.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE s.institution_id=$1 AND s.id=$2 FOR SHARE OF m FOR UPDATE OF s")
+        .bind(i).bind(source).bind(user).fetch_optional(&mut *tx).await?;
+    if source_kind.as_deref() != Some(kind) {
+        return Err(Error("not_found"));
+    }
+    if let Some(job) = replay(&mut tx, i, user, key, &request_hash).await? {
+        return Ok((StatusCode::ACCEPTED, Json(job)));
+    }
+    let operation = Uuid::new_v4();
+    let inserted=sqlx::query("INSERT INTO product.idempotency_keys(institution_id,user_id,key,request_sha256,operation_id,state) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
+        .bind(i).bind(user).bind(key).bind(&request_hash).bind(operation).execute(&mut *tx).await?.rows_affected();
+    if inserted == 0 {
+        // A concurrent request with this key committed after replay() looked.
+        return Err(Error("conflict"));
+    }
+    let duplicate: bool = sqlx::query_scalar(duplicate)
+        .bind(i)
+        .bind(source)
+        .bind(&sha)
+        .fetch_one(&mut *tx)
+        .await?;
+    if duplicate {
+        return Err(Error("conflict"));
+    }
     // An ambiguous DB commit retains the private orphan for operator reconciliation, never exposes it.
     sqlx::query("INSERT INTO product.source_versions(id,institution_id,source_id,label,sha256,storage_key,status,indexing,effective_from,effective_until,language) VALUES($1,$2,$3,$4,$5,$6,$7,$10,$8,$9,$11)")
         .bind(version).bind(i).bind(source).bind(b.label).bind(sha).bind(storage).bind(status).bind(b.effective_from).bind(b.effective_until).bind(indexing).bind(&b.language).execute(&mut *tx).await?;
@@ -346,12 +426,15 @@ pub async fn action(
     {
         return Err(Error("invalid_request"));
     }
+    if b.action == "retry_index" {
+        // Admission queries the pool; do it before holding version locks on this transaction.
+        crate::budget::admit(&s).await?;
+    }
     let mut tx = s.pool()?.begin().await?;
     let row=sqlx::query("SELECT v.status,v.source_id FROM product.source_versions v JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.id=$2 FOR UPDATE OF v FOR SHARE OF m").bind(i).bind(id).bind(&u.user_id).fetch_optional(&mut *tx).await?.ok_or(Error("not_found"))?;
     let status: String = row.try_get("status")?;
     let source: Uuid = row.try_get("source_id")?;
     if b.action == "retry_index" {
-        crate::budget::admit(&s).await?;
         if status != b.expected_status || !["pending_review", "approved"].contains(&status.as_str())
         {
             return Err(Error("conflict"));

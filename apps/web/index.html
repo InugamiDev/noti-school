@@ -3,12 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101314" />
+    <meta name="theme-color" content="#efe8df" />
     <meta
       name="description"
       content="Your university questions, answered with sources. An independent pilot for students and university staff."
     />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/brand/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <meta property="og:site_name" content="noti.school" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="noti.school — Answers with sources" />
@@ -16,9 +20,53 @@
       property="og:description"
       content="Find university information and inspect the evidence behind an answer. Independent pilot in development."
     />
+    <meta property="og:image" content="/brand/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="noti. — Answers with sources" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="noti.school — Answers with sources" />
+    <meta
+      name="twitter:description"
+      content="Find university information and inspect the evidence behind an answer. Independent pilot in development."
+    />
+    <meta name="twitter:image" content="/brand/og-image.png" />
+    <meta name="twitter:image:alt" content="noti. — Answers with sources" />
     <title>Answers with sources — noti.school</title>
+    <!-- Splash: paints on the first frame before the bundle. A droplet falls and becomes the "n."
+         tile; the app's main.tsx lifts it after mount and 700ms, and it leaves by 1.6s regardless.
+         It never takes pointer events or focus and only exists on a cold document load. -->
+    <style>
+      #splash{position:fixed;inset:0;z-index:100;display:grid;place-items:center;pointer-events:none;background:radial-gradient(40% 36% at 16% 26%,rgb(240 190 160/.5),transparent 70%),radial-gradient(34% 30% at 84% 30%,rgb(204 214 232/.55),transparent 70%),radial-gradient(38% 34% at 74% 80%,rgb(214 226 206/.55),transparent 70%),radial-gradient(30% 28% at 20% 82%,rgb(246 236 210/.6),transparent 70%),linear-gradient(180deg,#f6f1ea,#efe8df);transition:opacity .22s ease-out,transform .22s ease-out}
+      #splash.out{opacity:0;transform:translateY(-10px)}
+      #splash svg{width:96px;height:96px;filter:drop-shadow(0 14px 28px rgb(139 110 86/.3));animation:sp-fall .42s cubic-bezier(.16,1,.3,1) both}
+      #splash .s{fill:#2b2521;d:path("M30 3H34C40 15 60 27 60 42V45C60 56 47 64 32 64H32C17 64 4 56 4 45V42C4 27 24 15 30 3Z");animation:sp-morph .42s cubic-bezier(.34,1.4,.64,1) .14s both}
+      #splash .n{fill:none;stroke:#fbf8f3;stroke-width:9;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:130;stroke-dashoffset:130;animation:sp-draw .3s ease-out .4s both}
+      #splash .d{fill:#ef9a76;transform-origin:51px 44.5px;transform:scale(0);animation:sp-pop .22s cubic-bezier(.34,1.4,.64,1) .62s both}
+      html.splash-still #splash svg,html.splash-still #splash .s,html.splash-still #splash .n,html.splash-still #splash .d{animation:none;stroke-dashoffset:0;transform:none;d:path("M16 0H48C56.8 0 64 7.2 64 16V48C64 56.8 56.8 64 48 64H16C7.2 64 0 56.8 0 48V16C0 7.2 7.2 0 16 0Z")}
+      @keyframes sp-fall{from{opacity:0;transform:translateY(-48px) scale(.7)}40%{opacity:1}to{transform:none}}
+      @keyframes sp-morph{to{d:path("M16 0H48C56.8 0 64 7.2 64 16V48C64 56.8 56.8 64 48 64H16C7.2 64 0 56.8 0 48V16C0 7.2 7.2 0 16 0Z")}}
+      @keyframes sp-draw{to{stroke-dashoffset:0}}
+      @keyframes sp-pop{to{transform:scale(1)}}
+    </style>
   </head>
   <body>
+    <div id="splash" aria-hidden="true"><svg viewBox="0 0 64 64"><path class="s" d="M16 0H48C56.8 0 64 7.2 64 16V48C64 56.8 56.8 64 48 64H16C7.2 64 0 56.8 0 48V16C0 7.2 7.2 0 16 0Z"/><path class="n" d="M17 49V21M17 33q0-12 11-12t11 12v16"/><circle class="d" cx="51" cy="44.5" r="5.5"/></svg></div>
+    <script>
+      (function () {
+        var h = document.documentElement, s = document.getElementById('splash');
+        if (!s) return;
+        var paused = '';
+        try { paused = sessionStorage.getItem('noti.motion-paused') || localStorage.getItem('noti.motion-paused') || ''; } catch (e) {}
+        var still = paused === 'true' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if (still) h.classList.add('splash-still');
+        var t0 = performance.now(), min = still ? 250 : 700, gone = false, mounted = false;
+        function go() { if (gone) return; gone = true; s.classList.add('out'); setTimeout(function () { s.remove(); h.classList.remove('splash-still'); }, 260); }
+        function ready() { if (mounted && performance.now() - t0 >= min) go(); }
+        window.__notiSplash = function () { mounted = true; var wait = min - (performance.now() - t0); if (wait > 0) setTimeout(ready, wait); else ready(); };
+        setTimeout(go, 1600);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -18,11 +18,18 @@ export function Band(props: {
     )
       return;
     let animation: Animation | undefined;
+    let children: Animation[] = [];
+    const stop = () => {
+      animation?.cancel();
+      for (const child of children) child.cancel();
+      children = [];
+    };
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting && !revealed) {
             revealed = true;
+            element.dataset.revealed = 'true';
             animation = element.animate(
               [
                 { opacity: 0.55, transform: 'translateY(12px)' },
@@ -30,8 +37,18 @@ export function Band(props: {
               ],
               { duration: 420, easing: 'ease-out' },
             );
+            // Then each block rises out of a soft blur, one after another.
+            children = [...element.children].map((child, i) =>
+              child.animate(
+                [
+                  { opacity: 0, transform: 'translateY(32px)', filter: 'blur(8px)' },
+                  { opacity: 1, transform: 'none', filter: 'blur(0px)' },
+                ],
+                { duration: 760, delay: 60 + i * 110, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' },
+              ),
+            );
           } else if (!entry.isIntersecting && animation) {
-            animation.cancel();
+            stop();
           }
         }
       },
@@ -40,7 +57,7 @@ export function Band(props: {
     observer.observe(element);
     onCleanup(() => {
       observer.disconnect();
-      animation?.cancel();
+      stop();
     });
   });
   return (

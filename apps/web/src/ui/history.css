@@ -1,0 +1,119 @@
+.history .thread-title {
+  margin-top: 12px;
+}
+.conversation-list {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0;
+  padding: 0;
+  list-style: none;
+}
+.conversation-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  border-radius: var(--r-md);
+  border: 1px solid rgb(255 255 255 / 0.7);
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+  transition:
+    box-shadow var(--dur-sm) var(--ease-out),
+    transform var(--dur-sm) var(--ease-out);
+}
+.conversation-row:hover {
+  color: inherit;
+  box-shadow: var(--clay-lift);
+  transform: translateY(-1px);
+}
+.conversation-row:hover > svg {
+  color: var(--cyan);
+}
+.conversation-row > svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.conversation-text {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.conversation-text strong {
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversation-snippet {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.conversation-text small {
+  color: var(--muted);
+  font-size: 13px;
+}
+.history-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--clay-well);
+  color: var(--muted);
+  text-align: center;
+}
+.history-empty p {
+  margin: 0;
+}
+.history .thread .source-list {
+  margin-top: 4px;
+}
+.conversation-actions {
+  margin: 32px 0 20px;
+}
+.danger-zone {
+  margin-top: 28px;
+  padding: 16px 20px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--clay-well);
+}
+.danger-zone summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 620;
+  border-radius: var(--r-sm);
+}
+.danger-zone summary::-webkit-details-marker {
+  display: none;
+}
+.danger-zone summary:hover,
+.danger-zone[open] summary {
+  color: var(--vermilion);
+}
+.danger-chevron {
+  margin-left: auto;
+  transition: transform var(--dur-sm) var(--ease-out);
+}
+.danger-zone[open] .danger-chevron {
+  transform: rotate(180deg);
+}
+.danger-zone p {
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.danger {
+  color: var(--vermilion);
+}

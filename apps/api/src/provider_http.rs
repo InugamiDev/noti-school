@@ -66,6 +66,27 @@ impl ProviderHttp {
         }
         result
     }
+    // A dispatched request may have been billed even when its reply is unusable: settle
+    // validated usage without caching the result, otherwise keep an uncertain hold.
+    async fn reject(attempt: Attempt, usage: Option<Vec<u64>>, error: Error) -> Error {
+        let settled = match usage {
+            Some(units) => attempt.settle_rejected(units).await,
+            None => Err(Error(error.0)),
+        };
+        if settled.is_err() {
+            // A failed transition leaves the hold 'dispatched', which reconciliation also accepts.
+            let _ = attempt.uncertain().await;
+        }
+        error
+    }
+    // Local checks that fail before any HTTP is sent are verifiably uncharged: settle at zero
+    // instead of parking the hold as uncertain for manual reconciliation.
+    async fn unsent(attempt: Attempt, error: Error) -> Error {
+        if attempt.settle_unsent().await.is_err() {
+            let _ = attempt.uncertain().await;
+        }
+        error
+    }
     pub async fn jev(
         &self,
         key: &str,
@@ -85,12 +106,22 @@ impl ProviderHttp {
                 .len()
                 > 30000
         {
-            return Err(Error("invalid_request"));
+            return Err(Self::unsent(attempt, Error("invalid_request")).await);
         }
-        let bytes = self
+        let bytes = match self
             .exchange(providers::JEV_URL, key, body, Duration::from_secs(15))
-            .await?;
-        let response = self.observe("jev", providers::validate_jev(&bytes, ids))?;
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => return Err(Self::reject(attempt, None, e).await),
+        };
+        let response = match self.observe("jev", providers::validate_jev(&bytes, ids)) {
+            Ok(response) => response,
+            Err(e) => {
+                let usage = providers::validated_jev_usage(&bytes);
+                return Err(Self::reject(attempt, usage, e).await);
+            }
+        };
         attempt
             .settle(
                 vec![response.usage.input_tokens, response.usage.output_tokens],
@@ -100,31 +131,36 @@ impl ProviderHttp {
         Ok(response)
     }
     pub async fn embedding(&self, key: &str, input: &str, attempt: Attempt) -> Result<Vec<f32>> {
-        crate::input::validate(input)?;
+        if let Err(e) = crate::input::validate(input) {
+            return Err(Self::unsent(attempt, e).await);
+        }
         if !attempt.is_for(OperationKind::Embedding) {
-            return Err(Error("invalid_request"));
+            return Err(Self::unsent(attempt, Error("invalid_request")).await);
         }
         let body = serde_json::json!({"model":"text-embedding-3-small","input":input,"dimensions":1536,"encoding_format":"float"});
-        let bytes = self
+        let bytes = match self
             .exchange(
                 "https://api.openai.com/v1/embeddings",
                 key,
                 &body,
                 Duration::from_secs(30),
             )
-            .await?;
-        let vector = self.observe("openai", providers::validate_embedding(&bytes))?;
-        let response: Value =
-            serde_json::from_slice(&bytes).map_err(|_| Error("provider_unavailable"))?;
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => return Err(Self::reject(attempt, None, e).await),
+        };
+        let usage = providers::validated_embedding_usage(&bytes);
+        let vector = match self.observe("openai", providers::validate_embedding(&bytes)) {
+            Ok(vector) => vector,
+            Err(e) => return Err(Self::reject(attempt, usage.map(|n| vec![n]), e).await),
+        };
+        // validate_embedding already enforces the same usage checks.
+        let Some(tokens) = usage else {
+            return Err(Self::reject(attempt, None, Error("provider_unavailable")).await);
+        };
         attempt
-            .settle(
-                vec![
-                    response["usage"]["total_tokens"]
-                        .as_u64()
-                        .ok_or(Error("provider_unavailable"))?,
-                ],
-                serde_json::json!(vector),
-            )
+            .settle(vec![tokens], serde_json::json!(vector))
             .await?;
         Ok(vector)
     }
@@ -135,29 +171,40 @@ impl ProviderHttp {
         model: &str,
         attempt: Attempt,
     ) -> Result<providers::Generated> {
-        if !attempt.is_for(OperationKind::Generation) {
-            return Err(Error("invalid_request"));
-        }
-        let bytes = self
+        let allowed = body["input"]
+            .as_str()
+            .and_then(|input| serde_json::from_str::<Value>(input).ok())
+            .and_then(|input| {
+                input["evidence"]
+                    .as_array()
+                    .and_then(|e| crate::rag::ids(e).ok())
+            });
+        let Some(allowed) = allowed.filter(|_| attempt.is_for(OperationKind::Generation)) else {
+            return Err(Self::unsent(attempt, Error("invalid_request")).await);
+        };
+        let bytes = match self
             .exchange(
                 "https://api.openai.com/v1/responses",
                 key,
                 body,
                 Duration::from_secs(45),
             )
-            .await?;
-        let (result, usage) =
-            self.observe("openai", providers::validate_generation(&bytes, model))?;
-        let input: Value =
-            serde_json::from_str(body["input"].as_str().ok_or(Error("invalid_request"))?)
-                .map_err(crate::error::invalid)?;
-        let allowed = crate::rag::ids(
-            input["evidence"]
-                .as_array()
-                .ok_or(Error("invalid_request"))?,
-        )?;
-        self.observe(
-            "openai",
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => return Err(Self::reject(attempt, None, e).await),
+        };
+        let (value, usage) =
+            match self.observe("openai", providers::validate_response(&bytes, model)) {
+                Ok(valid) => valid,
+                Err(e) => {
+                    let usage = providers::validated_response_usage(&bytes, model);
+                    return Err(Self::reject(attempt, usage, e).await);
+                }
+            };
+        // Content-level rejection (including citing unsent evidence) fails only this request;
+        // it is not a provider outage and must not trip the shared cooldown.
+        let result = match providers::generated(value).and_then(|result| {
             if result
                 .claims
                 .iter()
@@ -165,9 +212,12 @@ impl ProviderHttp {
             {
                 Err(Error("provider_unavailable"))
             } else {
-                Ok(())
-            },
-        )?;
+                Ok(result)
+            }
+        }) {
+            Ok(result) => result,
+            Err(e) => return Err(Self::reject(attempt, Some(usage), e).await),
+        };
         attempt
             .settle(
                 usage,
@@ -185,18 +235,33 @@ impl ProviderHttp {
         validate: impl FnOnce(Value) -> Result<Value>,
     ) -> Result<Value> {
         if !attempt.is_for(OperationKind::Generation) {
-            return Err(Error("invalid_request"));
+            return Err(Self::unsent(attempt, Error("invalid_request")).await);
         }
-        let bytes = self
+        let bytes = match self
             .exchange(
                 "https://api.openai.com/v1/responses",
                 key,
                 body,
                 Duration::from_secs(15),
             )
-            .await?;
-        let (value, usage) = self.observe("openai", providers::validate_response(&bytes, model))?;
-        let value = self.observe("openai", validate(value))?;
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => return Err(Self::reject(attempt, None, e).await),
+        };
+        let (value, usage) =
+            match self.observe("openai", providers::validate_response(&bytes, model)) {
+                Ok(valid) => valid,
+                Err(e) => {
+                    let usage = providers::validated_response_usage(&bytes, model);
+                    return Err(Self::reject(attempt, usage, e).await);
+                }
+            };
+        // rag::validate rejects request-specific content; it is not observed as an outage.
+        let value = match validate(value) {
+            Ok(value) => value,
+            Err(e) => return Err(Self::reject(attempt, Some(usage), e).await),
+        };
         attempt.settle(usage, value.clone()).await?;
         Ok(value)
     }

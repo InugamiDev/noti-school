@@ -14,19 +14,26 @@ import type { IdentityMail, Mailer } from '../../apps/auth/src/mail.js';
 import { guardedRuntimeDatabase } from '../../scripts/database.js';
 import { cookies, fixture, origin, secret } from '../auth/helpers.js';
 
-test('bounded signed admission rejects forgery/expiry and does not accept forwarded identity', () => {
+test('bounded signed admission: stateless issuance, activation on first presentation, forgery and expiry fall back to shared', () => {
   const admission = new Admission(), now = 1_800_000_000_000;
-  const first = admission.identify(new Headers(), true, now)!;
+  const present = (cookie: string, headers: Record<string, string> = {}) => admission.identify(new Headers({ ...headers, cookie: cookie.split(';')[0]! }), false, now);
+  const first = admission.identify(new Headers(), true, now);
+  assert.equal(first.shared, true);
   assert.match(first.cookie!, /HttpOnly; SameSite=Lax; Max-Age=600; Secure$/);
-  const headers = new Headers({ cookie: first.cookie!.split(';')[0]! });
-  for (let i = 1; i < 120; i++) assert.ok(admission.identify(new Headers({ 'x-forwarded-for': `192.0.2.${i}` }), false, now));
-  assert.equal(admission.identify(new Headers({ cookie: 'noti.admission=forged', 'cf-connecting-ip': '192.0.2.1' }), false, now), null);
-  assert.equal(admission.identify(headers, false, now)?.id, first.id, 'Issued admission survives issuance exhaustion');
-  assert.notEqual(admission.identify(headers, false, now + 600_001)?.id, first.id);
+  assert.deepEqual(present(first.cookie!), { id: first.id, shared: false });
+  for (let i = 0; i < 1000; i++) assert.ok(admission.identify(new Headers({ 'x-forwarded-for': `192.0.2.${i % 250}` }), false, now).cookie, 'Cookieless issuance never spends activation');
+  for (let i = 1; i < 120; i++) assert.equal(present(admission.identify(new Headers(), false, now).cookie!).shared, false);
+  assert.equal(present(admission.identify(new Headers(), false, now).cookie!).shared, true, 'Activation budget is bounded');
+  const forged = admission.identify(new Headers({ cookie: 'noti.admission=forged', 'cf-connecting-ip': '192.0.2.1' }), false, now);
+  assert.equal(forged.shared, true); assert.ok(forged.cookie);
+  assert.deepEqual(present(first.cookie!), { id: first.id, shared: false }, 'Activated admission survives activation exhaustion');
+  assert.notEqual(admission.identify(new Headers({ cookie: first.cookie!.split(';')[0]! }), false, now + 600_001).id, first.id);
   const limit = new RateLimit(2, 100, 2);
   assert.equal(limit.allow('a', 0), true); assert.equal(limit.allow('a', 0), true);
   assert.equal(limit.allow('a', 0), false); assert.equal(limit.allow('b', 0), true);
-  assert.equal(limit.allow('c', 0), false); assert.equal(limit.allow('c', 101), true);
+  assert.equal(limit.allow('c', 0), true, 'A full table evicts the oldest key instead of refusing new keys');
+  assert.equal(limit.has('a', 0), false); assert.equal(limit.allow('c', 0), true); assert.equal(limit.allow('c', 0), false);
+  assert.equal(limit.allow('c', 101), true);
 });
 
 test('real HTTP and PostgreSQL identity: A cannot spend B session or Google callback quotas', async () => {

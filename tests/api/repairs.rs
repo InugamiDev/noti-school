@@ -1486,3 +1486,179 @@ async fn admission(
     }
     migration.close().await;
 }
+
+// A-02: operator-only reconciliation of a leaked/cancelled 'dispatched' hold, with history.
+pub(super) async fn reconciliation(pool: &sqlx::PgPool, root: Uuid) {
+    let (id, reserved, month): (Uuid, i64, chrono::NaiveDate) = sqlx::query_as("SELECT r.id,r.reserved_micro_usd,r.month FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id WHERE p.root_operation_id=$1 AND r.state='dispatched'").bind(root).fetch_one(pool).await.unwrap();
+    // The runtime role has no execute grant: no product route can clear holds.
+    assert!(
+        sqlx::query("SELECT product.reconcile_ai($1,0,'synthetic runtime attempt')")
+            .bind(id)
+            .execute(pool)
+            .await
+            .is_err()
+    );
+    let migration = sqlx::PgPool::connect(MIGRATOR).await.unwrap();
+    for (amount, reason) in [
+        (reserved + 1, "synthetic overrun"),
+        (-1, "synthetic negative"),
+        (1, " "),
+    ] {
+        assert!(
+            sqlx::query("SELECT product.reconcile_ai($1,$2,$3)")
+                .bind(id)
+                .bind(amount)
+                .bind(reason)
+                .execute(&migration)
+                .await
+                .is_err(),
+            "reconciliation {amount} {reason:?} must be refused"
+        );
+    }
+    let before: (i64, i64) = sqlx::query_as(
+        "SELECT spent_micro_usd,reserved_micro_usd FROM product.ai_months WHERE month=$1",
+    )
+    .bind(month)
+    .fetch_one(&migration)
+    .await
+    .unwrap();
+    let settled: i64 = sqlx::query_scalar(
+        "SELECT product.reconcile_ai($1,$2,'synthetic provider billing export')",
+    )
+    .bind(id)
+    .bind(reserved / 2)
+    .fetch_one(&migration)
+    .await
+    .unwrap();
+    assert_eq!(settled, reserved / 2);
+    let after: (i64, i64) = sqlx::query_as(
+        "SELECT spent_micro_usd,reserved_micro_usd FROM product.ai_months WHERE month=$1",
+    )
+    .bind(month)
+    .fetch_one(&migration)
+    .await
+    .unwrap();
+    assert_eq!(after.0 - before.0, reserved / 2);
+    assert_eq!(before.1 - after.1, reserved);
+    let (state, actual): (String, Option<i64>) =
+        sqlx::query_as("SELECT state,actual_micro_usd FROM product.ai_reservations WHERE id=$1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!((state.as_str(), actual), ("settled", Some(reserved / 2)));
+    let history: (String, i64, String) = sqlx::query_as("SELECT prior_state,actual_micro_usd,reconciled_by FROM product.ai_reconciliations WHERE reservation_id=$1").bind(id).fetch_one(&migration).await.unwrap();
+    assert_eq!(
+        history,
+        (
+            "dispatched".into(),
+            reserved / 2,
+            "noti_school_migrator".into()
+        )
+    );
+    // Single use, immutable history, and the settled stage stays fenced without a cached result.
+    assert!(
+        sqlx::query("SELECT product.reconcile_ai($1,0,'synthetic repeat')")
+            .bind(id)
+            .execute(&migration)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("DELETE FROM product.ai_reconciliations WHERE reservation_id=$1")
+            .bind(id)
+            .execute(&migration)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("SELECT 1 FROM product.ai_reconciliations")
+            .execute(pool)
+            .await
+            .is_err()
+    );
+    migration.close().await;
+    println!(
+        "PASS A-02: operator-only bounded reconciliation of a dispatched hold with retained history"
+    );
+}
+
+#[test]
+fn rejected_reply_usage_classification() {
+    use crate::providers::{
+        validated_embedding_usage, validated_jev_usage, validated_response_usage,
+    };
+    let response = |f: &dyn Fn(&mut Value)| {
+        let mut v = json!({"model":"synthetic-model","status":"completed","output":[{"type":"message","role":"assistant","status":"completed","content":[{"type":"refusal","refusal":"synthetic"}]}],"usage":{"input_tokens":30,"output_tokens":20,"total_tokens":50}});
+        f(&mut v);
+        serde_json::to_vec(&v).unwrap()
+    };
+    // Rejected content/envelope with validated usage is settled, not held.
+    let refused = response(&|_| {});
+    assert!(crate::providers::validate_response(&refused, "synthetic-model").is_err());
+    assert_eq!(
+        validated_response_usage(&refused, "synthetic-model"),
+        Some(vec![30, 20])
+    );
+    let incomplete = response(&|v| v["status"] = json!("incomplete"));
+    assert_eq!(
+        validated_response_usage(&incomplete, "synthetic-model"),
+        Some(vec![30, 20])
+    );
+    // Untrusted usage keeps an uncertain hold.
+    for bad in [
+        response(&|v| v["usage"]["total_tokens"] = json!(51)),
+        response(&|v| v["model"] = json!("other-model")),
+        response(&|v| v["usage"]["output_tokens"] = json!(4097)),
+        response(&|v| v["usage"]["input_tokens_details"] = json!({"cached_tokens":31})),
+        response(&|v| v["usage"] = Value::Null),
+        b"{\"model\":\"synthetic-model\",\"model\":\"synthetic-model\"}".to_vec(),
+        b"not json".to_vec(),
+    ] {
+        assert_eq!(validated_response_usage(&bad, "synthetic-model"), None);
+    }
+    let jev = br#"{"model":"jev-1.13.0","answers":{"other":{"type":"noul","noul":2.0}},"usage":{"input_tokens":20,"output_tokens":5}}"#;
+    assert!(
+        crate::providers::validate_jev(jev, &std::collections::BTreeSet::from(["claim_0".into()]))
+            .is_err()
+    );
+    assert_eq!(validated_jev_usage(jev), Some(vec![20, 5]));
+    for bad in [
+        r#"{"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":0,"output_tokens":5}}"#,
+        r#"{"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":20,"output_tokens":5,"extra":1}}"#,
+        r#"{"model":"jev-0","answers":{},"usage":{"input_tokens":20,"output_tokens":5}}"#,
+        r#"{"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":20,"input_tokens":1,"output_tokens":5}}"#,
+    ] {
+        assert_eq!(validated_jev_usage(bad.as_bytes()), None, "{bad}");
+    }
+    let embedding = |index: u64, prompt: u64, total: u64| {
+        serde_json::to_vec(&json!({"model":"text-embedding-3-small","data":[{"index":index,"embedding":vec![0.01f32;1536]}],"usage":{"prompt_tokens":prompt,"total_tokens":total}})).unwrap()
+    };
+    assert!(crate::providers::validate_embedding(&embedding(1, 10, 10)).is_err());
+    assert_eq!(validated_embedding_usage(&embedding(1, 10, 10)), Some(10));
+    assert_eq!(validated_embedding_usage(&embedding(0, 10, 11)), None);
+    assert_eq!(validated_embedding_usage(&embedding(0, 0, 0)), None);
+    assert_eq!(validated_embedding_usage(&embedding(0, 8193, 8193)), None);
+}
+
+#[test]
+fn failed_replay_and_cached_jev_answers_fail_closed() {
+    for code in [
+        "provider_unavailable",
+        "pricing_unavailable",
+        "budget_exhausted",
+        "core_unavailable",
+    ] {
+        assert_eq!(crate::retrieval::stored_error(code).0, code);
+    }
+    for code in ["", "conflict", "synthetic_unknown", "rate_limited"] {
+        assert_eq!(crate::retrieval::stored_error(code).0, "conflict");
+    }
+    // A cached Jev result without an expected answer must not panic the request task.
+    let cached: crate::providers::JevResponse = serde_json::from_value(json!({"model":"jev-1.13.0","answers":{"conflict":{"type":"noul","noul":0.0}},"usage":{"input_tokens":20,"output_tokens":5}})).unwrap();
+    assert_eq!(crate::pipeline::noul(&cached, "conflict").unwrap(), 0.0);
+    assert_eq!(
+        crate::pipeline::noul(&cached, "passage_0").unwrap_err().0,
+        "internal_error"
+    );
+}

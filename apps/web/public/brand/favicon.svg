@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="noti.school">
+  <!-- The "noti." header mark reduced to "n." for small sizes: ink tile, off-white n, coral dot.
+       Drawn as strokes and a circle, so nothing depends on a font. Colours are the site tokens. -->
+  <rect width="64" height="64" rx="16" fill="#2b2521"/>
+  <path d="M17 49V21M17 33q0-12 11-12t11 12v16" fill="none" stroke="#fbf8f3" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="51" cy="44.5" r="5.5" fill="#ef9a76"/>
+</svg>

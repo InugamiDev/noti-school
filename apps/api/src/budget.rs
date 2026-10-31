@@ -179,11 +179,12 @@ impl Attempt {
         if current.is_none() {
             return Err(Error("not_found"));
         }
+        // A UTC rollover or price expiry between reservation and dispatch is not cap exhaustion.
         sqlx::query("SELECT product.mark_ai($1,'dispatched')")
             .bind(id)
             .execute(&mut *tx)
             .await
-            .map_err(|_| Error("budget_exhausted"))?;
+            .map_err(dispatch_refused)?;
         tx.commit().await?;
         Ok(Self {
             pool: pool.clone(),
@@ -196,6 +197,26 @@ impl Attempt {
         self.kind == kind
     }
     pub async fn settle(self, units: Vec<u64>, result: serde_json::Value) -> Result<()> {
+        self.record(units, Some(result)).await
+    }
+    // A dispatched response that was rejected after validated usage is still charged, uncached.
+    pub async fn settle_rejected(&self, units: Vec<u64>) -> Result<()> {
+        self.record(units, None).await
+    }
+    // Zero settlement is valid only when no request was sent (verified uncharged).
+    pub async fn settle_unsent(&self) -> Result<()> {
+        self.record(vec![0; self.components.len()], None).await
+    }
+    // Ambiguous outcomes (timeout, transport, non-2xx, untrusted usage) keep the full hold for
+    // operator reconciliation; SQL only permits dispatched -> uncertain, never a zero release.
+    pub async fn uncertain(&self) -> Result<()> {
+        sqlx::query("SELECT product.mark_ai($1,'uncertain')")
+            .bind(self.id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+    async fn record(&self, units: Vec<u64>, result: Option<serde_json::Value>) -> Result<()> {
         if units.len() != self.components.len() || units.iter().any(|v| *v > 1_000_000) {
             return Err(Error("provider_unavailable"));
         }
@@ -213,8 +234,12 @@ impl Attempt {
             .bind(self.id).fetch_optional(&mut *tx).await?;
         if active.is_none()
             && self.kind == OperationKind::Embedding
-            && serde_json::from_value::<Vec<f32>>(result.clone()).is_ok_and(|v| {
-                v.len() == 1536 && v.iter().all(|n| n.is_finite()) && v.iter().any(|n| *n != 0.0)
+            && result.as_ref().is_some_and(|r| {
+                serde_json::from_value::<Vec<f32>>(r.clone()).is_ok_and(|v| {
+                    v.len() == 1536
+                        && v.iter().all(|n| n.is_finite())
+                        && v.iter().any(|n| *n != 0.0)
+                })
             })
         {
             active = sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT p.id FROM product.pipeline_stages p WHERE p.id=(SELECT operation_id FROM product.ai_reservations WHERE id=$1) AND {RECOVERABLE_EMBEDDING} FOR UPDATE OF p")))
@@ -227,7 +252,7 @@ impl Attempt {
             .bind(json!(usage))
             .execute(&mut *tx)
             .await?;
-        if let Some(stage) = active {
+        if let (Some(stage), Some(result)) = (active, result) {
             sqlx::query("UPDATE product.pipeline_stages SET result=$2 WHERE id=$1")
                 .bind(stage)
                 .bind(result)
@@ -236,6 +261,16 @@ impl Attempt {
         }
         tx.commit().await?;
         Ok(())
+    }
+}
+fn dispatch_refused(e: sqlx::Error) -> Error {
+    if e.as_database_error()
+        .is_some_and(|d| d.message().contains("pricing expired"))
+    {
+        Error("pricing_unavailable")
+    } else {
+        // Month rollover ('reserve again in current month') and DB faults are retryable.
+        Error("core_unavailable")
     }
 }
 // Dropping an Attempt intentionally leaves dispatched funds reserved after timeout/cancellation.

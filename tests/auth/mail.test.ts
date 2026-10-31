@@ -26,9 +26,14 @@ test('SMTP uses fixed sender and TLS, awaits acceptance, closes transport and re
     }, close() { closed++; } };
   });
   await mail.send(message); assert.equal(delivered, 1); assert.equal(closed, 1);
-  const failed = createMailer(mailConfig(), () => ({ async sendMail() { return { accepted: [], rejected: [message.to] }; }, close() {} }));
-  await assert.rejects(failed.send(message), /Email unavailable/); assert.equal(failed.failed, true);
-  await assert.rejects(failed.send(message), /Email unavailable/);
+  const rejected = createMailer(mailConfig(), () => ({ async sendMail() { return { accepted: [], rejected: [message.to] }; }, close() {} }));
+  for (let i = 0; i < 5; i++) await assert.rejects(rejected.send(message), /Email unavailable/);
+  assert.equal(rejected.failed, false, 'Recipient rejection is not a transport failure');
+  const rcpt = createMailer(mailConfig(), () => ({ async sendMail() {
+    throw Object.assign(new Error('Recipient command failed'), { code: 'EENVELOPE', command: 'RCPT TO', responseCode: 550 });
+  }, close() {} }));
+  for (let i = 0; i < 5; i++) await assert.rejects(rcpt.send(message), /Email unavailable/);
+  assert.equal(rcpt.failed, false);
   const disabled = createMailer(config(), () => { throw new Error('Transport must not be created'); });
   await assert.rejects(disabled.send(message), /Email unavailable/);
 });
@@ -39,7 +44,27 @@ test('SMTP delivery has an absolute eight-second deadline even if transport neve
   const mail = createMailer(mailConfig(), () => ({ sendMail: () => new Promise(() => {}), close() { closed = true; } }));
   const pending = mail.send(message);
   t.mock.timers.tick(8000);
-  await assert.rejects(pending, /Email unavailable/); assert.equal(closed, true); assert.equal(mail.failed, true);
+  await assert.rejects(pending, /Email unavailable/); assert.equal(closed, true); assert.equal(mail.failed, false, 'One timeout does not open the circuit');
+});
+
+test('A-05 transport circuit opens after consecutive failures, cools down, and closes on success', async () => {
+  let now = 0, fail = true, created = 0;
+  const mail = createMailer(mailConfig(), () => { created++; return { async sendMail() {
+    if (fail) throw Object.assign(new Error('Synthetic connection failure'), { code: 'ECONNECTION' });
+    return { accepted: [message.to], rejected: [] };
+  }, close() {} }; }, () => now);
+  for (let i = 0; i < 2; i++) await assert.rejects(mail.send(message));
+  assert.equal(mail.failed, false);
+  fail = false; await mail.send(message); fail = true;
+  for (let i = 0; i < 2; i++) await assert.rejects(mail.send(message));
+  assert.equal(mail.failed, false, 'Success resets the consecutive count');
+  await assert.rejects(mail.send(message)); assert.equal(mail.failed, true);
+  const before = created; await assert.rejects(mail.send(message), /Email unavailable/);
+  assert.equal(created, before, 'Open circuit does not touch the transport');
+  now = 60_000; assert.equal(mail.failed, false);
+  await assert.rejects(mail.send(message)); assert.equal(mail.failed, true, 'Failed half-open probe reopens');
+  now = 120_000; fail = false; await mail.send(message);
+  fail = true; await assert.rejects(mail.send(message)); assert.equal(mail.failed, false);
 });
 
 test('actual Nodemailer refuses a local SMTP peer without STARTTLS before transmitting credentials', async () => {

@@ -126,6 +126,36 @@ pub(crate) fn request_hash(b: &Ask, execution: &Value) -> Result<String> {
     ))
 }
 
+// An exact, unexpired replay of a failed ask reports the stored failure without redispatching.
+fn replay_error(row: &sqlx::postgres::PgRow, hash: &str) -> Result<Error> {
+    use sqlx::Row;
+    if row.try_get::<String, _>("request_sha256")? != hash
+        || !row.try_get::<bool, _>("valid")?
+        || row.try_get::<String, _>("state")? != "failed"
+    {
+        return Ok(Error("conflict"));
+    }
+    let response: Option<Value> = row.try_get("response")?;
+    Ok(stored_error(
+        response
+            .as_ref()
+            .and_then(|r| r["error_code"].as_str())
+            .unwrap_or_default(),
+    ))
+}
+pub(crate) fn stored_error(code: &str) -> Error {
+    Error(match code {
+        "provider_unavailable" => "provider_unavailable",
+        "pricing_unavailable" => "pricing_unavailable",
+        "budget_exhausted" => "budget_exhausted",
+        "core_unavailable" => "core_unavailable",
+        "internal_error" => "internal_error",
+        "not_found" => "not_found",
+        "invalid_request" => "invalid_request",
+        _ => "conflict",
+    })
+}
+
 pub async fn ask(
     State(s): State<AppState>,
     h: HeaderMap,
@@ -161,7 +191,7 @@ pub async fn ask(
     if let Some(row) = sqlx::query("SELECT request_sha256,state,response,expires_at>now() AS valid FROM product.idempotency_keys WHERE institution_id=$1 AND user_id=$2 AND key=$3")
         .bind(b.institution_id).bind(&u.user_id).bind(key).fetch_optional(s.pool()?).await? {
         if row.try_get::<String,_>("request_sha256")? != hash || !row.try_get::<bool,_>("valid")? || row.try_get::<String,_>("state")? != "completed" {
-            return Err(Error("conflict"));
+            return Err(replay_error(&row, &hash)?);
         }
         let response: Value = row.try_get("response")?;
         let id = serde_json::from_value(response["answer_id"].clone()).map_err(|_| Error("conflict"))?;
@@ -183,7 +213,7 @@ pub async fn ask(
             || !row.try_get::<bool, _>("valid")?
             || row.try_get::<String, _>("state")? != "completed"
         {
-            return Err(Error("conflict"));
+            return Err(replay_error(&row, &hash)?);
         }
         let response: Value = row.try_get("response")?;
         let id =

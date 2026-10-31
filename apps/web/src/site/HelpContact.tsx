@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, Show } from 'solid-js';
-import { ArrowUpRight, Search } from 'lucide-solid';
+import { Select } from '../ui/Select';
+import { ArrowUpRight, Search, ArrowRight } from 'lucide-solid';
 import { questions } from './Sections';
 
 export function Help() {
@@ -47,7 +48,7 @@ export function Help() {
               <summary>{item.question}</summary>
               <p>{item.answer}</p>
               <a class="site-inline-link" href={item.href}>
-                {item.action} <ArrowUpRight size={16} />
+                {item.action} <ArrowRight size={16} />
               </a>
             </details>
           )}
@@ -56,7 +57,7 @@ export function Help() {
       <Show when={!results().length}>
         <div class="site-empty">
           <h2>No matching help articles.</h2>
-          <p>Try a broader phrase or another category. You can also contact the project owner.</p>
+          <p>Try a broader phrase or another category. You can also contact us.</p>
           <button
             onClick={() => {
               setQuery('');
@@ -66,7 +67,7 @@ export function Help() {
             Clear filters
           </button>
           <a class="site-inline-link" href="#/contact">
-            Contact the owner <ArrowUpRight size={16} />
+            Contact us <ArrowRight size={16} />
           </a>
         </div>
       </Show>
@@ -79,30 +80,30 @@ export function Contact() {
   return (
     <div class="site-contact-grid">
       <div>
-        <h2>Reach the project owner.</h2>
+        <h2>Get in touch.</h2>
         <p>
-          The public contact destination is InugamiDev’s GitHub profile. Use the contact options
-          available there. There is no message submission form on this page.
+          noti.school is built by InugamiDev. Reach out through the contact options on GitHub.
         </p>
         <a class="primary" href="https://github.com/InugamiDev">
           Open GitHub profile <ArrowUpRight size={18} />
         </a>
         <p class="site-fine">
-          A response time is not guaranteed. Do not post sensitive information in public.
+          Please don’t post passwords or personal records in public.
         </p>
       </div>
       <div class="site-contact-prep">
-        <label for="contact-topic">What would you like to discuss?</label>
-        <select
+        <Select
           id="contact-topic"
+          label="What would you like to discuss?"
           value={topic()}
-          onChange={(e) => setTopic(e.currentTarget.value)}
-        >
-          <option>Pilot access</option>
-          <option>Institutional documents</option>
-          <option>Incorrect answer</option>
-          <option>Account or privacy concern</option>
-        </select>
+          onChange={setTopic}
+          options={[
+            'Pilot access',
+            'Institutional documents',
+            'Incorrect answer',
+            'Account or privacy concern',
+          ].map((value) => ({ value, label: value }))}
+        />
         <div aria-live="polite" class="site-contact-guidance">
           <h3>Useful details to prepare</h3>
           <Show when={topic() === 'Pilot access'}>

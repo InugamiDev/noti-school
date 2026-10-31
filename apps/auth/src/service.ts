@@ -11,12 +11,18 @@ const publicPaths = new Set([
   '/sign-up/email', '/sign-in/email', '/sign-in/social', '/sign-out', '/get-session',
   '/request-password-reset', '/reset-password', '/send-verification-email', '/verify-email',
   '/change-password', '/list-sessions', '/revoke-session', '/revoke-sessions', '/revoke-other-sessions',
-  '/delete-user', '/delete-user/callback',
+  '/delete-user',
 ]);
-const getPaths = new Set(['/get-session', '/list-sessions', '/verify-email', '/delete-user/callback', '/callback/google']);
+const getPaths = new Set(['/get-session', '/list-sessions', '/verify-email', '/callback/google']);
+// Per client (user or admission) and target email; the account ceiling is the absolute cross-client bound.
 const sensitiveLimits: Record<string, number> = {
   '/sign-in/email': 10, '/sign-up/email': 5, '/request-password-reset': 5, '/send-verification-email': 5,
 };
+const accountCeilings: Record<string, number> = {
+  '/sign-in/email': 50, '/sign-up/email': 10, '/request-password-reset': 10, '/send-verification-email': 10,
+};
+const ENUMERATION_FLOOR_MS = 8500, MAX_PADDED = 256;
+const sessionCookie = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]*)/;
 export type SessionIdentity = {
   user: { id: string; email: string; emailVerified: boolean };
   session: { id: string; userId: string; expiresAt: Date };
@@ -56,16 +62,22 @@ export function createService(deps: {
   pause?: (ms: number) => Promise<void>;
 }) {
   const { config, auth, mail, invitations } = deps;
-  const internalLimit = new RateLimit(600), admission = new Admission();
+  const admission = new Admission();
+  // Internal: per presented session token, so one token cannot spend another's capacity. Failed lookups
+  // share one budget; once spent, only recently valid tokens still reach the database.
+  const capabilityLimit = new RateLimit(600, 60_000, 1), tokenLimit = new RateLimit(300);
+  const knownSessions = new RateLimit(Number.MAX_SAFE_INTEGER, 600_000), invalidLookups = new RateLimit(600, 60_000, 1);
   const limits = new Map<string, RateLimit>();
   // Separate maps keep anonymous churn from filling verified-user quota storage.
   for (const path of [...publicPaths, '/callback/google', '/reset-password/:token', '/invitations/redeem']) {
-    for (const kind of ['user', 'admission', 'account']) limits.set(`${kind}:${path}`, new RateLimit(sensitiveLimits[path] ?? 120));
+    for (const kind of ['user', 'admission', 'pair']) limits.set(`${kind}:${path}`, new RateLimit(sensitiveLimits[path] ?? 120));
+    limits.set(`shared:${path}`, new RateLimit(120, 60_000, 1));
+    limits.set(`account:${path}`, new RateLimit(accountCeilings[path] ?? 120));
   }
-  let publicActive = 0, internalActive = 0;
+  let publicActive = 0, internalActive = 0, paddedActive = 0;
   const readSession = deps.readSession ?? (auth ? sessionReader(auth) : async () => null);
   const pause = deps.pause ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
-  const handle = async (original: Request, responseHeaders: Headers): Promise<Response> => {
+  const handle = async (original: Request, responseHeaders: Headers, pad: { until?: number }): Promise<Response> => {
     const started = Date.now();
     const url = new URL(original.url); const path = url.pathname;
     const authPath = path.slice('/api/auth'.length);
@@ -102,8 +114,8 @@ export function createService(deps: {
       }
       if (internal) {
         if ((await request.text()).length) return errorResponse(400, 'invalid_request');
-        if (!internalLimit.allow(path)) return errorResponse(429, 'rate_limited');
         if (path === '/internal/capabilities') {
+          if (!capabilityLimit.allow('capabilities')) return errorResponse(429, 'rate_limited');
           const ready = !!auth && await deps.ready().catch(() => false);
           const unavailable = { state: 'unavailable', reason: 'core_failed' };
           const capability = (configured: boolean) => !ready ? unavailable : configured
@@ -113,8 +125,12 @@ export function createService(deps: {
             email: !ready ? unavailable : mail.failed ? { state: 'unavailable', reason: 'provider_failed' } : capability(mail.enabled),
           }), { headers: { 'cache-control': 'no-store' } });
         }
+        const token = digest(sessionCookie.exec(request.headers.get('cookie') ?? '')?.[1] ?? '');
+        if (!tokenLimit.allow(token)) return errorResponse(429, 'rate_limited');
+        if (!knownSessions.has(token) && invalidLookups.blocked('invalid')) return errorResponse(429, 'rate_limited');
         const current = await readSession(request.headers);
-        if (!validSession(current)) return errorResponse(401, 'unauthenticated');
+        if (!validSession(current)) { knownSessions.forget(token); invalidLookups.allow('invalid'); return errorResponse(401, 'unauthenticated'); }
+        knownSessions.renew(token);
         return Response.json(Session.parse({ user_id: current.user.id, session_id: current.session.id,
           email_verified: true, expires_at: current.session.expiresAt.toISOString() }), { headers: { 'cache-control': 'no-store' } });
       }
@@ -123,15 +139,19 @@ export function createService(deps: {
       if (validSession(current)) { identity = digest(current.user.id); kind = 'user'; }
       else {
         const admitted = admission.identify(request.headers, config.env.NODE_ENV === 'production');
-        if (!admitted) return errorResponse(429, 'rate_limited');
-        identity = admitted.id; kind = 'admission';
+        // Cookieless (or over activation budget) traffic shares one key; the issued cookie gets its own next time.
+        identity = admitted.shared ? 'unadmitted' : admitted.id; kind = admitted.shared ? 'shared' : 'admission';
         if (admitted.cookie) responseHeaders.append('set-cookie', admitted.cookie);
       }
       if (!limits.get(`${kind}:${flow}`)!.allow(identity)) return errorResponse(429, 'rate_limited');
       if (sensitiveLimits[flow] && request.method === 'POST') {
         const body = await request.clone().json() as { email?: unknown };
-        if (typeof body.email === 'string' && body.email.length <= 254
-          && !limits.get(`account:${flow}`)!.allow(digest(body.email.trim().toLowerCase()))) return errorResponse(429, 'rate_limited');
+        if (typeof body.email === 'string' && body.email.length <= 254) {
+          const account = digest(body.email.trim().toLowerCase());
+          // A third party spends only its own client/account pair before the higher absolute ceiling.
+          if (!limits.get(`pair:${flow}`)!.allow(`${account}:${kind}:${identity}`)
+            || !limits.get(`account:${flow}`)!.allow(account)) return errorResponse(429, 'rate_limited');
+        }
       }
       if (path === '/api/auth/invitations/redeem') {
         if (request.method !== 'POST') return errorResponse(400, 'invalid_request');
@@ -147,12 +167,16 @@ export function createService(deps: {
       }
       if ((authPath === '/sign-up/email' || authPath === '/delete-user' || enumerationPaths.has(authPath)) && (!mail.enabled || mail.failed)) return errorResponse(503, 'provider_unavailable', 'email');
       if ((authPath === '/sign-in/social' || authPath === '/callback/google') && !config.configured.google) return errorResponse(503, 'provider_unavailable', 'google');
-      const response = await auth!.handler(request);
-      if (enumerationPaths.has(authPath) && (response.ok || response.status >= 500)) {
-        // Bound timing differences and never report queueing/delivery or distinguish a missing account.
-        await pause(Math.max(0, 8500 - (Date.now() - started)));
-        return Response.json(recoveryMessage, { headers: { 'cache-control': 'no-store' } });
+      const padded = enumerationPaths.has(authPath);
+      if (padded) {
+        // Padded requests wait outside the public slot pool, under their own bound.
+        if (paddedActive >= MAX_PADDED) return errorResponse(503, 'core_unavailable', 'identity');
+        paddedActive++; pad.until = started + ENUMERATION_FLOOR_MS;
       }
+      const response = await auth!.handler(request);
+      // Session-dependent 4xx (e.g. EMAIL_ALREADY_VERIFIED) and validation errors are normalized too; only
+      // origin rejection (403), which is independent of any account, keeps its status. All are padded.
+      if (padded && response.status !== 403) return Response.json(recoveryMessage, { headers: { 'cache-control': 'no-store' } });
       const headers = new Headers(response.headers);
       headers.set('cache-control', 'no-store'); headers.set('referrer-policy', 'no-referrer');
       return new Response(response.body, { status: response.status, headers });
@@ -162,9 +186,13 @@ export function createService(deps: {
     } finally { if (internal) internalActive--; else publicActive--; }
   };
   return async (original: Request): Promise<Response> => {
-    const headers = new Headers();
-    const response = await handle(original, headers);
-    for (const cookie of headers.getSetCookie()) response.headers.append('set-cookie', cookie);
-    return response;
+    const headers = new Headers(), pad: { until?: number } = {};
+    try {
+      const response = await handle(original, headers, pad);
+      // Bound timing differences and never report queueing/delivery or distinguish a missing account.
+      if (pad.until !== undefined) await pause(Math.max(0, pad.until - Date.now()));
+      for (const cookie of headers.getSetCookie()) response.headers.append('set-cookie', cookie);
+      return response;
+    } finally { if (pad.until !== undefined) paddedActive--; }
   };
 }

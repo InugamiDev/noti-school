@@ -1,0 +1,664 @@
+/* intent: the landing page's showier layer. Every moving rule sits under [data-motion='on'],
+   so pause, reduced motion and hidden tabs leave a still, fully readable page. */
+
+/* Reading progress */
+.scroll-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 3px;
+  z-index: 60;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--action), #f2c46d, var(--cyan), #9c86d9);
+  pointer-events: none;
+}
+.app-shell[data-motion='off'] .scroll-progress {
+  display: none;
+}
+
+/* Hero: aurora, pointer light, wordmark and shimmer */
+.site-home .hero-content {
+  position: relative;
+  z-index: 2;
+}
+.site-home .hero::before,
+.site-home .hero::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+.site-home .hero::before {
+  inset: 0;
+  background:
+    radial-gradient(28% 34% at 18% 30%, rgb(239 154 118 / 0.34), transparent 70%),
+    radial-gradient(26% 32% at 82% 26%, rgb(156 134 217 / 0.26), transparent 70%),
+    radial-gradient(30% 36% at 70% 82%, rgb(42 111 119 / 0.2), transparent 70%),
+    radial-gradient(24% 30% at 26% 80%, rgb(242 196 109 / 0.26), transparent 70%);
+  opacity: 0.8;
+}
+.site-home .motion-control {
+  z-index: 3;
+}
+.site-home .hero::after {
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(420px circle at var(--px, 50%) var(--py, 40%), rgb(255 255 255 / 0.55), transparent 65%);
+}
+.app-shell[data-motion='on'] .site-home .hero::after {
+  transition: opacity 0.5s;
+}
+.app-shell[data-motion='on'] .site-home .hero:hover::after {
+  opacity: 1;
+}
+/* Parallax depth on scroll. Only decoration and headings move; the composer and its controls stay put. */
+.app-shell[data-motion='on'] .site-home .hero:not(.leaving) h1 {
+  transform: translate3d(0, calc(var(--hero-p, 0) * -70px), 0) scale(calc(1 - var(--hero-p, 0) * 0.08));
+  opacity: calc(1 - var(--hero-p, 0) * 0.9);
+}
+.app-shell[data-motion='on'] .site-home .hero:not(.leaving) .hero-orbit {
+  transform: translate3d(0, calc(var(--hero-p, 0) * -180px), 0);
+}
+
+.hero h1 .ch {
+  display: inline-block;
+}
+/* First-load entrance; data-intro is set only when motion is allowed and removed afterwards. */
+.app-shell[data-motion='on'] .hero[data-intro] h1 .ch {
+  animation: letter-in 0.9s cubic-bezier(0.34, 1.5, 0.64, 1) calc(var(--i) * 45ms) both;
+}
+.app-shell[data-motion='on'] .hero[data-intro] .promise .word {
+  animation: word-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) calc(350ms + var(--i) * 60ms) both;
+}
+.app-shell[data-motion='on'] .hero[data-intro] .promise .shine .word {
+  animation-delay: calc(560ms + var(--i) * 60ms);
+}
+@keyframes letter-in {
+  from {
+    opacity: 0;
+    transform: translateY(56px) rotate(10deg);
+  }
+}
+@keyframes word-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+.hero h1 .ch.dot {
+  color: var(--action);
+  text-shadow: 0 0 24px rgb(239 154 118 / 0.6);
+}
+.app-shell[data-motion='on'] .hero[data-live='true'] h1 .ch.dot {
+  animation: dot-pulse 2.6s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  50% {
+    color: var(--cyan);
+    text-shadow: 0 0 30px rgb(42 111 119 / 0.55);
+  }
+}
+.promise .word {
+  display: inline-block;
+}
+/* Solid accent: a background-clip:text gradient went transparent whenever the animated .word
+   children composited on their own layer, which hid "answered with sources." entirely. */
+.promise .shine,
+.promise .shine .word {
+  color: var(--action-deep);
+  font-weight: 600;
+}
+
+/* Floating citation chips */
+.hero-orbit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.hero-orbit > span {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--ink-soft);
+  background: rgb(251 248 243 / 0.88);
+  box-shadow: var(--clay-sm);
+  white-space: nowrap;
+}
+.hero-orbit > span[data-tone='peach'] svg {
+  color: var(--action-deep);
+}
+.hero-orbit > span[data-tone='sky'] {
+  background: rgb(224 233 242 / 0.92);
+}
+.hero-orbit > span[data-tone='sage'] {
+  background: rgb(226 236 221 / 0.92);
+}
+.hero-orbit > span[data-tone='lilac'] {
+  background: rgb(233 226 243 / 0.92);
+}
+.hero-orbit > span[data-tone='number'] {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  color: var(--raised);
+  background: var(--ink);
+  box-shadow: 4px 6px 14px rgb(43 37 33 / 0.25);
+}
+.hero-orbit > span:nth-child(1) { left: 7%; top: 22%; --d: 7s; }
+.hero-orbit > span:nth-child(2) { right: 9%; top: 18%; --d: 8.5s; }
+.hero-orbit > span:nth-child(3) { left: 10%; bottom: 22%; --d: 9s; }
+.hero-orbit > span:nth-child(4) { right: 7%; bottom: 28%; --d: 7.5s; }
+.hero-orbit > span:nth-child(5) { left: 22%; top: 44%; --d: 6s; }
+.hero-orbit > span:nth-child(6) { right: 21%; top: 52%; --d: 6.8s; }
+.app-shell[data-motion='on'] .hero[data-live='true'] .hero-orbit > span {
+  animation: float var(--d) ease-in-out infinite alternate;
+}
+.app-shell[data-motion='on'] .hero[data-live='true'] .hero-orbit > span:nth-child(even) {
+  animation-direction: alternate-reverse;
+}
+@keyframes float {
+  from {
+    translate: 0 -10px;
+    rotate: -2deg;
+  }
+  to {
+    translate: 0 12px;
+    rotate: 2deg;
+  }
+}
+@media (max-width: 1180px) {
+  .hero-orbit {
+    display: none;
+  }
+}
+
+/* Cards: pointer light and tilt */
+.fx-card {
+  position: relative;
+}
+.app-shell[data-motion='on'] .fx-card {
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s;
+}
+.fx-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgb(255 255 255 / 0.7), rgb(239 154 118 / 0.12) 40%, transparent 70%);
+}
+.app-shell[data-motion='on'] .fx-card:hover {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-4px);
+  box-shadow: var(--clay-lift);
+}
+.app-shell[data-motion='on'] .fx-card::after {
+  transition: opacity 0.3s;
+}
+.app-shell[data-motion='on'] .fx-card:hover::after {
+  opacity: 1;
+}
+.app-shell[data-motion='on'] .fx-magnet {
+  transform: translate3d(var(--tx, 0px), var(--ty, 0px), 0);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Pinned walkthrough */
+.site-story {
+  position: relative;
+  padding: 88px max(6%, calc((100% - 1160px) / 2));
+}
+.site-story[data-pinned='true'] {
+  height: 340vh;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.story-sticky {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: clamp(32px, 6vw, 96px);
+  align-items: center;
+}
+.site-story[data-pinned='true'] .story-sticky {
+  position: sticky;
+  top: 72px;
+  height: calc(100vh - 72px);
+}
+.story-copy h2 {
+  font-size: clamp(34px, 3.6vw, 52px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  margin: 12px 0 28px;
+}
+.story-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.story-steps li {
+  display: flex;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: var(--r-md);
+  transition:
+    background 0.4s,
+    box-shadow 0.4s,
+    opacity 0.4s;
+}
+.story-steps h3 {
+  margin: 2px 0 4px;
+  font-size: 18px;
+}
+.story-steps p {
+  margin: 0;
+}
+.story-number {
+  flex: none;
+  font-weight: 760;
+  font-size: 14px;
+  color: var(--action-deep);
+  padding-top: 4px;
+}
+.site-story[data-pinned='true'] .story-steps li {
+  opacity: 0.42;
+}
+.site-story[data-pinned='true'] .story-steps li[data-done='true'] {
+  opacity: 0.7;
+}
+.site-story[data-pinned='true'] .story-steps li[aria-current='step'] {
+  opacity: 1;
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+}
+.story-progress {
+  display: none;
+  height: 4px;
+  margin-top: 24px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.site-story[data-pinned='true'] .story-progress {
+  display: block;
+}
+.story-progress span {
+  display: block;
+  height: 100%;
+  transform: scaleX(var(--story-p, 0));
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--action), var(--cyan));
+}
+.story-stage {
+  position: relative;
+  aspect-ratio: 5 / 4;
+  border-radius: 40px;
+  background:
+    radial-gradient(60% 60% at 30% 20%, rgb(239 154 118 / 0.28), transparent 70%),
+    radial-gradient(60% 60% at 80% 90%, rgb(42 111 119 / 0.22), transparent 70%),
+    var(--surface);
+  box-shadow: var(--clay);
+  overflow: hidden;
+}
+.sv {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  padding: 8%;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(30px) scale(0.96);
+  transition:
+    opacity 0.55s,
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0.55s;
+}
+.story-stage[data-active='0'] .sv[data-step='0'],
+.story-stage[data-active='1'] .sv[data-step='1'],
+.story-stage[data-active='2'] .sv[data-step='2'],
+.story-stage[data-active='3'] .sv[data-step='3'] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.sv-composer {
+  display: flex;
+  align-items: center;
+  width: min(100%, 420px);
+  padding: 20px 24px;
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  box-shadow: var(--clay);
+  font-size: 18px;
+  font-weight: 560;
+}
+.sv-typed {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.app-shell[data-motion='on'] .story-stage[data-active='0'] .sv-typed {
+  animation: type 2.4s steps(31) both;
+}
+@keyframes type {
+  from {
+    max-width: 0;
+  }
+  to {
+    max-width: 100%;
+  }
+}
+.sv-caret {
+  width: 2px;
+  height: 22px;
+  margin-left: 3px;
+  background: var(--action-deep);
+}
+.app-shell[data-motion='on'] .sv-caret {
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.sv-langs {
+  display: flex;
+  gap: 10px;
+}
+.sv-langs span {
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 640;
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+}
+.sv-langs span + span {
+  background: var(--lilac-soft);
+}
+.sv-docs {
+  position: relative;
+  display: flex;
+  gap: 16px;
+}
+.sv-doc {
+  position: relative;
+  display: grid;
+  gap: 9px;
+  width: 140px;
+  padding: 18px 16px 22px;
+  border-radius: 20px;
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+  font-size: 13px;
+  transform: rotate(calc((var(--i) - 1) * 6deg)) translateY(calc(var(--i) * 8px - 8px));
+}
+.sv-doc:first-child {
+  transform: translateY(-18px);
+  box-shadow:
+    var(--clay-lift),
+    0 0 0 2px var(--action);
+  z-index: 1;
+}
+.sv-doc i,
+.sv-passage i {
+  display: block;
+  height: 7px;
+  border-radius: 6px;
+  background: var(--line);
+}
+.sv-doc i:nth-of-type(2) {
+  width: 70%;
+}
+.sv-doc em {
+  position: absolute;
+  top: -12px;
+  right: -10px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  color: #1f5a3c;
+  background: var(--sage-soft);
+  box-shadow: var(--clay-sm);
+}
+.sv-beam {
+  position: absolute;
+  inset: -20px -30px;
+  border-radius: 24px;
+  background: linear-gradient(90deg, transparent, rgb(239 154 118 / 0.28), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.app-shell[data-motion='on'] .story-stage[data-active='1'] .sv-beam {
+  animation: beam 2.2s ease-in-out infinite;
+}
+@keyframes beam {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+.sv-passage {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 420px);
+  padding: 26px 28px;
+  border-radius: 28px;
+  background: var(--raised);
+  box-shadow: var(--clay);
+}
+.sv-passage i.short {
+  width: 55%;
+}
+.sv-passage i.mark {
+  height: 12px;
+  background: linear-gradient(90deg, #f6c9b4, #f2c46d);
+  transform-origin: 0 50%;
+}
+.app-shell[data-motion='on'] .story-stage[data-active='2'] .sv-passage i.mark {
+  animation: mark 0.9s 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes mark {
+  from {
+    transform: scaleX(0);
+  }
+}
+.sv-cite {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: start;
+  margin-top: 6px;
+  padding: 6px 14px 6px 6px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 620;
+  background: var(--cyan-soft);
+  color: var(--cyan);
+}
+.sv-cite b {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--raised);
+  background: var(--cyan);
+}
+.app-shell[data-motion='on'] .story-stage[data-active='2'] .sv-cite {
+  animation: pop 0.6s 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.sv-abstain {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(100%, 400px);
+  padding: 30px;
+  text-align: center;
+  border-radius: 28px;
+  background: var(--raised);
+  box-shadow: var(--clay-press);
+  color: var(--ink-soft);
+}
+.sv-abstain svg {
+  color: var(--muted);
+}
+.sv-next {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--cyan);
+}
+@media (max-width: 959px) {
+  .story-sticky {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Question marquee */
+.site-marquee {
+  display: grid;
+  gap: 14px;
+  padding: 28px 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+.marquee-row {
+  display: flex;
+}
+.marquee-track {
+  display: flex;
+  flex: none;
+  gap: 14px;
+  padding-right: 14px;
+}
+.marquee-track span {
+  padding: 14px 22px;
+  border-radius: var(--r-pill);
+  font-size: 16px;
+  font-weight: 580;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+}
+.marquee-row[data-reverse='true'] .marquee-track span:nth-child(odd) {
+  background: var(--butter-soft);
+}
+.marquee-row:not([data-reverse='true']) .marquee-track span:nth-child(3n) {
+  background: var(--cyan-soft);
+}
+.app-shell[data-motion='on'] .marquee-track {
+  animation: marquee 48s linear infinite;
+}
+.app-shell[data-motion='on'] .marquee-row[data-reverse='true'] .marquee-track {
+  animation-direction: reverse;
+  animation-duration: 56s;
+}
+.site-marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Scroll-lit statement */
+.site-kinetic {
+  padding: clamp(24px, 4vw, 56px) max(6%, calc((100% - 1160px) / 2)) clamp(56px, 8vw, 120px);
+}
+.site-kinetic p {
+  margin: 0;
+  font-size: clamp(34px, 5.4vw, 76px);
+  line-height: 1.08;
+  font-weight: 720;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.app-shell[data-motion='on'] .site-kinetic .kw {
+  color: rgb(43 37 33 / 0.14);
+  transition: color 0.35s;
+}
+.site-kinetic .kw[data-accent='true'] {
+  color: var(--action-deep);
+}
+.app-shell[data-motion='on'] .site-kinetic .kw[data-lit='true'] {
+  color: var(--ink);
+}
+.app-shell[data-motion='on'] .site-kinetic .kw[data-lit='true'][data-accent='true'] {
+  color: var(--action-deep);
+}
+
+/* Closing: a slow glowing slab */
+.site-closing {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.site-closing::before {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  z-index: -1;
+  background: conic-gradient(from 0deg, rgb(239 154 118 / 0.35), rgb(242 196 109 / 0.3), rgb(42 111 119 / 0.25), rgb(156 134 217 / 0.3), rgb(239 154 118 / 0.35));
+  filter: blur(60px);
+}
+.app-shell[data-motion='on'] .site-closing[data-revealed]::before {
+  animation: spin 18s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Branded scrollbar */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) var(--bg);
+}
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  border: 2px solid var(--bg);
+  border-radius: 10px;
+  background: linear-gradient(var(--action), var(--cyan));
+}
+
+/* The departing hero keeps only the scene; decoration would cost frames during the hand-off. */
+.hero.leaving .hero-orbit,
+.site-home .hero.leaving::before,
+.site-home .hero.leaving::after {
+  display: none;
+}

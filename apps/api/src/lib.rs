@@ -44,6 +44,8 @@ pub struct AppState {
     pub db: Option<PgPool>,
     pub identity: reqwest::Client,
     pub slots: Arc<tokio::sync::Semaphore>,
+    pub static_slots: Arc<tokio::sync::Semaphore>,
+    pub identity_probe: Arc<auth::ProbeCache>,
     pub pipeline_slots: Arc<tokio::sync::Semaphore>,
     pub providers: provider_http::ProviderHttp,
     #[cfg(test)]
@@ -74,6 +76,8 @@ impl AppState {
             db,
             identity,
             slots: Arc::new(tokio::sync::Semaphore::new(8)),
+            static_slots: Arc::new(tokio::sync::Semaphore::new(16)),
+            identity_probe: Arc::new(tokio::sync::Mutex::new(None)),
             pipeline_slots: Arc::new(tokio::sync::Semaphore::new(2)),
             providers: provider_http::ProviderHttp::new()?,
             #[cfg(test)]
@@ -199,7 +203,8 @@ pub fn router(s: AppState) -> Router {
         .with_state(s)
 }
 async fn boundary(State(s): State<AppState>, request: Request, next: Next) -> Response {
-    let path = request.uri().path();
+    let path = request.uri().path().to_owned();
+    let path = path.as_str();
     if path == "/internal" || path.starts_with("/internal/") {
         if let Err(e) = auth::internal(request.headers(), s.config.secret.as_deref()) {
             return e.into_response();
@@ -209,8 +214,42 @@ async fn boundary(State(s): State<AppState>, request: Request, next: Next) -> Re
     {
         return e.into_response();
     }
-    let Ok(_permit) = s.slots.clone().try_acquire_owned() else {
-        return Error("rate_limited").into_response();
+    // intent: /healthz is never throttled and static assets use their own slots, so product
+    // saturation (or a slow client) cannot make the site or liveness probe unavailable.
+    let product = path.starts_with("/api/") || path == "/api" || path.starts_with("/internal");
+    let slots = if product || path == "/readyz" {
+        &s.slots
+    } else {
+        &s.static_slots
+    };
+    let _permit = if path == "/healthz" {
+        None
+    } else {
+        let Ok(permit) = slots.clone().try_acquire_owned() else {
+            return Error("rate_limited").into_response();
+        };
+        Some(permit)
+    };
+    // A slow request body may hold a slot only for the short read allowance, not the 150s answer
+    // allowance. Uploads stream so their handler can reject unauthenticated callers before the body.
+    let upload = request.method() == Method::POST
+        && path.starts_with("/api/v1/institutions/")
+        && path.ends_with("/versions");
+    let bodiless = [Method::GET, Method::HEAD, Method::OPTIONS].contains(request.method());
+    let request = if bodiless || upload {
+        request
+    } else {
+        let (parts, body) = request.into_parts();
+        match tokio::time::timeout(
+            Duration::from_secs(10),
+            axum::body::to_bytes(body, 64 * 1024),
+        )
+        .await
+        {
+            Ok(Ok(bytes)) => Request::from_parts(parts, Body::from(bytes)),
+            Ok(Err(_)) => return Error("payload_too_large").into_response(),
+            Err(_) => return Error("invalid_request").into_response(),
+        }
     };
     let timeout = if path == "/api/v1/answers" { 150 } else { 30 };
     let mut response =

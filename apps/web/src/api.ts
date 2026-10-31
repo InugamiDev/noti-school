@@ -43,7 +43,14 @@ export async function request<T>(
   const owned = !['/api/v1/me', '/api/v1/capabilities', '/api/v1/institutions'].includes(path);
   const scope = scopeController.signal;
   const timeout = path === '/api/v1/answers' && init.method === 'POST' ? ANSWER_WAIT_MS : 45000;
-  const signal = AbortSignal.any([AbortSignal.timeout(timeout), ...(init.signal ? [init.signal] : []), ...(owned ? [scope] : [])]);
+  const signal = anySignal([AbortSignal.timeout(timeout), ...(init.signal ? [init.signal] : []), ...(owned ? [scope] : [])]);
+  // Caller and scope aborts propagate unchanged; a timeout becomes a visible, non-final wait failure.
+  const stopped = (error: unknown) =>
+    init.signal?.aborted || (owned && scope.aborted)
+      ? error
+      : new RequestError(path === '/api/v1/answers'
+        ? 'Stopped waiting for a response. Processing may continue. Submit the same question to check the same operation.'
+        : 'Connection unavailable. Please try again.');
   try {
     response = await fetch(path, {
       ...init,
@@ -53,19 +60,17 @@ export async function request<T>(
       redirect: 'error',
     });
   } catch (error) {
-    if (init.signal?.aborted || (owned && scope.aborted)) throw error;
-    throw new RequestError(path === '/api/v1/answers'
-      ? 'Stopped waiting for a response. Processing may continue. Submit the same question to check the same operation.'
-      : 'Connection unavailable. Please try again.');
+    throw stopped(error);
   }
   if (response.status === 204 && schema === null) return undefined as T;
   let value: unknown;
   try {
     value = await response.json();
-  } catch {
+  } catch (error) {
+    if (signal.aborted) throw stopped(signal.reason ?? error);
     throw new RequestError('This service is unavailable. Please try again later.', response.status);
   }
-  signal.throwIfAborted();
+  if (signal.aborted) throw stopped(signal.reason);
   if (!response.ok) {
     const parsed = ApiError.safeParse(value);
     const code = parsed.success ? parsed.data.error.code : 'unavailable';
@@ -87,8 +92,24 @@ export async function request<T>(
   if (!schema) return undefined as T;
   const result = schema.safeParse(value);
   if (!result.success)
-    throw new RequestError('The response could not be read safely. Please try again later.');
+    throw new RequestError('The response could not be read safely. Please try again later.', response.status);
   return result.data;
+}
+// AbortSignal.any is newer than the ES2022 baseline; combine manually where it is missing.
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals);
+  const controller = new AbortController();
+  const abort = (source: AbortSignal) => {
+    if (controller.signal.aborted) return;
+    controller.abort(source.reason);
+    for (const signal of signals) signal.removeEventListener('abort', listeners.get(signal)!);
+  };
+  const listeners = new Map(signals.map((signal) => [signal, () => abort(signal)] as const));
+  for (const signal of signals) {
+    if (signal.aborted) { abort(signal); break; }
+    signal.addEventListener('abort', listeners.get(signal)!, { once: true });
+  }
+  return controller.signal;
 }
 export function get<N extends SchemaName>(path: string, name: N, signal?: AbortSignal) {
   return request(
@@ -175,6 +196,32 @@ export async function operationKey(owner: string, payload: unknown, signal?: Abo
   try { sessionStorage.setItem('noti.operations', JSON.stringify({ owner, keys: { ...saved, [fingerprint]: key } })); } catch { /* Memory still preserves explicit retries. */ }
   return key;
 }
+// A definitive server outcome ends the operation: the same input later is a fresh request.
+export function retireOperation(key: string) {
+  for (const [fingerprint, value] of operations) if (value === key) operations.delete(fingerprint);
+  try {
+    const stored = JSON.parse(sessionStorage.getItem('noti.operations') || 'null');
+    if (!stored?.keys || typeof stored.keys !== 'object') return;
+    const keys = Object.fromEntries(Object.entries(stored.keys as Record<string, unknown>).filter(([, value]) => value !== key));
+    sessionStorage.setItem('noti.operations', JSON.stringify({ owner: stored.owner, keys }));
+  } catch { /* Optional tab storage. */ }
+}
+// Drop every retained identity without touching drafts (e.g. after deleting a conversation).
+export function forgetOperations() {
+  operations.clear();
+  try { sessionStorage.removeItem('noti.operations'); } catch { /* Optional tab storage. */ }
+}
+const definitiveCodes = ['provider_unavailable', 'budget_exhausted', 'pricing_unavailable'];
+// Only explicit server rejections or completed responses are definitive. Stops, disconnects,
+// timeouts, conflicts and other unreadable/5xx outcomes keep the key for an explicit replay.
+export function isDefinitiveOutcome(error: unknown) {
+  if (!(error instanceof RequestError)) return false;
+  if (error.status >= 200 && error.status < 300) return true;
+  if (error.status >= 400 && error.status < 500) return error.code !== 'conflict' && error.status !== 409 && error.status !== 408;
+  return definitiveCodes.includes(error.code);
+}
+export const isAuthError = (error: unknown) =>
+  error instanceof RequestError && (error.code === 'unauthenticated' || error.code === 'forbidden');
 
 // Consume callbacks synchronously before rendering; never persist credential-bearing query strings.
 export function takeAuthCallback(href: string) {

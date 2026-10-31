@@ -27,6 +27,14 @@ pub async fn delete(
         return Err(Error("invalid_request"));
     }
     let mut tx = s.pool()?.begin().await?;
+    lock_identity(&mut tx, &b.user_id).await?;
+    // The tombstone keeps an in-flight or later redemption from re-creating a membership.
+    sqlx::query(
+        "INSERT INTO product.deleted_identities(user_sha256) VALUES($1) ON CONFLICT DO NOTHING",
+    )
+    .bind(identity_hash(&b.user_id))
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("SELECT institution_id FROM product.memberships WHERE user_id=$1 ORDER BY institution_id FOR UPDATE").bind(&b.user_id).fetch_all(&mut *tx).await?;
     sqlx::query("UPDATE product.invitations SET expires_at=least(expires_at,now()) WHERE created_by=$1 OR redeemed_by=$1").bind(&b.user_id).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM product.feedback WHERE user_id=$1")
@@ -45,6 +53,24 @@ pub async fn delete(
         .await?;
     tx.commit().await?;
     Ok(Json(json!({"deleted":true})))
+}
+fn identity_hash(user: &str) -> String {
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(user.as_bytes()))
+}
+// Account deletion and invitation redemption take this transaction lock first. Returns whether the
+// identity was already deleted, so redemption can refuse it.
+pub(crate) async fn lock_identity(tx: &mut sqlx::PgConnection, user: &str) -> Result<bool> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,718443906))")
+        .bind(user)
+        .execute(&mut *tx)
+        .await?;
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM product.deleted_identities WHERE user_sha256=$1)",
+    )
+    .bind(identity_hash(user))
+    .fetch_one(&mut *tx)
+    .await?)
 }
 pub async fn conversations(
     State(s): State<AppState>,

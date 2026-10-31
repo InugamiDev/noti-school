@@ -1,31 +1,33 @@
 ---
-name: noti.school luminous archive
+name: noti.school clay archive
 colors:
-  primary: '#d5ee78'
-  on-primary: '#19200d'
-  background: '#101314'
-  surface: '#191f21'
-  text: '#e7ebea'
-  muted: '#a5b0b2'
-  cyan: '#9bdde7'
-  vermilion: '#ee826d'
+  primary: '#ef9a76'
+  on-primary: '#2b1a12'
+  background: '#efe8df'
+  surface: '#f6f1ea'
+  raised: '#fbf8f3'
+  text: '#2b2521'
+  muted: '#655b53'
+  evidence: '#2a6f77'
+  unavailable: '#ac4029'
 typography:
   body:
-    fontFamily: 'Aptos, Segoe UI, sans-serif'
+    fontFamily: 'ui-rounded, SF Pro Rounded, Nunito, Segoe UI Variable Text, Segoe UI, system-ui, sans-serif'
     fontSize: '16px'
     fontWeight: 400
     lineHeight: 1.65
     letterSpacing: '0px'
   heading:
-    fontFamily: 'Aptos, Segoe UI, sans-serif'
+    fontFamily: 'ui-rounded, SF Pro Rounded, Nunito, Segoe UI Variable Text, Segoe UI, system-ui, sans-serif'
     fontSize: '40px'
-    fontWeight: 500
+    fontWeight: 650
     lineHeight: 1.1
-    letterSpacing: '0px'
+    letterSpacing: '-0.02em'
 rounded:
-  none: '0px'
-  sm: '5px'
-  md: '8px'
+  sm: '12px'
+  md: '20px'
+  lg: '30px'
+  pill: '999px'
 spacing:
   sm: '8px'
   md: '16px'
@@ -34,38 +36,52 @@ components:
   primary-button:
     backgroundColor: '{colors.primary}'
     textColor: '{colors.on-primary}'
-    rounded: '{rounded.sm}'
+    rounded: '{rounded.pill}'
     padding: '{spacing.md}'
 ---
 
 ## Overview
 
-An open archive corridor frames a stable question composer. The explicitly requested dark theme is the only theme. System fonts avoid another external fetch and cover Vietnamese.
+Soft clay minimalism. A light, warm archive of matte clay shelves, books and floating notes frames a stable question composer. One light theme. System fonts (rounded where the platform has them) avoid another external fetch and cover Vietnamese.
 
 ## Colors
 
-Neutral platinum on charcoal. Chartreuse is reserved for the primary action, cyan for evidence links, vermilion for unavailable states. Status always includes words.
+Warm clay neutrals with pastel accents. Peach clay is reserved for the primary action, teal for evidence links and labels, deep terracotta red for unavailable states. Pastel tints (sky, sage, butter) only colour large slabs. Status always includes words. Text colours meet WCAG AA on every surface.
 
 ## Typography
 
-Fixed sizes at breakpoints: archive hero 58/100/112px with compact-height reductions, marketing page titles 34/40/52/64px, section headings 29/38px, body 16px, question 16/18px. No viewport-scaled text or negative tracking. Long source titles wrap.
+Fixed sizes at breakpoints: archive hero 58/100/112px with compact-height reductions, marketing page titles 34/40/52/64px, section headings 30/40px, body 16px, question 16/18px. Large headings use light negative tracking (-0.02 to -0.045em); body text none. No viewport-scaled text. Long source titles wrap.
 
 ## Layout
 
-Header is 72px on desktop and 64px with mobile disclosure. Sources, History and account entry remain directly visible. A centered 680px composer opens onto the next answer/evidence section. Marketing bands use a 1160px content measure with evidence tools, editorial rows, audience splits, manual process selection and native FAQs. Answer/source splits collapse to vertical readers on phones. Admin keeps compact forms and rows. The minimum supported width is 320px.
+Header is 72px on desktop and 64px with mobile disclosure; the account link is a dark pill. Sources, History and account entry remain directly visible. A centered 680px composer opens onto the next answer/evidence section. Marketing bands use a 1160px content measure; audience, pilot and about bands are inset tinted slabs. Lists, FAQs, citations and document rows are separate raised cards rather than ruled rows. Answer/source splits collapse to vertical readers on phones. The minimum supported width is 320px.
 
 ## Elevation & Depth
 
-Only the direct Three.js archive supplies spatial depth. Forms use solid surfaces and simple borders.
+Clay elevation: raised surfaces use a paired warm drop shadow and white highlight (`--clay`, `--clay-sm`); inputs, passages and selected states are pressed wells (`--clay-well`, `--clay-press`). Buttons lift 1px on hover and press in on activation. The Three.js archive supplies spatial depth with matte rounded geometry, hemisphere plus key/fill light and baked contact shadows; no shadow maps.
 
 ## Shapes
 
-Maximum radius 8px. Documents and shelves are rectangular.
+Rounded everywhere: 12px controls, 20px cards, 30px panels, pill buttons and chips. Scene geometry uses rounded boxes, capsules and spheres.
 
 ## Components
 
-Native labels, inputs, selects and buttons. Lucide icons supplement visible labels. Motion control has a title and accessible name; the footer shares its pause preference across routes. Bounded section reveals and evidence transitions stop for pause, reduced motion and hidden pages. Without IntersectionObserver the archive bitmap and page content remain visible and still. Loading regions include visible status. The synthetic product example is an isolated framed tool, not a simulated live answer.
+Native labels, inputs and buttons. Selects are a clay select-only combobox (`ui/Select.tsx`, WAI-ARIA APG keyboard model, hidden input for forms) so the open list matches the theme instead of the OS picker. Loading uses clay bead loaders with visible status text and content-shaped shimmer skeletons (`ui/Loader.tsx`). Short entrances (select tray spring, answer claim stagger, auth panel swap) use Motion (`motion`, the framework-agnostic framer-motion build) through `ui/motion.ts`, which skips them under reduced motion, the pause control and hidden pages. Sign-in is one card: Google first, email second, with create account, reset, invitation and verification reached by links rather than five tabs. Lucide icons supplement visible labels. Motion control has a title and accessible name; the footer shares its pause preference across routes. Bounded section reveals and evidence transitions stop for pause, reduced motion and hidden pages. Without IntersectionObserver the archive bitmap (a capture of the clay scene) and page content remain visible and still. Loading regions include visible status. The synthetic product example is an isolated framed tool, not a simulated live answer.
+
+## Motion
+
+One system, defined once as custom properties in `style.css` and mirrored in `ui/motion.ts`: durations `--dur-xs` 120ms, `--dur-sm` 200ms, `--dur-md` 320ms, `--dur-lg` 420ms; easings `--ease-out` (settle), `--ease-in-out` (pulse), `--ease-spring` (chip pop); `--stagger` 45ms. Nothing on the task path exceeds 420ms and only transform and opacity animate. Choreography: workspace pages rise in (`page-in`); list rows set `--i` and rise in turn (`.stagger-in`, delay capped at eight rows); an arriving answer fades its status, settles sentences one by one, pops citation chips, then stacks the source cards in the same order; a pending question slides into the thread. Hovering or focusing a citation chip lights its source card and vice versa (`data-hot`); opening one pulses the card, scrolls it into view and reveals the passage a beat later. Every entrance is skipped under system reduced motion, the shared pause control and hidden pages, and the layout is identical without it.
+
+The landing page is the one place allowed to be showy (`site/Flash.tsx`, `site/flash.css`): a reading progress bar, wordmark letters and promise words rising on first load, a shimmering "answered with sources", floating citation chips, scroll parallax on the wordmark and chips, a pinned four-step walkthrough on wide screens, drifting question rows, a statement that lights word by word as it scrolls, pointer light and tilt on cards, a magnetic closing button, eased wheel scrolling and a branded scroll bar. Rules: the composer and every control never move, so the page is usable immediately; decoration pauses when the hero is off screen or the tab is hidden; nothing infinite runs inside a `.site-band` until it has been revealed; and with motion off every one of these is still, with the walkthrough shown as a plain list and the statement fully lit.
+
+## Glass preview (flag)
+
+"Liquid glass" accents are the default (`html[data-style="glass"]`, `ui/style-flag.ts`, `ui/glass.css`); `?style=classic` or the footer "Glass style" switch returns to the solid clay style, remembered in localStorage. Glass appears only over the bookshelf: the hero composer and institution picker (blur + saturate, a masked specular rim, a Chromium-only `feDisplacementMap` refraction on desktop), the header as the page scrolls (a CSS scroll-driven animation over the first 90px; an IntersectionObserver sentinel only where `animation-timeline` is unsupported), and the top edge and handle of the mobile citation sheet. Reading surfaces stay paper. `@supports` and `prefers-reduced-transparency` fall back to solid.
+
+## Splash and loader
+
+`index.html` inlines a splash (critical CSS + SVG, no JS dependency) that paints before the bundle: a droplet falls and becomes the "n." tile, the n draws, the coral dot pops, then the overlay lifts once the app has mounted and at least 700ms have passed, or at 1.6s regardless. It never takes pointer events or focus and exists only on a cold document load. Reduced motion or a paused-motion preference (read synchronously from storage) shows a still tile with a quick fade. `ui/Loader.tsx` loops the same mark at 28–36px for every page-level loading state next to its announced text; skeletons keep the layout.
 
 ## Do's and Don'ts
 
-Do preserve drafts and give accurate failure recovery. Do not fabricate sources, metrics, affiliation, authentication, or policy answers.
+Do preserve drafts and give accurate failure recovery. Do not fabricate sources, metrics, affiliation, authentication, or policy answers. Do not add glossy, metallic or neon effects; clay stays matte.

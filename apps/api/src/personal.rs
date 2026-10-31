@@ -98,8 +98,9 @@ pub async fn feedback_context(
     let mut tx = s.pool()?.begin().await?;
     let row = sqlx::query("SELECT to_jsonb(f)-'user_id' AS feedback,a.id,a.question,c.user_id FROM product.feedback f JOIN product.answers a ON a.institution_id=f.institution_id AND a.id=f.answer_id JOIN product.conversations c ON c.institution_id=a.institution_id AND c.id=a.conversation_id JOIN product.memberships m ON m.institution_id=f.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE f.institution_id=$1 AND f.id=$2 FOR SHARE OF f,a,c,m")
         .bind(i).bind(report).bind(&u.user_id).fetch_optional(&mut *tx).await?.ok_or(Error("not_found"))?;
-    let answer = crate::answers::assemble(
-        &s,
+    // Assemble on the locked transaction: a second pool connection per request can deadlock the pool.
+    let answer = crate::answers::assemble_in(
+        &mut tx,
         i,
         row.try_get("id")?,
         &row.try_get::<String, _>("user_id")?,

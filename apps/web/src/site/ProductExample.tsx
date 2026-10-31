@@ -1,32 +1,30 @@
 import { createSignal, For, Show } from 'solid-js';
-import { ArrowUpRight, BookOpen, Check, FileText } from 'lucide-solid';
+import { ArrowRight, BookOpen, Check, ChevronRight, FileText } from 'lucide-solid';
 
 const examples = [
   {
-    question: 'Where is the practice handbook?',
+    question: 'How do I request an official transcript?',
     answer:
-      'In this example, open the Sample Library and choose “Practice handbook”. The document index identifies the current example version.',
-    title: 'Sample Library guide',
-    locator: 'Section 1 · Finding a document',
-    version: 'Example version A',
+      'Request it from the Student Services portal under “Records”, then collect the stamped copy from the Registry desk.',
+    title: 'Student Services Handbook',
+    locator: 'Section 4.2 · Transcripts',
+    version: '2026–27 edition',
     passage:
-      'The Sample Library lists the Practice handbook in its document index. Select “Practice handbook” to open it. The index marks the current example version beside the title.',
-    limit: 'This passage gives a location. It does not establish any university rule.',
+      'Official transcripts are requested through the Student Services portal under “Records”. Stamped copies are collected in person from the Registry desk.',
   },
   {
-    question: 'Which version of the sample form should I use?',
+    question: 'Which course change form should I use?',
     answer:
-      'Use version B of the Practice request form in this fictional collection. Version A is archived and is kept only for reference.',
-    title: 'Practice request form — version note',
-    locator: 'Section 2 · Version history',
-    version: 'Example version B',
+      'Use form CC-2. It replaced CC-1, which is kept in the archive for reference and is no longer accepted.',
+    title: 'Academic Forms Index',
+    locator: 'Page 3 · Course changes',
+    version: 'Revised edition',
     passage:
-      'Practice request form, version B, replaces version A in this sample collection. Version A is archived for reference and should not be used for a new practice request.',
-    limit: 'No real form, submission deadline or eligibility requirement is represented here.',
+      'Form CC-2 replaces CC-1 for all course changes. CC-1 remains in the archive for reference and is no longer accepted.',
   },
 ] as const;
 
-// intent: an inspectable, synthetic example with no live request or institution data; status: implemented.
+// intent: an inspectable example of a fictional university; no live request or institution data.
 export default function ProductExample() {
   const [selected, setSelected] = createSignal(0);
   const [sourceOpen, setSourceOpen] = createSignal(false);
@@ -36,9 +34,9 @@ export default function ProductExample() {
     <div class="site-example" data-testid="product-example">
       <div class="site-example-label">
         <span>
-          <BookOpen size={17} /> Illustrative example
+          <BookOpen size={17} /> Example
         </span>
-        <span>Synthetic collection · not university guidance</span>
+        <span>Example University</span>
       </div>
       <div class="site-example-questions" role="group" aria-label="Example questions">
         <For each={examples}>
@@ -51,7 +49,7 @@ export default function ProductExample() {
               }}
             >
               {item.question}
-              <ArrowUpRight size={16} />
+              <ArrowRight size={16} />
             </button>
           )}
         </For>
@@ -80,9 +78,8 @@ export default function ProductExample() {
                   <span>
                     View example source<small>{item.title}</small>
                   </span>
-                  <ArrowUpRight size={16} />
+                  <ChevronRight size={16} />
                 </button>
-                <p class="site-fine">{item.limit}</p>
               </div>
             )}
           </Show>
@@ -102,14 +99,13 @@ export default function ProductExample() {
               <div class="site-source-prompt">
                 <FileText size={28} />
                 <h3>Read the evidence.</h3>
-                <p>Select “View example source” to inspect the exact passage behind this answer.</p>
-                <span class="site-fine">No live answer request is made.</span>
+                <p>Open the source to see the exact passage behind this answer.</p>
               </div>
             }
           >
             <div class="site-fade">
               <span class="site-label">
-                <Check size={15} /> Synthetic source passage
+                <Check size={15} /> Source passage
               </span>
               <h3>{example().title}</h3>
               <p class="site-source-locator">
@@ -118,7 +114,6 @@ export default function ProductExample() {
                 {example().locator}
               </p>
               <blockquote>{example().passage}</blockquote>
-              <p class="site-fine">Written only for this illustration. Not an HCMIU document.</p>
             </div>
           </Show>
         </div>

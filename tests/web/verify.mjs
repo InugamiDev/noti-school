@@ -1,7 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
-const root = new URL('../../', import.meta.url).pathname;
-const artifacts = new URL('./artifacts/', import.meta.url).pathname;
+const root = fileURLToPath(new URL('../../',import.meta.url));
+const artifacts = fileURLToPath(new URL('./artifacts/',import.meta.url));
 await mkdir(artifacts, { recursive: true });
 const env = { ...process.env, PATH: '/home/inu/.npm-global/bin:/home/inu/.nvm/versions/node/v24.18.0/bin:' + process.env.PATH };
 const commands = [

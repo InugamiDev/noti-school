@@ -1,26 +1,27 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-const artifacts=new URL('./artifacts/',import.meta.url).pathname;
+const artifacts=fileURLToPath(new URL('./artifacts/',import.meta.url));
 const id='11111111-1111-4111-8111-111111111111';
 const error={error:{code:'provider_unavailable',message:'Synthetic unavailable fixture',request_id:id,retryable:false,capability:'answers'}};
 const capability={state:'disabled',reason:'not_configured'};
-async function fixture(page:Page){await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;if(path.endsWith('/capabilities'))return route.fulfill({json:{mode:'disabled',answers:capability,indexing:capability,discovery:capability,google:capability,email:capability,identity:capability}});if(path.endsWith('/institutions'))return route.fulfill({json:{items:[{id,slug:'demo',name:'Demo university · synthetic test',coverage:'synthetic_demo'}],next_cursor:null}});return route.fulfill({status:503,json:error});});}
+async function fixture(page:Page){await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;if(path.endsWith('/capabilities'))return route.fulfill({json:{mode:'disabled',answers:{state:'available',reason:'ready'},indexing:capability,discovery:capability,google:capability,email:capability,identity:capability}});if(path.endsWith('/institutions'))return route.fulfill({json:{items:[{id,slug:'demo',name:'Demo university · synthetic test',coverage:'synthetic_demo'}],next_cursor:null}});return route.fulfill({status:503,json:error});});}
 async function canvasShot(page:Page,name:string){const canvas=page.locator('canvas');await expect(canvas).toBeVisible();const hide=await page.addStyleTag({content:'.hero-content,.motion-control,.archive-shade{visibility:hidden!important}'});const bytes=await canvas.screenshot({path:`${artifacts}${name}.png`,animations:'allow'});await hide.evaluate(el=>el.remove());return createHash('sha256').update(bytes).digest('hex');}
 test.beforeAll(async()=>{await mkdir(artifacts,{recursive:true});});
 for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:1920,height:1080},{name:'mobile',width:390,height:844}])test(`render ${size.name}: scene, responsive prompt, keyboard, failure`,async({page})=>{
  await page.setViewportSize(size);await fixture(page);await page.goto('/');await expect(page.getByRole('heading',{name:'noti.school',exact:true})).toBeVisible();await page.waitForTimeout(2200);
  await page.screenshot({path:`${artifacts}${size.name}.png`,fullPage:true});await page.screenshot({path:`${artifacts}${size.name}-viewport.png`});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- const prompt=page.getByLabel('Your question');await prompt.fill('Tôi có thể tìm quy chế học vụ và các biểu mẫu chính thức ở đâu? '.repeat(3));
+ const prompt=page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ });await prompt.fill('Tôi có thể tìm quy chế học vụ và các biểu mẫu chính thức ở đâu? '.repeat(3));
  expect(await prompt.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;})).toBe(true);
  await page.keyboard.press('Tab');await expect(page.getByLabel('Answer language')).toBeFocused();
- await page.getByRole('button',{name:'Ask',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Answers are temporarily unavailable');
+ await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();await expect(page.getByRole('alert')).toContainText('Answers are temporarily unavailable');
  await expect(prompt).toHaveValue(/Tôi có thể/);await page.getByRole('link',{name:'Sign in',exact:true}).first().click();await expect(page.getByRole('heading',{name:'Welcome to noti.school'})).toBeVisible();
  await expect(page.locator('form').getByRole('button',{name:'Sign in',exact:true})).toBeDisabled();await expect(page.getByText('Sign-in availability is not confirmed.',{exact:false})).toBeVisible();
  await page.getByRole('link',{name:'Sources',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unavailable');
- await page.goto('/#/');await expect(page.getByLabel('Your question')).toHaveValue(/Tôi có thể/);
+ await page.goto('/#/');await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue(/Tôi có thể/);
 });
 test('available identity still reports a failed sign-in request without claiming success',async({page})=>{
  await fixture(page);await page.route('**/api/v1/capabilities',route=>route.fulfill({json:{mode:'disabled',answers:capability,indexing:capability,discovery:capability,google:capability,email:capability,identity:{state:'available',reason:'ready'}}}));
@@ -37,11 +38,11 @@ for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:192
 });
 test('WebGL failure retains bitmap and usable composer',async({page})=>{
  await page.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type:string,...args:unknown[]){if(type==='webgl2'||type==='webgl')return null;return original.apply(this,[type,...args] as never); } as typeof original;});
- await fixture(page);await page.goto('/');await expect(page.locator('.archive')).toHaveClass(/fallback/);await expect(page.getByLabel('Your question')).toBeVisible();await expect(page.locator('.archive img')).toBeVisible();await page.screenshot({path:`${artifacts}webgl-fallback.png`});
+ await fixture(page);await page.goto('/');await expect(page.locator('.archive')).toHaveClass(/fallback/);await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toBeVisible();await expect(page.locator('.archive img')).toBeVisible();await page.screenshot({path:`${artifacts}webgl-fallback.png`});
 });
 test('immediate submit, one request, cancellation and context-loss fallback',async({page})=>{
  await fixture(page);let calls=0;let headers:Record<string,string>={};await page.route('**/api/v1/answers',async route=>{calls++;headers=route.request().headers();await new Promise(resolve=>setTimeout(resolve,1200));await route.fulfill({status:503,json:error}).catch(()=>{});});
- await page.goto('/');await expect(page.locator('canvas')).toBeVisible();await page.getByLabel('Your question').fill('Synthetic test question');const start=Date.now();await page.getByRole('button',{name:'Ask',exact:true}).click();await expect.poll(()=>calls).toBe(1);expect(Date.now()-start).toBeLessThan(1000);expect(headers['x-noti-csrf']).toBe('1');expect(headers['idempotency-key']).toMatch(/^[a-f0-9-]{36}$/);await page.getByRole('button',{name:'Stop waiting',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Processing may continue');expect(calls).toBe(1);
+ await page.goto('/');await expect(page.locator('canvas')).toBeVisible();await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('Synthetic test question');const start=Date.now();await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();await expect.poll(()=>calls).toBe(1);expect(Date.now()-start).toBeLessThan(1000);expect(headers['x-noti-csrf']).toBe('1');expect(headers['idempotency-key']).toMatch(/^[a-f0-9-]{36}$/);await page.getByRole('button', { name: /^(Stop waiting|Dừng chờ)$/ }).click();await expect(page.getByRole('alert')).toContainText('Processing may continue');expect(calls).toBe(1);
  await page.goto('/#/');await expect(page.locator('canvas')).toBeVisible();await page.locator('canvas').evaluate(el=>el.dispatchEvent(new Event('webglcontextlost',{cancelable:true})));await expect(page.locator('.archive')).toHaveClass(/fallback/);
 });
 test('offscreen, hidden and disposed scene stops actual WebGL draws',async({page})=>{
@@ -117,9 +118,9 @@ test('entry dolly and submit zoom dispatch immediately without replaying history
  const entry=await page.evaluate(()=>(window as Window&{cameraDepths:number[]}).cameraDepths);
  expect(entry.length).toBeGreaterThan(2);
  expect(entry.at(-1)!-entry[0]!).toBeGreaterThan(0.2);
- await page.getByLabel('Your question').fill('Synthetic zoom question');
+ await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('Synthetic zoom question');
  await page.evaluate(()=>{(window as Window&{cameraDepths:number[]}).cameraDepths=[];});
- await page.getByRole('button',{name:'Ask',exact:true}).click();await page.waitForTimeout(700);
+ await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();await page.waitForTimeout(700);
  const result=await page.evaluate(()=>{const target=window as Window&{cameraDepths:number[];submitTime:number;requestTime:number;requestCount:number};return {depths:target.cameraDepths,dispatchDelayMs:target.requestTime-target.submitTime,requestCount:target.requestCount};});
  expect(result.dispatchDelayMs).toBeGreaterThanOrEqual(0);expect(result.dispatchDelayMs).toBeLessThan(100);
  expect(result.requestCount).toBe(1);
@@ -135,12 +136,34 @@ test('entry dolly and submit zoom dispatch immediately without replaying history
  expect(returned.depths[0]).toBeLessThan(-13);
  expect(returned.depths.at(-1)!-returned.depths[0]!).toBeGreaterThan(0.2);
  expect(Math.max(...returned.depths)).toBeLessThan(-11.8);
- await page.getByLabel('Your question').fill('Synthetic subsequent zoom question');
+ await page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ }).fill('Synthetic subsequent zoom question');
  await page.evaluate(()=>{(window as Window&{cameraDepths:number[]}).cameraDepths=[];});
- await page.getByRole('button',{name:'Ask',exact:true}).click();await page.waitForTimeout(700);
+ await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();await page.waitForTimeout(700);
  const subsequent=await page.evaluate(()=>{const target=window as Window&{cameraDepths:number[];submitTime:number;requestTime:number;requestCount:number};return {depths:target.cameraDepths,dispatchDelayMs:target.requestTime-target.submitTime,requestCount:target.requestCount};});
  expect(subsequent.requestCount).toBe(2);
  expect(subsequent.dispatchDelayMs).toBeGreaterThanOrEqual(0);expect(subsequent.dispatchDelayMs).toBeLessThan(100);
  expect(Math.max(...subsequent.depths)-returned.depths.at(-1)!).toBeGreaterThan(0.4);
  await writeFile(`${artifacts}camera-request-evidence.json`,JSON.stringify({entryStart:entry[0],entryEnd:entry.at(-1),...result,returned,subsequent},null,2));
+});
+
+test('context loss releases scene GPU resources when the fallback starts',async({page})=>{
+ await page.addInitScript(()=>{
+  const buffers=new Set<WebGLBuffer>(),programs=new Set<WebGLProgram>();
+  const proto=WebGL2RenderingContext.prototype;
+  const createBuffer=proto.createBuffer,deleteBuffer=proto.deleteBuffer,createProgram=proto.createProgram,deleteProgram=proto.deleteProgram;
+  proto.createBuffer=function(){const value=createBuffer.call(this);if(value)buffers.add(value);return value;};
+  proto.deleteBuffer=function(value){if(value)buffers.delete(value);deleteBuffer.call(this,value);};
+  proto.createProgram=function(){const value=createProgram.call(this);if(value)programs.add(value);return value;};
+  proto.deleteProgram=function(value){if(value)programs.delete(value);deleteProgram.call(this,value);};
+  Object.defineProperty(window,'archiveResources',{get:()=>({buffers:buffers.size,programs:programs.size})});
+ });
+ await fixture(page);await page.goto('/');
+ const resources=()=>page.evaluate(()=>(window as Window&{archiveResources:{buffers:number;programs:number}}).archiveResources);
+ await expect(page.locator('canvas')).toBeVisible();await expect.poll(async()=>(await resources()).buffers).toBeGreaterThan(0);
+ await page.locator('canvas').evaluate(el=>el.dispatchEvent(new Event('webglcontextlost',{cancelable:true})));
+ await expect(page.locator('.archive')).toHaveClass(/fallback/);
+ await expect(page.locator('canvas')).toHaveCount(0);
+ await expect.poll(resources).toEqual({buffers:0,programs:0});
+ // Unmount after loss must not fail or double-release.
+ await page.getByRole('link',{name:'For institutions'}).click();await expect(page.locator('.archive')).toHaveCount(0);
 });

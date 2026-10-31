@@ -630,6 +630,7 @@ async fn runtime_sql_and_complete_pipeline() {
         mode.store(m, Ordering::SeqCst);
         s.providers.expire_cooldown();
         let before = hits.load(Ordering::SeqCst);
+        let failed_key = Uuid::new_v4();
         assert_eq!(
             call(
                 &s,
@@ -637,7 +638,7 @@ async fn runtime_sql_and_complete_pipeline() {
                 "/api/v1/answers",
                 &student,
                 ask.clone(),
-                Some(Uuid::new_v4())
+                Some(failed_key)
             )
             .await
             .0,
@@ -647,6 +648,14 @@ async fn runtime_sql_and_complete_pipeline() {
             hits.load(Ordering::SeqCst) - before,
             calls,
             "malformed embeddings or invented IDs must stop the pipeline"
+        );
+        // Both replies carry validated usage: settled and fenced, never left 'dispatched'.
+        let unsettled: i64 = sqlx::query_scalar("SELECT count(*) FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND r.state<>'settled'").bind(failed_key).fetch_one(&pool).await.unwrap();
+        assert_eq!(unsettled, 0, "mode {m}");
+        // Citing unsent evidence is request-specific; a malformed embedding is a provider fault.
+        assert_eq!(
+            s.providers.admit(s.config.evidence_provider).is_ok(),
+            m == 5
         );
     }
     mode.store(3, Ordering::SeqCst);
@@ -671,19 +680,24 @@ async fn runtime_sql_and_complete_pipeline() {
         3,
         "Jev outage must stop before generation"
     );
+    let outage_state: String = sqlx::query_scalar("SELECT r.state FROM product.ai_reservations r JOIN product.pipeline_stages p ON p.id=r.operation_id JOIN product.idempotency_keys k ON k.operation_id=p.root_operation_id WHERE k.key=$1 AND p.stage='selection'").bind(error_key).fetch_one(&pool).await.unwrap();
     assert_eq!(
-        call(
-            &s,
-            "POST",
-            "/api/v1/answers",
-            &student,
-            ask.clone(),
-            Some(error_key)
-        )
-        .await
-        .0,
-        409
+        outage_state, "uncertain",
+        "a non-2xx reply keeps an uncertain hold"
     );
+    let replay_hits = hits.load(Ordering::SeqCst);
+    let (replay_status, replay) = call(
+        &s,
+        "POST",
+        "/api/v1/answers",
+        &student,
+        ask.clone(),
+        Some(error_key),
+    )
+    .await;
+    assert_eq!(replay_status, 503);
+    assert_eq!(replay["error"]["code"], "provider_unavailable");
+    assert_eq!(hits.load(Ordering::SeqCst), replay_hits);
     mode.store(0, Ordering::SeqCst);
     let answer_id = id(&answer, "id");
     let (_, failed_caps) = call(&s, "GET", "/api/v1/capabilities", &student, json!({}), None).await;
@@ -1274,6 +1288,7 @@ async fn runtime_sql_and_complete_pipeline() {
         .await
         .is_err()
     );
+    repairs::reconciliation(&pool, root).await;
     mode.store(0, Ordering::SeqCst);
     // Invitation redemption uses actual non-owner SQL and a single-use token under contention.
     use hmac::{Hmac, Mac};
@@ -1486,4 +1501,240 @@ async fn runtime_sql_and_complete_pipeline() {
     println!(
         "PASS runtime-role SQL, bilingual indexing, complete ask, claim support/conflict, idempotency contention, stage cancellation, graph provenance, visibility/history, invitation contention, account cleanup and retention; mocked providers only"
     );
+}
+// Audit hardening (A-08/A-11/A-12/A-14 and the 0005 trigger): runtime-role SQL only; no identity
+// service, provider or network access. Requires migrations through 0005 on the disposable DB.
+#[tokio::test]
+#[ignore = "requires the dedicated migrated api2 DB including 0005_audit_hardening"]
+async fn audit_hardening_runtime_sql() {
+    use hmac::{Hmac, Mac};
+    use sha2::{Digest, Sha256};
+    let pool = sqlx::PgPool::connect(DB).await.unwrap();
+    for table in [
+        "chunks",
+        "source_versions",
+        "citations",
+        "answers",
+        "graph_edges",
+    ] {
+        assert!(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "DELETE FROM product.{table} WHERE false"
+            )))
+            .execute(&pool)
+            .await
+            .is_err(),
+            "{table}"
+        );
+    }
+    for table in [
+        "conversations",
+        "feedback",
+        "memberships",
+        "invitations",
+        "idempotency_keys",
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM product.{table} WHERE false"
+        )))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let upload_dir = format!(
+        "{}/../../.cache/audit-hardening/uploads-{}",
+        env!("CARGO_MANIFEST_DIR"),
+        Uuid::new_v4()
+    );
+    let vars = HashMap::from([
+        ("DATABASE_URL".into(), DB.into()),
+        ("INTERNAL_AUTH_SECRET".into(), SECRET.into()),
+        ("UPLOAD_DIR".into(), upload_dir.clone()),
+    ]);
+    let s = AppState::new(Config::parse(&vars).unwrap()).unwrap();
+    let i = Uuid::new_v4();
+    let admin = format!("synthetic-audit-admin-{}", Uuid::new_v4());
+    sqlx::query("INSERT INTO product.institutions(id,slug,name) VALUES($1,$2,'Synthetic institution; not a real policy corpus')").bind(i).bind(format!("synthetic-{i}")).execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO product.memberships(institution_id,user_id,role) VALUES($1,$2,'admin')",
+    )
+    .bind(i)
+    .bind(&admin)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let source = Uuid::new_v4();
+    sqlx::query("INSERT INTO product.sources(id,institution_id,title,kind,visibility) VALUES($1,$2,'Synthetic audit text','text','institution')").bind(source).bind(i).execute(&pool).await.unwrap();
+    let ingest = |key: Uuid, text: &'static str| {
+        let s = s.clone();
+        let admin = admin.clone();
+        async move {
+            let metadata = serde_json::from_value(json!({"label":"Synthetic audit","language":"en","effective_from":null,"effective_until":null})).unwrap();
+            crate::ingestion::ingest(
+                &s,
+                i,
+                source,
+                &admin,
+                key,
+                metadata,
+                "text/plain",
+                text.as_bytes(),
+                false,
+            )
+            .await
+            .map(|(_, Json(job))| job)
+            .map_err(|e| e.0)
+        }
+    };
+    // A-12: an expired key still rooting an unfinished job stays fenced; once that job is terminal
+    // the key may be reused instead of conflicting forever.
+    let key = Uuid::new_v4();
+    let first = ingest(key, "Synthetic expired key fixture one")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE product.idempotency_keys SET expires_at=now()-interval '1 day' WHERE operation_id=$1").bind(id(&first, "id")).execute(&pool).await.unwrap();
+    assert_eq!(
+        ingest(key, "Synthetic expired key fixture two")
+            .await
+            .unwrap_err(),
+        "conflict"
+    );
+    sqlx::query("UPDATE product.ingestion_jobs SET state='succeeded' WHERE id=$1")
+        .bind(id(&first, "id"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let reused = ingest(key, "Synthetic expired key fixture two")
+        .await
+        .unwrap();
+    assert_ne!(reused["id"], first["id"]);
+    assert_eq!(
+        ingest(key, "Synthetic expired key fixture two")
+            .await
+            .unwrap(),
+        reused
+    );
+    // The worker sweep removes the same class of expired keys in bounded batches.
+    sqlx::query("UPDATE product.idempotency_keys SET expires_at=now()-interval '1 day' WHERE operation_id=$1").bind(id(&reused, "id")).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE product.ingestion_jobs SET state='succeeded' WHERE id=$1")
+        .bind(id(&reused, "id"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    while crate::worker::reclaim_keys(&pool).await.unwrap() > 0 {}
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM product.idempotency_keys WHERE operation_id=$1"
+        )
+        .bind(id(&reused, "id"))
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    let invite = |role: &'static str, email: &'static str| {
+        let pool = pool.clone();
+        let admin = admin.clone();
+        async move {
+            let token = Uuid::new_v4().to_string();
+            let mut mac = Hmac::<Sha256>::new_from_slice(SECRET.as_bytes()).unwrap();
+            mac.update(email.as_bytes());
+            sqlx::query("INSERT INTO product.invitations(id,institution_id,token_hash,email_hash,role,expires_at,created_by) VALUES($1,$2,$3,$4,$5,now()+interval '1 hour',$6)")
+                .bind(Uuid::new_v4()).bind(i).bind(format!("{:x}",Sha256::digest(token.as_bytes()))).bind(format!("{:x}",mac.finalize().into_bytes())).bind(role).bind(&admin).execute(&pool).await.unwrap();
+            token
+        }
+    };
+    let redeem = |token: String, email: &'static str, user: String| {
+        let s = s.clone();
+        async move {
+            let body = json!({"token":token,"email":email,"user_id":user,"email_verified":true});
+            call(&s, "POST", "/internal/invitations/redeem", "", body, None).await
+        }
+    };
+    let role = |user: String| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query("SELECT role,revoked_at IS NOT NULL AS revoked FROM product.memberships WHERE institution_id=$1 AND user_id=$2").bind(i).bind(user).fetch_optional(&pool).await.unwrap().map(|r| (r.get::<String, _>("role"), r.get::<bool, _>("revoked")))
+        }
+    };
+    // A-08: an invitation never demotes an active admin and never restores a revoked membership.
+    let token = invite("student", "synthetic-audit-admin@example.invalid").await;
+    let (status, body) = redeem(
+        token,
+        "synthetic-audit-admin@example.invalid",
+        admin.clone(),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["role"], "admin");
+    assert_eq!(role(admin.clone()).await, Some(("admin".into(), false)));
+    let member = format!("synthetic-audit-member-{}", Uuid::new_v4());
+    let email = "synthetic-audit-member@example.invalid";
+    let token = invite("student", email).await;
+    assert_eq!(redeem(token, email, member.clone()).await.0, 200);
+    let pending = invite("admin", email).await;
+    let pending_hash = format!("{:x}", Sha256::digest(pending.as_bytes()));
+    sqlx::query(
+        "UPDATE product.memberships SET revoked_at=now() WHERE institution_id=$1 AND user_id=$2",
+    )
+    .bind(i)
+    .bind(&member)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // The 0005 trigger expired the outstanding invitation to the revoked member's address.
+    let live: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM product.invitations WHERE token_hash=$1 AND expires_at>now()",
+    )
+    .bind(&pending_hash)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(live, 0);
+    sqlx::query(
+        "UPDATE product.invitations SET expires_at=now()+interval '1 hour' WHERE token_hash=$1",
+    )
+    .bind(&pending_hash)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(redeem(pending, email, member.clone()).await.0, 403);
+    assert_eq!(role(member).await, Some(("student".into(), true)));
+    // A-11: a deleted identity cannot be granted membership by a late or replayed redemption.
+    let deleted = format!("synthetic-audit-deleted-{}", Uuid::new_v4());
+    let token = invite("student", "synthetic-audit-deleted@example.invalid").await;
+    let body = json!({"user_id":deleted});
+    assert_eq!(
+        call(
+            &s,
+            "POST",
+            "/internal/accounts/delete",
+            "",
+            body.clone(),
+            None
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        call(&s, "POST", "/internal/accounts/delete", "", body, None)
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        redeem(
+            token,
+            "synthetic-audit-deleted@example.invalid",
+            deleted.clone()
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(role(deleted).await, None);
+    s.pool().unwrap().close().await;
+    pool.close().await;
+    let _ = tokio::fs::remove_dir_all(upload_dir).await;
 }

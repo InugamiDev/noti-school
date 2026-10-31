@@ -18,7 +18,9 @@ pub fn public_ip(ip: IpAddr) -> bool {
                 || o[0] >= 224
                 || (o[0] == 100 && (64..=127).contains(&o[1]))
                 || (o[0] == 198 && (o[1] == 18 || o[1] == 19))
-                || (o[0] == 192 && o[1] == 0))
+                || (o[0] == 192 && o[1] == 0)
+                // Deprecated 6to4 relay anycast (RFC 7526) is not globally reachable.
+                || (o[0] == 192 && o[1] == 88 && o[2] == 99))
         }
         IpAddr::V6(v) => {
             let o = v.segments();

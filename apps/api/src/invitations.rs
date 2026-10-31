@@ -73,14 +73,19 @@ pub async fn redeem(
         s.config.secret.as_deref().unwrap_or_default(),
     )?;
     let mut tx = s.pool()?.begin().await?;
+    // Serializes with account deletion of the same identity; a deleted identity never regains access.
+    if crate::accounts::lock_identity(&mut tx, &body.user_id).await? {
+        return Err(Error("forbidden"));
+    }
     let row=sqlx::query("SELECT i.id,i.institution_id,i.role FROM product.invitations i JOIN product.memberships m ON m.institution_id=i.institution_id AND m.user_id=i.created_by AND m.role='admin' AND m.revoked_at IS NULL WHERE i.token_hash=$1 AND i.email_hash=$2 AND i.expires_at>now() AND i.redeemed_at IS NULL FOR UPDATE OF i FOR SHARE OF m")
         .bind(token).bind(email).fetch_optional(&mut *tx).await?.ok_or(Error("forbidden"))?;
     let id: uuid::Uuid = row.try_get("id")?;
     let institution: uuid::Uuid = row.try_get("institution_id")?;
     let role: String = row.try_get("role")?;
     // intent: role originates only from the locked invitation; replay cannot grant membership twice.
-    sqlx::query("INSERT INTO product.memberships(institution_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(institution_id,user_id) DO UPDATE SET role=EXCLUDED.role,revoked_at=NULL")
-        .bind(institution).bind(&body.user_id).bind(&role).execute(&mut *tx).await?;
+    // A revoked membership is never restored and an existing admin is never demoted by an invitation.
+    let role: String = sqlx::query_scalar("INSERT INTO product.memberships(institution_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(institution_id,user_id) DO UPDATE SET role=CASE WHEN memberships.role='admin' THEN 'admin' ELSE EXCLUDED.role END WHERE memberships.revoked_at IS NULL RETURNING role")
+        .bind(institution).bind(&body.user_id).bind(&role).fetch_optional(&mut *tx).await?.ok_or(Error("forbidden"))?;
     sqlx::query("UPDATE product.invitations SET redeemed_at=now(),redeemed_by=$1 WHERE id=$2 AND institution_id=$3 AND redeemed_at IS NULL")
         .bind(&body.user_id).bind(id).bind(institution).execute(&mut *tx).await?;
     tx.commit().await?;

@@ -23,7 +23,7 @@ Source/citation reads, version files, upload, actions, feedback and budget depen
 
 ## Scene and asset
 
-The direct Three scene is dynamically imported, with repeated geometry batched into six instanced meshes. DPR is capped at 1.5, archive dimensions and geometry counts are fixed, and the request starts independently of submit motion. Entry camera motion and submit zoom are separate; returning home does not replay the previous submission. System reduced-motion applies before the first rendered frame. Pause, visibility, intersection and unmount stop animation; context loss reveals the approved fallback. Geometry/materials/renderer/listeners/observers are disposed.
+The direct Three scene is dynamically imported, with repeated geometry batched into six instanced meshes. DPR is capped at 1.5, archive dimensions and geometry counts are fixed, and the request starts independently of submit motion. Entry camera motion and submit zoom are separate; returning home does not replay the previous submission. System reduced-motion applies before the first rendered frame. Pause, visibility, intersection and unmount stop animation; context loss reveals the approved fallback. Geometry/materials/renderer/listeners/observers are disposed on context loss or unmount, whichever comes first.
 
 The fallback was inspected before optimization. Reproducible Sharp conversion and source/output hashes are recorded in `public/archive.provenance.json`. It is illustrative and is not source evidence.
 
