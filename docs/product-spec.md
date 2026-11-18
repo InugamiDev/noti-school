@@ -20,7 +20,9 @@ Make institutional information accessible through an answer-first interface whil
 - PDF/text ingestion, extraction diagnostics, page-preserving chunks, source-version checksums and document lifecycle states.
 - Hybrid lexical/vector retrieval scoped by institution, visibility, approval and validity; bounded graph expansion; OpenAI reranking; selected-provider evidence and claim checks (OpenAI by default, Jev opt-in); OpenAI answer generation.
 - Source-grounded citations, abstention and conflict handling. Separate evidence support from syntactically valid links.
-- Optional on-demand official-domain web discovery using OpenAI. Search results are not automatically approved corpus evidence. They remain separately labeled until fetched, validated and reviewed.
+- Web discovery through TinyFish Search and Fetch (owner decision, 18 November 2026, supersedes the earlier OpenAI official-domain-only rule). Any public page may become answer evidence, but only after it is fetched, chunked, embedded and scored by Jev for four things: is it about the asked-about school, is the source trustworthy (the school's own domains score highest), is the passage relevant, and does it actually answer the question. Every web-derived claim and citation shows its origin (`web`), domain, fetch time and confidence; it is never presented as institution-approved. An administrator can promote a cached page to an approved source or block it. Cached pages and searches are reused for 7 days and re-fetched on the next use after that.
+- Evidence ontology: entities and relations extracted from approved and web passages, each relation tied to its source passage and carrying a Jev confidence. Relations are retrieval hints, never independent evidence.
+- Personal space: each signed-in user can open a private space with the same search, scoring and citation pipeline for questions beyond one school.
 - Persistent conversations and feedback with access controls; user deletion and clear retention defaults.
 - Local observability, a cost ledger, unit/integration/end-to-end tests and bilingual evaluation fixtures.
 

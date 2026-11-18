@@ -7,14 +7,20 @@ const text = z.string().min(1);
 const httpsUrl = z.url({ protocol: /^https$/ });
 const object = z.strictObject;
 export const Language = z.enum(['en', 'vi']);
+// intent: contract freeze for campaign noti-jev-web (2026-11-18). Owner decision: any web page may be
+// evidence when Jev scores it; every web-derived item carries origin, domain, fetch time and confidence.
+// status: done (frozen by coordinator) | next: backend + web workers implement | confidence: high
+const probability = z.number().min(0).max(1);
+export const Confidence = object({ overall: probability, school: probability, source: probability, relevance: probability, answers: probability, model: text.max(100) });
+export const EvidenceOrigin = z.enum(['approved', 'web']);
 export const ErrorCode = z.enum(['invalid_request', 'unauthenticated', 'forbidden', 'not_found', 'conflict', 'payload_too_large', 'unsupported_media', 'rate_limited', 'provider_unavailable', 'budget_exhausted', 'pricing_unavailable', 'core_unavailable', 'internal_error']);
 export const ApiError = object({ error: object({ code: ErrorCode, message: text, request_id: id, retryable: z.boolean(), capability: z.enum(['answers', 'indexing', 'discovery', 'google', 'email', 'identity']).optional() }) });
-export const Capability = object({ state: z.enum(['available', 'disabled', 'unavailable']), reason: z.enum(['ready', 'not_configured', 'paid_calls_disabled', 'pricing_missing', 'budget_exhausted', 'provider_failed', 'core_failed', 'no_approved_evidence']) });
+export const Capability = object({ state: z.enum(['available', 'disabled', 'unavailable']), reason: z.enum(['ready', 'not_configured', 'paid_calls_disabled', 'pricing_missing', 'budget_exhausted', 'provider_failed', 'core_failed', 'no_approved_evidence', 'quota_exhausted']) });
 export const Capabilities = object({ mode: z.enum(['disabled', 'mock', 'live']), answers: Capability, indexing: Capability, discovery: Capability, google: Capability, email: Capability, identity: Capability });
 export const IdentityCapabilities = object({ identity: Capability, google: Capability, email: Capability });
 export const AccountDelete = object({ user_id: text.max(256) });
 export const AccountDeleted = object({ deleted: z.literal(true) });
-export const Institution = object({ id, slug: text, name: text, coverage: z.enum(['none', 'synthetic_demo', 'approved_sources']) });
+export const Institution = object({ id, slug: text, name: text, kind: z.enum(['school', 'personal']), domains: z.array(text.max(253)).max(20), coverage: z.enum(['none', 'synthetic_demo', 'approved_sources', 'web_discovery']) });
 export const Membership = object({ institution_id: id, role: z.enum(['student', 'admin']) });
 export const Session = object({ user_id: text, session_id: text, email_verified: z.literal(true), expires_at: time });
 export const Me = object({ identity: Session, memberships: z.array(Membership) });
@@ -23,16 +29,16 @@ export const Locator = object({ page: z.number().int().positive().nullable(), se
 export const Source = object({ id, institution_id: id, title: text, kind: z.enum(['pdf', 'text', 'url']), original_url: httpsUrl.nullable(), visibility: z.enum(['institution', 'admin']), current_version_id: id.nullable(), created_at: time });
 export const Version = object({ id, source_id: id, institution_id: id, label: text, sha256: z.string().regex(/^[a-f0-9]{64}$/), status: z.enum(['draft', 'quarantined', 'pending_review', 'approved', 'archived', 'failed']), indexing: z.enum(['pending', 'running', 'ready', 'failed', 'disabled']), effective_from: time.nullable(), effective_until: time.nullable(), created_at: time });
 export const Chunk = object({ id, institution_id: id, source_id: id, version_id: id, ordinal: z.number().int().nonnegative(), text: text.max(16000), locator: Locator, language: Language });
-export const Evidence = object({ id, source_id: id, version_id: id, chunk_id: id, institution_id: id, title: text, version_label: text, locator: Locator, quote: text.max(4000), original_url: httpsUrl.nullable() });
-export const GraphEntity = object({ id, institution_id: id, kind: z.enum(['course', 'procedure', 'regulation', 'office', 'form', 'program']), label: text });
-export const GraphEdge = object({ id, institution_id: id, from_entity_id: id, to_entity_id: id, relation: text.max(100), status: z.enum(['candidate', 'approved', 'rejected']), evidence: z.array(Evidence).min(1).max(10) });
+export const Evidence = object({ id, source_id: id, version_id: id, chunk_id: id, institution_id: id, title: text, version_label: text, locator: Locator, quote: text.max(4000), original_url: httpsUrl.nullable(), origin: EvidenceOrigin, domain: z.string().max(253).nullable(), retrieved_at: time.nullable(), confidence: Confidence.nullable() });
+export const GraphEntity = object({ id, institution_id: id, kind: z.enum(['course', 'procedure', 'regulation', 'office', 'form', 'program', 'deadline', 'fee', 'topic']), label: text });
+export const GraphEdge = object({ id, institution_id: id, from_entity_id: id, to_entity_id: id, relation: text.max(100), status: z.enum(['candidate', 'approved', 'rejected']), confidence: probability.nullable(), evidence: z.array(Evidence).min(1).max(10) });
 export const QUESTION_MAX_CHARACTERS = 4000;
 export const QUESTION_MAX_BYTES = 16000;
 export const ANSWER_WAIT_MS = 155000;
 const questionText = text.max(QUESTION_MAX_CHARACTERS).regex(/^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*$/);
 export const AskRequest = object({ institution_id: id, question: questionText, language: Language, conversation_id: id.optional(), discover: z.boolean().default(false) });
-export const Claim = object({ text: text.max(8000), evidence_ids: z.array(id).min(1).max(20) });
-export const Answer = object({ id, conversation_id: id, institution_id: id, status: z.enum(['answered', 'qualified', 'abstained']), language: Language, claims: z.array(Claim).max(50), evidence: z.array(Evidence).max(50), explanation: z.string().max(4000).nullable(), created_at: time });
+export const Claim = object({ text: text.max(8000), evidence_ids: z.array(id).min(1).max(20), confidence: probability.nullable() });
+export const Answer = object({ id, conversation_id: id, institution_id: id, status: z.enum(['answered', 'qualified', 'abstained']), language: Language, claims: z.array(Claim).max(50), evidence: z.array(Evidence).max(50), explanation: z.string().max(4000).nullable(), confidence: probability.nullable(), created_at: time });
 export function validateAnswer(value: unknown) {
   const answer = Answer.parse(value);
   const evidenceIds = new Set(answer.evidence.map(e => e.id));
@@ -61,9 +67,14 @@ export const GraphEntityCreate = object({ kind: GraphEntity.shape.kind, label: t
 export const GraphEdgeCreate = object({ from_entity_id: id, to_entity_id: id, relation: text.max(100), evidence_chunk_id: id });
 export const GraphEdgeAction = object({ status: z.enum(['approved', 'rejected']) });
 export const Discovery = object({ title: text, url: httpsUrl, discovered_at: time });
+// Cached web page (TinyFish fetch). Stale after 7 days; the next use re-fetches it.
+export const WebDocument = object({ id, institution_id: id, url: httpsUrl, final_url: httpsUrl, domain: text.max(253), title: text.max(500), language: Language.nullable(), fetched_at: time, stale_after: time, sha256: z.string().regex(/^[a-f0-9]{64}$/), state: z.enum(['fresh', 'stale', 'failed']), source_id: id.nullable(), confidence: Confidence.nullable() });
+export const WebDocumentPage = page(WebDocument);
+export const WebDocumentAction = object({ action: z.enum(['promote', 'refresh', 'block']) });
+export const InstitutionDomains = object({ domains: z.array(text.max(253)).min(1).max(20) });
 export const DiscoveryPage = object({ items: z.array(Discovery), next_cursor: z.null() });
 export const ChunkPage = page(Chunk);
 export const FeedbackContext = object({ feedback: Feedback, question: z.string().max(4000), answer: Answer });
-export const Schemas = { ChunkPage, FeedbackContext, IdentityCapabilities, AccountDelete, AccountDeleted, Conversation, ConversationPage, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction, Discovery, DiscoveryPage, ApiError, Capabilities, Institution, Membership, Session, Me, PageQuery, Locator, Source, Version, Chunk, Evidence, GraphEntity, GraphEdge, AskRequest, Answer, FeedbackRequest, Feedback, SourceCreate, VersionCreate, VersionAction, Job, SearchRequest, Budget, Health, InvitationCheck, InvitationValid, InvitationRedeem, PublicInvitationRedeem, FeedbackAction, InstitutionPage: page(Institution), SourcePage: page(Source), VersionPage: page(Version), FeedbackPage: page(Feedback), EvidencePage: page(Evidence), AnswerPage: page(Answer), GraphEdgePage: page(GraphEdge) };
+export const Schemas = { Confidence, WebDocument, WebDocumentPage, WebDocumentAction, InstitutionDomains, ChunkPage, FeedbackContext, IdentityCapabilities, AccountDelete, AccountDeleted, Conversation, ConversationPage, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction, Discovery, DiscoveryPage, ApiError, Capabilities, Institution, Membership, Session, Me, PageQuery, Locator, Source, Version, Chunk, Evidence, GraphEntity, GraphEdge, AskRequest, Answer, FeedbackRequest, Feedback, SourceCreate, VersionCreate, VersionAction, Job, SearchRequest, Budget, Health, InvitationCheck, InvitationValid, InvitationRedeem, PublicInvitationRedeem, FeedbackAction, InstitutionPage: page(Institution), SourcePage: page(Source), VersionPage: page(Version), FeedbackPage: page(Feedback), EvidencePage: page(Evidence), AnswerPage: page(Answer), GraphEdgePage: page(GraphEdge) };
 export type AskInput = z.infer<typeof AskRequest>;
 export type AnswerOutput = z.infer<typeof Answer>;

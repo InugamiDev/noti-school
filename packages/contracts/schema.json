@@ -2,6 +2,406 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://noti.school/contracts/v1",
   "$defs": {
+    "Confidence": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "overall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "school": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "source": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "relevance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "answers": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "overall",
+        "school",
+        "source",
+        "relevance",
+        "answers",
+        "model"
+      ],
+      "additionalProperties": false
+    },
+    "WebDocument": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "institution_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "final_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "en",
+                "vi"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "stale_after": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "failed"
+          ]
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "overall": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "school": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "source": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "relevance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "answers": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "overall",
+                "school",
+                "source",
+                "relevance",
+                "answers",
+                "model"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "institution_id",
+        "url",
+        "final_url",
+        "domain",
+        "title",
+        "language",
+        "fetched_at",
+        "stale_after",
+        "sha256",
+        "state",
+        "source_id",
+        "confidence"
+      ],
+      "additionalProperties": false
+    },
+    "WebDocumentPage": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "institution_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "final_url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "domain": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "language": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "vi"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fetched_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "stale_after": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "fresh",
+                  "stale",
+                  "failed"
+                ]
+              },
+              "source_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "overall": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "school": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "source": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "relevance": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "answers": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "overall",
+                      "school",
+                      "source",
+                      "relevance",
+                      "answers",
+                      "model"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "institution_id",
+              "url",
+              "final_url",
+              "domain",
+              "title",
+              "language",
+              "fetched_at",
+              "stale_after",
+              "sha256",
+              "state",
+              "source_id",
+              "confidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "WebDocumentAction": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "promote",
+            "refresh",
+            "block"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "InstitutionDomains": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "domains": {
+          "minItems": 1,
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          }
+        }
+      },
+      "required": [
+        "domains"
+      ],
+      "additionalProperties": false
+    },
     "ChunkPage": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -257,11 +657,24 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
                   "text",
-                  "evidence_ids"
+                  "evidence_ids",
+                  "confidence"
                 ],
                 "additionalProperties": false
               }
@@ -365,6 +778,87 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "web"
+                    ]
+                  },
+                  "domain": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 253
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "retrieved_at": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "overall": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "school": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "source": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "relevance": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "answers": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "model": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "overall",
+                          "school",
+                          "source",
+                          "relevance",
+                          "answers",
+                          "model"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -377,7 +871,11 @@
                   "version_label",
                   "locator",
                   "quote",
-                  "original_url"
+                  "original_url",
+                  "origin",
+                  "domain",
+                  "retrieved_at",
+                  "confidence"
                 ],
                 "additionalProperties": false
               }
@@ -387,6 +885,18 @@
                 {
                   "type": "string",
                   "maxLength": 4000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "confidence": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
                 },
                 {
                   "type": "null"
@@ -408,6 +918,7 @@
             "claims",
             "evidence",
             "explanation",
+            "confidence",
             "created_at"
           ],
           "additionalProperties": false
@@ -445,7 +956,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -476,7 +988,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -507,7 +1020,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -639,7 +1153,10 @@
             "regulation",
             "office",
             "form",
-            "program"
+            "program",
+            "deadline",
+            "fee",
+            "topic"
           ]
         },
         "label": {
@@ -866,7 +1383,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -897,7 +1415,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -928,7 +1447,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -959,7 +1479,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -990,7 +1511,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -1021,7 +1543,8 @@
                 "budget_exhausted",
                 "provider_failed",
                 "core_failed",
-                "no_approved_evidence"
+                "no_approved_evidence",
+                "quota_exhausted"
               ]
             }
           },
@@ -1060,12 +1583,29 @@
           "type": "string",
           "minLength": 1
         },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "school",
+            "personal"
+          ]
+        },
+        "domains": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          }
+        },
         "coverage": {
           "type": "string",
           "enum": [
             "none",
             "synthetic_demo",
-            "approved_sources"
+            "approved_sources",
+            "web_discovery"
           ]
         }
       },
@@ -1073,6 +1613,8 @@
         "id",
         "slug",
         "name",
+        "kind",
+        "domains",
         "coverage"
       ],
       "additionalProperties": false
@@ -1620,6 +2162,87 @@
               "type": "null"
             }
           ]
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "web"
+          ]
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 253
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retrieved_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "overall": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "school": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "source": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "relevance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "answers": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "overall",
+                "school",
+                "source",
+                "relevance",
+                "answers",
+                "model"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1632,7 +2255,11 @@
         "version_label",
         "locator",
         "quote",
-        "original_url"
+        "original_url",
+        "origin",
+        "domain",
+        "retrieved_at",
+        "confidence"
       ],
       "additionalProperties": false
     },
@@ -1658,7 +2285,10 @@
             "regulation",
             "office",
             "form",
-            "program"
+            "program",
+            "deadline",
+            "fee",
+            "topic"
           ]
         },
         "label": {
@@ -1709,6 +2339,18 @@
             "candidate",
             "approved",
             "rejected"
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "evidence": {
@@ -1811,6 +2453,87 @@
                     "type": "null"
                   }
                 ]
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "web"
+                ]
+              },
+              "domain": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 253
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retrieved_at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "overall": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "school": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "source": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "relevance": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "answers": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "overall",
+                      "school",
+                      "source",
+                      "relevance",
+                      "answers",
+                      "model"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -1823,7 +2546,11 @@
               "version_label",
               "locator",
               "quote",
-              "original_url"
+              "original_url",
+              "origin",
+              "domain",
+              "retrieved_at",
+              "confidence"
             ],
             "additionalProperties": false
           }
@@ -1836,6 +2563,7 @@
         "to_entity_id",
         "relation",
         "status",
+        "confidence",
         "evidence"
       ],
       "additionalProperties": false
@@ -1933,11 +2661,24 @@
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                 }
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "text",
-              "evidence_ids"
+              "evidence_ids",
+              "confidence"
             ],
             "additionalProperties": false
           }
@@ -2041,6 +2782,87 @@
                     "type": "null"
                   }
                 ]
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "web"
+                ]
+              },
+              "domain": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 253
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retrieved_at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "overall": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "school": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "source": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "relevance": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "answers": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "overall",
+                      "school",
+                      "source",
+                      "relevance",
+                      "answers",
+                      "model"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -2053,7 +2875,11 @@
               "version_label",
               "locator",
               "quote",
-              "original_url"
+              "original_url",
+              "origin",
+              "domain",
+              "retrieved_at",
+              "confidence"
             ],
             "additionalProperties": false
           }
@@ -2063,6 +2889,18 @@
             {
               "type": "string",
               "maxLength": 4000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
             },
             {
               "type": "null"
@@ -2084,6 +2922,7 @@
         "claims",
         "evidence",
         "explanation",
+        "confidence",
         "created_at"
       ],
       "additionalProperties": false
@@ -2594,12 +3433,29 @@
                 "type": "string",
                 "minLength": 1
               },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "school",
+                  "personal"
+                ]
+              },
+              "domains": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 253
+                }
+              },
               "coverage": {
                 "type": "string",
                 "enum": [
                   "none",
                   "synthetic_demo",
-                  "approved_sources"
+                  "approved_sources",
+                  "web_discovery"
                 ]
               }
             },
@@ -2607,6 +3463,8 @@
               "id",
               "slug",
               "name",
+              "kind",
+              "domains",
               "coverage"
             ],
             "additionalProperties": false
@@ -3027,6 +3885,87 @@
                     "type": "null"
                   }
                 ]
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "web"
+                ]
+              },
+              "domain": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 253
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retrieved_at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "overall": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "school": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "source": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "relevance": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "answers": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      }
+                    },
+                    "required": [
+                      "overall",
+                      "school",
+                      "source",
+                      "relevance",
+                      "answers",
+                      "model"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -3039,7 +3978,11 @@
               "version_label",
               "locator",
               "quote",
-              "original_url"
+              "original_url",
+              "origin",
+              "domain",
+              "retrieved_at",
+              "confidence"
             ],
             "additionalProperties": false
           }
@@ -3116,11 +4059,24 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
                     "text",
-                    "evidence_ids"
+                    "evidence_ids",
+                    "confidence"
                   ],
                   "additionalProperties": false
                 }
@@ -3224,6 +4180,87 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "web"
+                      ]
+                    },
+                    "domain": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 253
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "retrieved_at": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overall": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "school": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "source": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "relevance": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "answers": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "model": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            }
+                          },
+                          "required": [
+                            "overall",
+                            "school",
+                            "source",
+                            "relevance",
+                            "answers",
+                            "model"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -3236,7 +4273,11 @@
                     "version_label",
                     "locator",
                     "quote",
-                    "original_url"
+                    "original_url",
+                    "origin",
+                    "domain",
+                    "retrieved_at",
+                    "confidence"
                   ],
                   "additionalProperties": false
                 }
@@ -3246,6 +4287,18 @@
                   {
                     "type": "string",
                     "maxLength": 4000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
                   },
                   {
                     "type": "null"
@@ -3267,6 +4320,7 @@
               "claims",
               "evidence",
               "explanation",
+              "confidence",
               "created_at"
             ],
             "additionalProperties": false
@@ -3325,6 +4379,18 @@
                   "candidate",
                   "approved",
                   "rejected"
+                ]
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               },
               "evidence": {
@@ -3427,6 +4493,87 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "web"
+                      ]
+                    },
+                    "domain": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 253
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "retrieved_at": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "overall": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "school": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "source": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "relevance": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "answers": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "model": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            }
+                          },
+                          "required": [
+                            "overall",
+                            "school",
+                            "source",
+                            "relevance",
+                            "answers",
+                            "model"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -3439,7 +4586,11 @@
                     "version_label",
                     "locator",
                     "quote",
-                    "original_url"
+                    "original_url",
+                    "origin",
+                    "domain",
+                    "retrieved_at",
+                    "confidence"
                   ],
                   "additionalProperties": false
                 }
@@ -3452,6 +4603,7 @@
               "to_entity_id",
               "relation",
               "status",
+              "confidence",
               "evidence"
             ],
             "additionalProperties": false
