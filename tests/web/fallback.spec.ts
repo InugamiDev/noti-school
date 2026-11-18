@@ -17,7 +17,7 @@ async function fixture(page: Page, disable = true) {
     if (path.endsWith('/capabilities')) return route.fulfill({ json: { mode: 'disabled', answers: { state: 'available', reason: 'ready' },
       indexing: capability, discovery: capability, google: capability, email: capability, identity: capability } });
     if (path.endsWith('/institutions')) return route.fulfill({ json: { items: [{ id, slug: 'demo',
-      name: 'Synthetic university', coverage: 'synthetic_demo' }], next_cursor: null } });
+      name: 'Synthetic university', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null } });
     return route.fulfill({ status: 503, json: { error: { code: 'provider_unavailable',
       message: 'Synthetic unavailable fixture', request_id: id, retryable: false, capability: 'answers' } } });
   });
@@ -30,6 +30,8 @@ async function pixels(page: Page, name: string) {
   return createHash('sha256').update(shot).digest('hex');
 }
 async function frozen(page: Page, name: string) {
+  // The cold-load splash covers the hero until the app has mounted; compare frames only after it is gone.
+  await expect(page.locator('#splash')).toHaveCount(0);
   await page.waitForTimeout(100);
   const a = await pixels(page, `${name}-a`);
   await page.waitForTimeout(220);

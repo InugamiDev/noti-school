@@ -47,7 +47,75 @@ const strings = {
   browseSources: { en: 'Browse sources', vi: 'Xem thư viện tài liệu' },
   rephrase: { en: 'Ask a more specific question', vi: 'Hỏi cụ thể hơn' },
   askOffice: { en: 'Ask the responsible university office', vi: 'Hỏi phòng ban phụ trách của trường' },
+  // Confidence: the words carry the level; the number and colour only support them.
+  confidence: { en: 'Confidence', vi: 'Độ tin cậy' },
+  confidenceHigh: { en: 'High', vi: 'Cao' },
+  confidenceMedium: { en: 'Medium', vi: 'Trung bình' },
+  confidenceLow: { en: 'Low', vi: 'Thấp' },
+  confidenceNotScored: { en: 'Not scored', vi: 'Chưa chấm điểm' },
+  confidenceParts: { en: 'What the confidence is based on', vi: 'Độ tin cậy dựa trên điều gì' },
+  partSchool: { en: 'About this school', vi: 'Nói về trường này' },
+  partSource: { en: 'Trusted source', vi: 'Nguồn đáng tin' },
+  partRelevance: { en: 'On topic', vi: 'Đúng chủ đề' },
+  partAnswers: { en: 'Answers the question', vi: 'Trả lời được câu hỏi' },
+  scoredBy: { en: 'Scored by', vi: 'Chấm bởi' },
+  answerConfidenceHigh: { en: 'The cited sources strongly support this answer.', vi: 'Các nguồn trích dẫn hỗ trợ tốt cho câu trả lời này.' },
+  answerConfidenceMedium: { en: 'The cited sources partly support this answer. Read them before relying on it.', vi: 'Các nguồn trích dẫn chỉ hỗ trợ một phần. Hãy đọc nguồn trước khi dựa vào câu trả lời.' },
+  answerConfidenceLow: { en: 'The cited sources give weak support. Treat this as a lead and check the sources.', vi: 'Các nguồn trích dẫn hỗ trợ yếu. Hãy xem đây là gợi ý và kiểm tra lại nguồn.' },
+  // Where evidence came from. Web pages are never worded as approved.
+  originApproved: { en: 'Approved document', vi: 'Tài liệu đã duyệt' },
+  originWeb: { en: 'Web page', vi: 'Trang web' },
+  fetched: { en: 'Fetched', vi: 'Tải về ngày' },
+  openWebPage: { en: 'Open web page', vi: 'Mở trang web' },
+  webNotice: { en: 'Includes pages found on the web. They have not been reviewed by {school} staff.', vi: 'Có dùng các trang tìm thấy trên web. Nhân viên {school} chưa kiểm duyệt các trang này.' },
+  webNoticeGeneric: { en: 'Includes pages found on the web. They have not been reviewed by school staff.', vi: 'Có dùng các trang tìm thấy trên web. Nhà trường chưa kiểm duyệt các trang này.' },
+  webNoticePersonal: { en: 'Includes pages found on the web. Nobody has reviewed them.', vi: 'Có dùng các trang tìm thấy trên web. Chưa có ai kiểm duyệt các trang này.' },
+  webPassageNotice: { en: 'Found on the web. This page is not an approved document.', vi: 'Tìm thấy trên web. Trang này không phải tài liệu đã duyệt.' },
+  searchingWeb: { en: 'Searching approved documents and the web…', vi: 'Đang tìm trong tài liệu đã duyệt và trên web…' },
+  // Personal space
+  mySpace: { en: 'My space', vi: 'Không gian của tôi' },
+  mySpaceHint: { en: 'Private to you', vi: 'Chỉ mình bạn thấy' },
+  mySpaceSignInHint: { en: 'Sign in to use', vi: 'Đăng nhập để dùng' },
+  mySpaceAbout: { en: 'My space is private to you. Ask about anything beyond one school. Answers come from pages found on the web and show their confidence.', vi: 'Không gian của tôi chỉ mình bạn thấy. Bạn có thể hỏi những điều ngoài phạm vi một trường. Câu trả lời dựa trên các trang tìm thấy trên web và có ghi độ tin cậy.' },
+  mySpaceOpening: { en: 'Opening your private space…', vi: 'Đang mở không gian riêng của bạn…' },
+  mySpaceSignIn: { en: 'Sign in to open your private space.', vi: 'Hãy đăng nhập để mở không gian riêng của bạn.' },
+  signIn: { en: 'Sign in', vi: 'Đăng nhập' },
+  // Collection management: cached web pages and school domains
+  webPages: { en: 'Web pages', vi: 'Trang web' },
+  webPagesAbout: { en: 'Pages found on the web and kept for 7 days. They can support answers with a confidence score, but they are not approved documents.', vi: 'Các trang tìm thấy trên web, được lưu 7 ngày. Chúng có thể hỗ trợ câu trả lời kèm độ tin cậy, nhưng không phải tài liệu đã duyệt.' },
+  webPagesEmpty: { en: 'No web pages are cached for this collection.', vi: 'Chưa có trang web nào được lưu cho bộ sưu tập này.' },
+  webPagesLoading: { en: 'Loading web pages…', vi: 'Đang tải danh sách trang web…' },
+  webPagesNav: { en: 'Web page list pages', vi: 'Các trang của danh sách trang web' },
+  stateFresh: { en: 'Fresh', vi: 'Còn mới' },
+  stateStale: { en: 'Stale', vi: 'Đã cũ' },
+  stateFailed: { en: 'Fetch failed', vi: 'Tải lỗi' },
+  staleHint: { en: 'A stale page is fetched again the next time it is used.', vi: 'Trang đã cũ sẽ được tải lại ở lần dùng kế tiếp.' },
+  promote: { en: 'Promote', vi: 'Đưa vào duyệt' },
+  refresh: { en: 'Refresh', vi: 'Tải lại' },
+  block: { en: 'Block', vi: 'Chặn' },
+  promoted: { en: 'Sent for review', vi: 'Đã gửi duyệt' },
+  viewDocument: { en: 'View document', vi: 'Xem tài liệu' },
+  openPage: { en: 'Open page', vi: 'Mở trang' },
+  promoteDone: { en: 'Page promoted. It now waits for review as a document and is not approved yet.', vi: 'Đã đưa trang vào danh sách tài liệu. Trang đang chờ duyệt và chưa được phê duyệt.' },
+  refreshDone: { en: 'Refresh requested. The list shows the latest fetch.', vi: 'Đã yêu cầu tải lại. Danh sách hiển thị lần tải mới nhất.' },
+  blockDone: { en: 'Page blocked. It will not be used in answers.', vi: 'Đã chặn trang. Trang sẽ không được dùng trong câu trả lời.' },
+  blockConfirm: { en: 'Block this page? It will no longer be used in answers.', vi: 'Chặn trang này? Trang sẽ không còn được dùng trong câu trả lời.' },
+  blockConfirmLabel: { en: 'Confirm block', vi: 'Xác nhận chặn' },
+  blockPage: { en: 'Block page', vi: 'Chặn trang' },
+  keep: { en: 'Keep', vi: 'Giữ lại' },
+  schoolDomains: { en: 'School domains', vi: 'Tên miền của trường' },
+  schoolDomainsAbout: { en: 'Pages from these domains count as the school’s own and score highest as a trusted source.', vi: 'Trang thuộc các tên miền này được xem là của trường và có điểm nguồn đáng tin cao nhất.' },
+  domainsLabel: { en: 'Domains, one per line', vi: 'Tên miền, mỗi dòng một tên' },
+  saveDomains: { en: 'Save domains', vi: 'Lưu tên miền' },
+  domainsSaved: { en: 'Domains saved.', vi: 'Đã lưu tên miền.' },
+  domainsInvalid: { en: 'Enter 1 to 20 domain names such as example.edu, one per line, without https:// or paths.', vi: 'Nhập từ 1 đến 20 tên miền như example.edu, mỗi dòng một tên, không kèm https:// hay đường dẫn.' },
 } as const;
 
 export type StringKey = keyof typeof strings;
 export const t = (lang: Lang | undefined, key: StringKey) => strings[key][lang ?? 'en'];
+/** Fills {name} placeholders with plain text; values are rendered as text, never as markup. */
+export const fill = (template: string, values: Record<string, string>) =>
+  template.replace(/\{(\w+)\}/g, (_, name: string) => values[name] ?? '');
+/** Every string in both languages, for checks that copy stays complete and free of dashes. */
+export const allStrings = (): readonly { key: string; en: string; vi: string }[] =>
+  Object.entries(strings).map(([key, value]) => ({ key, ...value }));

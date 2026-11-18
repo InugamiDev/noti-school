@@ -22,7 +22,9 @@ export const Price = z.strictObject({
   effective_at: z.iso.datetime({ offset: true }), valid_until: z.iso.datetime({ offset: true }),
   source_url: z.url({ protocol: /^https$/ }).refine(v => { const u = new URL(v); return !u.username && !u.password; }),
 }).refine(v => Date.parse(v.valid_until) > Date.parse(v.effective_at), 'Invalid price window')
-  .refine(v => (v.provider === 'jev') === v.component.startsWith('jev_'), 'Provider/component mismatch');
+  .refine(v => (v.provider === 'jev') === v.component.startsWith('jev_'), 'Provider/component mismatch')
+  // Jev rows must name an exact pinned model (as JEV_MODEL does); dated rows are still operator-supplied.
+  .refine(v => v.provider !== 'jev' || ['jev-1.14.0', 'jev-1.13.0'].includes(v.model), 'Unpinned Jev model');
 
 export async function bootstrap(client: pg.Client, input: unknown, secret: string) {
   const value = Bootstrap.parse(input);
@@ -99,6 +101,7 @@ export async function retainPersonalData(client: pg.Client, input: unknown) {
       AND NOT EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state<>'succeeded')
       AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id)
       AND NOT EXISTS(SELECT 1 FROM product.ai_reservations r WHERE r.operation_id=k.operation_id)
+      AND NOT EXISTS(SELECT 1 FROM product.ontology_jobs o WHERE o.id=k.operation_id AND o.state IN ('queued','running'))
       ORDER BY k.expires_at,k.operation_id LIMIT $1 FOR UPDATE OF k SKIP LOCKED)
       DELETE FROM product.idempotency_keys k USING selected WHERE k.ctid=selected.ctid`, [limit]);
     // Age both creation and replay expiry: the schema has no terminal-transition timestamp.

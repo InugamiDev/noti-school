@@ -27,7 +27,15 @@ pub struct Config {
     pub openai_key: Option<String>,
     pub jev_key: Option<String>,
     pub generation_model: Option<String>,
+    pub jev_model: String,
+    pub tinyfish_key: Option<String>,
+    pub tinyfish_daily_search_limit: u32,
+    pub tinyfish_daily_fetch_limit: u32,
+    pub web_min_confidence: f64,
+    pub graph_auto_approve: f64,
 }
+// Exact pinned Jev models (docs.typesafe.ai/models, consulted 2026-11-18); aliases are rejected.
+pub const JEV_MODELS: [&str; 2] = ["jev-1.14.0", "jev-1.13.0"];
 impl Config {
     pub fn load() -> Result<Self> {
         let mut vars: HashMap<String, String> = std::env::vars().collect();
@@ -70,12 +78,35 @@ impl Config {
             ("AI_MONTHLY_BUDGET_USD", "50"),
             ("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
             ("EMBEDDING_DIMENSIONS", "1536"),
-            ("JEV_MODEL", "jev-1.13.0"),
         ] {
             if get(key, expected) != expected {
                 return Err(Error("invalid_request"));
             }
         }
+        let jev_model = get("JEV_MODEL", JEV_MODELS[0]);
+        if !JEV_MODELS.contains(&jev_model.as_str()) {
+            return Err(Error("invalid_request"));
+        }
+        let limit = |key: &str, default: u32, max: u32| -> Result<u32> {
+            let raw = get(key, &default.to_string());
+            match raw.parse::<u32>() {
+                Ok(n) if (1..=max).contains(&n) && raw.bytes().all(|b| b.is_ascii_digit()) => Ok(n),
+                _ => Err(Error("invalid_request")),
+            }
+        };
+        let probability = |key: &str, default: &str| -> Result<f64> {
+            let raw = get(key, default);
+            match raw.parse::<f64>() {
+                Ok(n) if n.is_finite() && (0.0..=1.0).contains(&n) && !raw.contains(['e', 'E']) => {
+                    Ok(n)
+                }
+                _ => Err(Error("invalid_request")),
+            }
+        };
+        let tinyfish_daily_search_limit = limit("TINYFISH_DAILY_SEARCH_LIMIT", 1000, 12000)?;
+        let tinyfish_daily_fetch_limit = limit("TINYFISH_DAILY_FETCH_LIMIT", 300, 1000)?;
+        let web_min_confidence = probability("WEB_EVIDENCE_MIN_CONFIDENCE", "0.6")?;
+        let graph_auto_approve = probability("GRAPH_AUTO_APPROVE", "0.9")?;
         let mode = get("AI_MODE", "disabled");
         let evidence_provider = match get("EVIDENCE_PROVIDER", "openai").as_str() {
             "openai" => EvidenceProvider::Openai,
@@ -109,7 +140,8 @@ impl Config {
         let openai_key = optional("OPENAI_API_KEY");
         let jev_key = optional("TYPESAFE_API_KEY");
         let generation_model = optional("OPENAI_CHAT_MODEL");
-        for value in [&openai_key, &jev_key, &generation_model]
+        let tinyfish_key = optional("TINYFISH_API_KEY");
+        for value in [&openai_key, &jev_key, &generation_model, &tinyfish_key]
             .into_iter()
             .flatten()
         {
@@ -130,6 +162,12 @@ impl Config {
             openai_key,
             jev_key,
             generation_model,
+            jev_model,
+            tinyfish_key,
+            tinyfish_daily_search_limit,
+            tinyfish_daily_fetch_limit,
+            web_min_confidence,
+            graph_auto_approve,
             web_dist: get("WEB_DIST_DIR", "./apps/web/dist").into(),
             uploads: get("UPLOAD_DIR", "./data/uploads").into(),
         })
@@ -155,6 +193,28 @@ impl Config {
         ))
     }
 }
+impl Config {
+    // Jev also supplies calibrated confidence whenever its key is configured in live mode, not only
+    // when it is the selected evidence provider. Selected Jev still never falls back to OpenAI.
+    pub fn jev(&self) -> Option<&str> {
+        (self.mode == "live")
+            .then_some(self.jev_key.as_deref())
+            .flatten()
+    }
+    // Provider whose failures gate admission: any configured Jev use joins the shared cooldown.
+    pub fn jev_dependency(&self) -> EvidenceProvider {
+        if self.evidence_provider == EvidenceProvider::Jev || self.jev().is_some() {
+            EvidenceProvider::Jev
+        } else {
+            EvidenceProvider::Openai
+        }
+    }
+    pub fn tinyfish(&self) -> Option<&str> {
+        (self.mode == "live")
+            .then_some(self.tinyfish_key.as_deref())
+            .flatten()
+    }
+}
 pub fn validate_database(raw: &str) -> Result<()> {
     let u = url::Url::parse(raw).map_err(crate::error::invalid)?;
     let db = u.path().trim_start_matches('/');
@@ -175,4 +235,52 @@ pub fn validate_database(raw: &str) -> Result<()> {
         return Err(Error("invalid_request"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn web_evidence_settings_mirror_the_environment_contract() {
+        let c = Config::parse(&HashMap::new()).unwrap();
+        assert_eq!(c.jev_model, "jev-1.14.0");
+        assert_eq!(
+            (c.tinyfish_daily_search_limit, c.tinyfish_daily_fetch_limit),
+            (1000, 300)
+        );
+        assert_eq!((c.web_min_confidence, c.graph_auto_approve), (0.6, 0.9));
+        assert!(c.tinyfish().is_none() && c.jev().is_none());
+        let with = |k: &str, v: &str| Config::parse(&HashMap::from([(k.to_owned(), v.to_owned())]));
+        assert_eq!(
+            with("JEV_MODEL", "jev-1.13.0").unwrap().jev_model,
+            "jev-1.13.0"
+        );
+        for (k, v) in [
+            ("JEV_MODEL", "jev-latest"),
+            ("JEV_MODEL", "jev-1.14"),
+            ("TINYFISH_DAILY_SEARCH_LIMIT", "0"),
+            ("TINYFISH_DAILY_SEARCH_LIMIT", "12001"),
+            ("TINYFISH_DAILY_FETCH_LIMIT", "+5"),
+            ("TINYFISH_DAILY_FETCH_LIMIT", "1001"),
+            ("WEB_EVIDENCE_MIN_CONFIDENCE", "1.01"),
+            ("WEB_EVIDENCE_MIN_CONFIDENCE", "NaN"),
+            ("GRAPH_AUTO_APPROVE", "9e-1"),
+            ("TINYFISH_API_KEY", "has space"),
+        ] {
+            assert!(with(k, v).is_err(), "{k}={v}");
+        }
+        let live = Config::parse(&HashMap::from([
+            ("AI_MODE".to_owned(), "live".to_owned()),
+            ("AI_LIVE_CALLS_ENABLED".into(), "true".into()),
+            ("TINYFISH_API_KEY".into(), "fixture".into()),
+            ("TYPESAFE_API_KEY".into(), "fixture".into()),
+        ]))
+        .unwrap();
+        assert!(live.tinyfish().is_some() && live.jev().is_some());
+        assert_eq!(
+            live.jev_dependency(),
+            EvidenceProvider::Jev,
+            "configured Jev joins admission"
+        );
+    }
 }

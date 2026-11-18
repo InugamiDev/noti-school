@@ -82,6 +82,20 @@ The landing page is the one place allowed to be showy (`site/Flash.tsx`, `site/f
 
 `index.html` inlines a splash (critical CSS + SVG, no JS dependency) that paints before the bundle: a droplet falls and becomes the "n." tile, the n draws, the coral dot pops, then the overlay lifts once the app has mounted and at least 700ms have passed, or at 1.6s regardless. It never takes pointer events or focus and exists only on a cold document load. Reduced motion or a paused-motion preference (read synchronously from storage) shows a still tile with a quick fade. `ui/Loader.tsx` loops the same mark at 28–36px for every page-level loading state next to its announced text; skeletons keep the layout.
 
+## Confidence and web evidence
+
+Web pages may support an answer, so every evidence item says where it came from and how sure the system is (`ui/Confidence.tsx`, `ui/Origin.tsx`, `ui/confidence.css`). Nothing new was added to the palette: the labels reuse the existing chips and tints.
+
+- Origin: "Approved document" (teal, file-check icon) or "Web page · example.edu" (ink, globe icon). Web items also show "Fetched 3 Nov 2026". A web page is never worded or coloured as approved, and its passage opens with "Found on the web. This page is not an approved document." and a link to the page itself instead of the library reader.
+- Confidence: a word first (High from 0.8, Medium from 0.6, Low below), then the whole percent rounded down so the number never contradicts the word, then a three-bar glyph with one, two or three bars filled. Tints are sage, butter and warm, the same tones as the status chips. Colour is never the only signal, and the accessible name reads "Confidence: Medium 72%". A missing score reads "Not scored"; the interface does not invent one.
+- Breakdown: on a source card the label is a disclosure button (`aria-expanded`). Opening it lists the four checks in plain words (about this school, trusted source, on topic, answers the question), each with a short bar and its percent, then the scoring model's name.
+- Answer header: after the status chip, one line with the overall label and one plain sentence. When any cited evidence is a web page, a calm sky-tinted note follows: "Includes pages found on the web. They have not been reviewed by <school> staff." In the private space the note says nobody has reviewed them. Each claim ends with a small outlined label, quieter than the sentence.
+- Waiting: one truthful line, "Searching approved documents and the web…", because the API returns a single final answer. No step list, no progress bar. If the server reports discovery as unavailable the question is sent without it and the line stays "Finding an answer and its sources…".
+- My space: the last entry of the school picker, with the hint "Private to you" (or "Sign in to use"). Choosing it the first time creates the space; a line under the composer says it is private.
+- Collection management: a "Web pages" card lists cached pages as the same raised rows as document versions, with a Fresh, Stale or Fetch failed chip, the confidence disclosure, and Promote, Refresh and Block. Block opens the inline confirmation used for deleting a conversation, with focus on Keep. Promote sends the page into the normal review flow and says it is not approved yet. The school's own domains are edited beside the list, one per line. Graph relations show their confidence label next to their status.
+
+These strings exist in English and Vietnamese (`ui/i18n.ts`) and contain no em or en dashes.
+
 ## Do's and Don'ts
 
 Do preserve drafts and give accurate failure recovery. Do not fabricate sources, metrics, affiliation, authentication, or policy answers. Do not add glossy, metallic or neon effects; clay stays matte.

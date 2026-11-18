@@ -4,6 +4,7 @@ import {
   createSignal,
   For,
   Show,
+  on,
   onCleanup,
   untrack,
 } from 'solid-js';
@@ -165,14 +166,50 @@ export default function App() {
     document.removeEventListener('visibilitychange', revalidate);
   });
   const [institution, setInstitution] = createSignal('');
+  // intent: every signed-in reader has one private space (institution kind "personal") beside the
+  // schools. It is offered as "My space", created on first use, and never shown to another account.
+  // status: done | next: a read endpoint for the space would let a reload restore it without the
+  // create call | confidence: medium (the list endpoint may or may not include the reader's space)
+  const [ownSpace, setOwnSpace] = createSignal<{ owner: string; space: Institution }>();
+  const [spaceNote, setSpaceNote] = createSignal<{ kind: 'opening' | 'signin' } | { kind: 'error'; text: string }>();
+  const schools = () => (institutions()?.items ?? []).filter((i) => i.kind !== 'personal');
+  const personalSpace = () => {
+    const session = me();
+    if (!session) return undefined;
+    const created = ownSpace();
+    if (created?.owner === session.identity.user_id) return created.space;
+    // A listed personal space counts only when this account is a member of it.
+    return institutions()?.items.find(
+      (i) => i.kind === 'personal' && session.memberships.some((m) => m.institution_id === i.id),
+    );
+  };
+  const available = () => {
+    const space = personalSpace();
+    return space ? [...schools(), space] : schools();
+  };
   createEffect(() => {
-    const first = institutions()?.items[0];
-    if (first && !institution()) {
+    if (!institutions()) return;
+    const current = institution();
+    if (current && available().some((i) => i.id === current)) return;
+    const sessionKnown = !(me.loading && !me());
+    if (!current) {
       const saved = readPreference('institution');
-      setInstitution(institutions()?.items.some((i) => i.id === saved) ? saved : first.id);
+      if (available().some((i) => i.id === saved)) return void setInstitution(saved);
+      // A saved private space can only be confirmed once the session is known.
+      if (!sessionKnown && institutions()!.items.some((i) => i.id === saved && i.kind === 'personal')) return;
+      const first = schools()[0];
+      if (first) setInstitution(first.id);
+      return;
     }
+    // The selection is gone (signed out of a private space, or another account): fall back to a school.
+    const first = schools()[0];
+    if (first && sessionKnown && !institutions.loading) setInstitution(first.id);
   });
-  const selected = () => institutions()?.items.find((i) => i.id === institution());
+  const selected = () => available().find((i) => i.id === institution());
+  const institutionLabel = (id: string) => {
+    const item = available().find((i) => i.id === id);
+    return item?.kind === 'personal' ? t(language(), 'mySpace') : item?.name;
+  };
   // #/sources/<source>/versions/<version> opens the in-app document reader.
   const documentRoute = () => {
     const parts = route().split('/');
@@ -200,6 +237,12 @@ export default function App() {
     return { text: reasons[answers.reason] || 'Answers are unavailable.', blocking: true };
   };
   const answersUnavailable = () => !!answerState()?.blocking;
+  // Questions also search the web by default. Only a server that reports discovery as not available
+  // turns it off, so the waiting text never claims a web search that cannot run.
+  const discover = () => {
+    const discovery = capabilities()?.discovery;
+    return !discovery || discovery.state === 'available';
+  };
   const answerNotice = (extra = '') => (
     <Show when={answerState()}>
       {(state) => (
@@ -295,7 +338,8 @@ export default function App() {
     [authError, setAuthError] = createSignal(false),
     [answer, setAnswer] = createSignal<AnswerOutput>(),
     [turns, setTurns] = createSignal<Turn[]>([]),
-    [pendingLanguage, setPendingLanguage] = createSignal<'en' | 'vi'>('en');
+    [pendingLanguage, setPendingLanguage] = createSignal<'en' | 'vi'>('en'),
+    [discovering, setDiscovering] = createSignal(false);
   // Only authentication/authorization failures offer sign-in as recovery.
   const setError = (text: string, auth = false) => {
     setErrorText(text);
@@ -479,6 +523,34 @@ export default function App() {
     cancel(false);
     clearTimeout(transitionTimer);
   });
+  // Choosing "My space" before it exists creates it, then selects it. Nothing is created signed out.
+  const newSpace = 'personal:new';
+  // A sign-in prompt or failure belongs to the session it was shown in.
+  createEffect(on(() => me()?.identity.user_id, () => setSpaceNote(undefined), { defer: true }));
+  async function openSpace() {
+    if (spaceNote()?.kind === 'opening') return;
+    const user = me()?.identity.user_id;
+    if (!user) {
+      setSpaceNote({ kind: 'signin' });
+      return;
+    }
+    const sameAccount = () => me()?.identity.user_id === user;
+    setSpaceNote({ kind: 'opening' });
+    try {
+      const space = await post(endpoint('/api/v1/me/personal-space'), 'Institution', undefined);
+      if (space.kind !== 'personal') throw new Error('Scope mismatch');
+      if (!sameAccount()) return;
+      setOwnSpace({ owner: user, space });
+      // Membership is read before switching, so the access scope settles once and keeps what is typed next.
+      await refreshMe();
+      if (!sameAccount()) return;
+      cancel(false);
+      setInstitution(space.id);
+      setSpaceNote(undefined);
+    } catch (e) {
+      setSpaceNote(sameAccount() ? { kind: 'error', text: errorText(e) } : undefined);
+    }
+  }
   async function ask(event: SubmitEvent) {
     event.preventDefault();
     if (busy() || accessScope() === 'initial' || answersUnavailable()) return;
@@ -495,7 +567,7 @@ export default function App() {
       question: draft(),
       language: language(),
       ...(previous?.institution === institution() ? { conversation_id: previous.id } : {}),
-      discover: false,
+      discover: discover(),
     });
     if (
       !parsed.success ||
@@ -514,6 +586,7 @@ export default function App() {
     if (!sameConversation) setTurns([]);
     setAnswer(undefined);
     setPendingLanguage(language());
+    setDiscovering(parsed.data.discover);
     const active = new AbortController();
     controller = active;
     saveDraft(draft(), draftOwner, previous);
@@ -732,15 +805,29 @@ export default function App() {
                       value={institution()}
                       placeholder={institutions.loading ? 'Loading institutions…' : 'Choose your institution'}
                       onChange={(value) => {
+                        if (value === newSpace) return void openSpace();
+                        setSpaceNote(undefined);
                         cancel(false);
                         setInstitution(value);
                         setAnswer(undefined);
       setTurns([]);
                       }}
-                      options={(institutions()?.items ?? []).map((item: Institution) => ({
-                        value: item.id,
-                        label: item.name + (item.coverage === 'synthetic_demo' ? ' · Demo' : ''),
-                      }))}
+                      options={[
+                        ...schools().map((item: Institution) => ({
+                          value: item.id,
+                          label: item.name + (item.coverage === 'synthetic_demo' ? ' · Demo' : ''),
+                        })),
+                        // The private space sits after the schools; before it exists the entry creates it.
+                        ...(institutions()
+                          ? [
+                              {
+                                value: personalSpace()?.id ?? newSpace,
+                                label: t(language(), 'mySpace'),
+                                hint: t(language(), me() ? 'mySpaceHint' : 'mySpaceSignInHint'),
+                              },
+                            ]
+                          : []),
+                      ]}
                     />
                   </Show>
                 </div>
@@ -784,6 +871,22 @@ export default function App() {
                 <Show when={selected()?.coverage === 'synthetic_demo'}>
                   <p class="coverage">Demo collection</p>
                 </Show>
+                <Show when={selected()?.kind === 'personal'}>
+                  <p class="coverage space-note" lang={language()}>{t(language(), 'mySpaceAbout')}</p>
+                </Show>
+                <Show when={spaceNote()} keyed>
+                  {(note) => (
+                    <p class="coverage space-note" role={note.kind === 'error' ? 'alert' : 'status'} lang={language()}>
+                      {note.kind === 'error'
+                        ? note.text
+                        : t(language(), note.kind === 'opening' ? 'mySpaceOpening' : 'mySpaceSignIn')}
+                      <Show when={note.kind === 'signin'}>
+                        {' '}
+                        <a href="#/auth">{t(language(), 'signIn')}</a>
+                      </Show>
+                    </p>
+                  )}
+                </Show>
                 <Show when={error()}>
                   <p role="alert" class="error">
                     {error()}
@@ -826,6 +929,8 @@ export default function App() {
           <AnswerView
             institution={institution()}
             institutionName={selected()?.name}
+            personal={selected()?.kind === 'personal'}
+            discovering={discovering()}
             demo={demo()}
             busy={busy()}
             restoring={restoring()}
@@ -892,7 +997,7 @@ export default function App() {
                       ? {
                           userId: me()!.identity.user_id,
                           memberships: me()!.memberships.map((m) => ({
-                            institution: institutions()?.items.find((i) => i.id === m.institution_id)?.name ?? 'Unknown institution',
+                            institution: institutionLabel(m.institution_id) ?? 'Unknown institution',
                             role: m.role,
                           })),
                         }
@@ -923,6 +1028,13 @@ export default function App() {
               {(_scope) => (
                 <Admin
                   institution={institution()}
+                  lang={language()}
+                  domains={selected()?.domains ?? []}
+                  institutionUpdated={(next) => {
+                    const own = ownSpace();
+                    if (own?.space.id === next.id) setOwnSpace({ owner: own.owner, space: next });
+                    void reloadInstitutions();
+                  }}
                   signedIn={!!me()}
                   allowed={
                     me()?.memberships.some(
@@ -943,7 +1055,7 @@ export default function App() {
             history={visibleHistory()}
             listCursor={listCursor()}
             setListCursor={setListCursor}
-            institutionName={(id) => institutions()?.items.find((i) => i.id === id)?.name}
+            institutionName={institutionLabel}
             opening={() => setOrigin('history')}
           />
         </Show>

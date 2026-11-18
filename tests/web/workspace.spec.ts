@@ -8,14 +8,14 @@ const citationId='44444444-4444-4444-8444-444444444444';
 const time='2026-09-25T00:00:00Z';
 const source={id:sourceId,institution_id:id,title:'Demo · Quy chế tổng hợp dành cho sinh viên — tài liệu thử nghiệm không phải chính sách',kind:'text',original_url:'https://example.test/demo',visibility:'institution',current_version_id:versionId,created_at:time};
 const version={id:versionId,institution_id:id,source_id:sourceId,label:'Demo v1',sha256:'a'.repeat(64),status:'archived',indexing:'ready',effective_from:null,effective_until:'2025-01-01T00:00:00Z',created_at:time};
-const evidence={id:citationId,institution_id:id,source_id:sourceId,version_id:versionId,chunk_id:id,title:source.title,version_label:'Demo v1',locator:{page:2,section:'Synthetic section',start_char:0,end_char:40},quote:'Synthetic passage. <img src=x onerror=alert(1)>',original_url:'https://example.test/demo'};
-const answer={id,conversation_id:id,institution_id:id,status:'qualified',language:'vi',claims:[{text:'Demo answer for component testing only. Đây không phải quy định của trường đại học.',evidence_ids:[citationId]}],evidence:[evidence],explanation:'Synthetic fixture · no live provider used.',created_at:time};
+const evidence={id:citationId,institution_id:id,source_id:sourceId,version_id:versionId,chunk_id:id,title:source.title,version_label:'Demo v1',locator:{page:2,section:'Synthetic section',start_char:0,end_char:40},quote:'Synthetic passage. <img src=x onerror=alert(1)>',original_url:'https://example.test/demo',origin:'approved',domain:null,retrieved_at:null,confidence:null};
+const answer={id,conversation_id:id,institution_id:id,status:'qualified',language:'vi',claims:[{text:'Demo answer for component testing only. Đây không phải quy định của trường đại học.',evidence_ids:[citationId],confidence:null}],evidence:[evidence],explanation:'Synthetic fixture · no live provider used.',confidence:null,created_at:time};
 async function setup(page:Page,admin=false){await page.emulateMedia({reducedMotion:'reduce'});await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;const method=route.request().method();let body:unknown;
  if(path.endsWith('/capabilities')){const cap={state:'available',reason:'ready'};body={mode:'mock',answers:cap,indexing:cap,discovery:cap,google:cap,email:cap,identity:cap};}
- else if(path.endsWith('/institutions'))body={items:[{id,slug:'demo',name:'Demo university',coverage:'synthetic_demo'}],next_cursor:null};
+ else if(path.endsWith('/institutions'))body={items:[{id,slug:'demo',name:'Demo university',kind: 'school', domains: [], coverage: 'synthetic_demo'}],next_cursor:null};
  else if(path.endsWith('/me'))body={identity:{user_id:'synthetic-test-user',session_id:'synthetic-session',email_verified:true,expires_at:'2027-01-01T00:00:00Z'},memberships:[{institution_id:id,role:admin?'admin':'student'}]};
  else if(path.endsWith('/conversations'))body={items:[{id,institution_id:id,created_at:time}],next_cursor:null};
- else if(path.endsWith('/graph'))body={items:[],next_cursor:null};
+ else if(path.endsWith('/graph')||path.endsWith('/web-documents'))body={items:[],next_cursor:null};
  else if(path.endsWith('/answers'))body=method==='POST'?answer:{items:[answer],next_cursor:null};
  else if(path.includes('/citations/'))body=evidence;
  else if(path.includes('/chunks/'))body={id,institution_id:id,source_id:sourceId,version_id:versionId,ordinal:0,text:'Synthetic full passage only.',locator:evidence.locator,language:'vi'};

@@ -57,6 +57,13 @@ pub async fn tick(s: &AppState) -> Result<bool> {
         .execute(&mut conn)
         .await;
     update?;
+    if matches!(result, Ok(true)) {
+        let approved: bool = sqlx::query_scalar("SELECT status='approved' FROM product.source_versions WHERE institution_id=$1 AND id=$2")
+            .bind(institution).bind(version).fetch_one(s.pool()?).await?;
+        if approved {
+            crate::ontology::enqueue(s, institution, version, &user).await?;
+        }
+    }
     result.map(|_| true)
 }
 
@@ -94,7 +101,12 @@ pub async fn run(s: AppState) {
     loop {
         interval.tick().await;
         let _ = tick(&s).await;
+        let _ = crate::ontology::tick(&s).await;
         if let Some(db) = &s.db {
+            // Ontology jobs whose actor lost access or whose root expired cannot reserve; fail them visibly.
+            let _ = sqlx::query("UPDATE product.ontology_jobs SET state='failed',error_code='not_found',updated_at=now() WHERE id IN (SELECT o.id FROM product.ontology_jobs o LEFT JOIN product.idempotency_keys k ON k.operation_id=o.id WHERE o.state IN ('queued','running') AND o.updated_at<now()-interval '2 minutes' AND (k.operation_id IS NULL OR k.expires_at<now() OR NOT EXISTS(SELECT 1 FROM product.memberships m WHERE m.institution_id=o.institution_id AND m.user_id=k.user_id AND m.revoked_at IS NULL)) ORDER BY o.updated_at LIMIT 100)").execute(db).await;
+            // Search results older than the 7-day reuse window carry no further value.
+            let _ = sqlx::query("DELETE FROM product.web_searches WHERE id IN (SELECT id FROM product.web_searches WHERE fetched_at<now()-interval '30 days' ORDER BY fetched_at LIMIT 100)").execute(db).await;
             let _ = crate::accounts::retain(&s).await;
             let _ = reclaim_keys(db).await;
             let _ = sqlx::query("UPDATE product.idempotency_keys SET state='failed',response='{}' WHERE operation_id IN (SELECT operation_id FROM product.idempotency_keys WHERE state='pending' AND created_at<now()-interval '5 minutes' ORDER BY created_at LIMIT 100)").execute(db).await;

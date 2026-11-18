@@ -29,7 +29,7 @@ fn duplicate_jev_raw_fields_reject() {
     for id in ["conflict", "claim_0"] {
         let expected = std::collections::BTreeSet::from([id.to_owned()]);
         let raw = json!({"model":"jev-1.13.0","answers":{id:{"type":"noul","noul":if id=="conflict" {0.0}else{0.99}}},"usage":{"input_tokens":20,"output_tokens":5}}).to_string();
-        assert!(crate::providers::validate_jev(raw.as_bytes(), &expected).is_ok());
+        assert!(crate::providers::validate_jev(raw.as_bytes(), &expected, "jev-1.13.0").is_ok());
         for key in [
             id,
             "answers",
@@ -48,7 +48,8 @@ fn duplicate_jev_raw_fields_reject() {
                 };
                 let ambiguous = duplicate_key(&raw, key, first, escaped);
                 assert!(
-                    crate::providers::validate_jev(ambiguous.as_bytes(), &expected).is_err(),
+                    crate::providers::validate_jev(ambiguous.as_bytes(), &expected, "jev-1.13.0")
+                        .is_err(),
                     "{key}, escaped={escaped}"
                 );
             }
@@ -94,6 +95,8 @@ pub(super) fn mock_raw_other(body: &Value, mode: usize, embedding: bool) -> Opti
             _ => None,
         };
     }
+    // Confidence-scoring requests (no conflict question) are answered by the ordinary mock.
+    body["questions"].get("conflict")?;
     let support = body["questions"].get("claim_0").is_some();
     if !matches!((mode, support), (60 | 62, false) | (61 | 63, true)) {
         return None;

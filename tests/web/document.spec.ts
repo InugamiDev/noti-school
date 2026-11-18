@@ -12,8 +12,8 @@ const source = { id: sourceId, institution_id: id, title: 'Synthetic Handbook 20
 const version = { id: versionId, institution_id: id, source_id: sourceId, label: '2026 edition', sha256: 'a'.repeat(64), status: 'approved', indexing: 'ready', effective_from: '2026-08-01T00:00:00Z', effective_until: null, created_at: time };
 const chunk = (chunk_id: string, ordinal: number, page: number, section: string, text: string) => ({ id: chunk_id, institution_id: id, source_id: sourceId, version_id: versionId, ordinal, text, locator: { page, section, start_char: 0, end_char: text.length }, language: 'en' });
 const chunks = [chunk(otherChunk, 0, 1, '1. Scope', 'Synthetic first page text.'), chunk(chunkId, 1, 2, '2. Rules', 'Synthetic cited passage text.')];
-const evidence = { id: citationId, institution_id: id, source_id: sourceId, version_id: versionId, chunk_id: chunkId, title: source.title, version_label: version.label, locator: { page: 2, section: '2. Rules', start_char: 0, end_char: 29 }, quote: 'Synthetic cited passage text.', original_url: null };
-const answer = { id, conversation_id: id, institution_id: id, status: 'answered', language: 'en', claims: [{ text: 'Synthetic claim for the document test.', evidence_ids: [citationId] }], evidence: [evidence], explanation: null, created_at: time };
+const evidence = { id: citationId, institution_id: id, source_id: sourceId, version_id: versionId, chunk_id: chunkId, title: source.title, version_label: version.label, locator: { page: 2, section: '2. Rules', start_char: 0, end_char: 29 }, quote: 'Synthetic cited passage text.', original_url: null, origin: 'approved', domain: null, retrieved_at: null, confidence: null };
+const answer = { id, conversation_id: id, institution_id: id, status: 'answered', language: 'en', claims: [{ text: 'Synthetic claim for the document test.', evidence_ids: [citationId], confidence: null }], evidence: [evidence], explanation: null, confidence: null, created_at: time };
 const fileHeaders = { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment', 'content-security-policy': 'sandbox', 'x-content-type-options': 'nosniff' };
 const denied = (code: string, status: number) => ({ status, json: { error: { code, message: 'Synthetic', request_id: id, retryable: false } } });
 
@@ -23,7 +23,7 @@ async function setup(page: Page, options: { admin?: boolean; versionMissing?: bo
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
     if (path.endsWith('/capabilities')) { const cap = { state: 'available', reason: 'ready' }; return route.fulfill({ json: { mode: 'mock', answers: cap, indexing: cap, discovery: cap, google: cap, email: cap, identity: cap } }); }
-    if (path.endsWith('/institutions')) return route.fulfill({ json: { items: [{ id, slug: 'demo', name: 'Demo university', coverage: 'synthetic_demo' }], next_cursor: null } });
+    if (path.endsWith('/institutions')) return route.fulfill({ json: { items: [{ id, slug: 'demo', name: 'Demo university', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null } });
     if (path.endsWith('/me')) return route.fulfill({ json: { identity: { user_id: 'synthetic-user', session_id: 's', email_verified: true, expires_at: '2027-01-01T00:00:00Z' }, memberships: [{ institution_id: id, role: options.admin === false ? 'student' : 'admin' }] } });
     if (path.endsWith('/answers') && method === 'POST') return route.fulfill({ json: answer });
     if (path.endsWith(`/sources/${sourceId}`)) return route.fulfill({ json: source });

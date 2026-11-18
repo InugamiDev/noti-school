@@ -25,7 +25,13 @@ export const Environment = z.object({
   OPENAI_CHAT_MODEL: optional,
   OPENAI_EMBEDDING_MODEL: z.literal('text-embedding-3-small').default('text-embedding-3-small'),
   EMBEDDING_DIMENSIONS: z.literal('1536').default('1536'),
-  JEV_MODEL: z.literal('jev-1.13.0').default('jev-1.13.0'),
+  // Exact pinned Jev models (docs.typesafe.ai/models, consulted 2026-11-18); no aliases.
+  JEV_MODEL: z.enum(['jev-1.14.0', 'jev-1.13.0']).default('jev-1.14.0'),
+  TINYFISH_API_KEY: optional,
+  TINYFISH_DAILY_SEARCH_LIMIT: z.coerce.number().int().min(1).max(12000).default(1000),
+  TINYFISH_DAILY_FETCH_LIMIT: z.coerce.number().int().min(1).max(1000).default(300),
+  WEB_EVIDENCE_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.6),
+  GRAPH_AUTO_APPROVE: z.coerce.number().min(0).max(1).default(0.9),
   GOOGLE_CLIENT_ID: optional,
   GOOGLE_CLIENT_SECRET: optional,
   SMTP_HOST: optional,
@@ -106,12 +112,15 @@ export function parseEnvironment(
     env.OPENAI_CHAT_MODEL &&
     (env.EVIDENCE_PROVIDER === 'openai' || env.TYPESAFE_API_KEY)
   );
+  // Discovery additionally needs TinyFish and Jev (confidence scoring), whatever EVIDENCE_PROVIDER is.
+  const discovery = providers && !!env.TINYFISH_API_KEY && !!env.TYPESAFE_API_KEY;
   return {
     env,
     configured: {
       identity,
       core: identity && (service === 'auth' || !!env.DATABASE_URL),
       providers,
+      discovery,
       google: identity && !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
       email: identity && !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD && env.SMTP_FROM),
     },

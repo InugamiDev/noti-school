@@ -8,7 +8,7 @@ for (const [width, height] of [[1440, 900], [1920, 1080], [1583, 805], [1366, 76
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.route('**/api/**', route => {
       if (new URL(route.request().url()).pathname.endsWith('/institutions')) return route.fulfill({ json: {
-        items: [{ id, slug: 'demo', name: 'UI preview only - no university data', coverage: 'synthetic_demo' }], next_cursor: null,
+        items: [{ id, slug: 'demo', name: 'UI preview only - no university data', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null,
       } });
       return route.fulfill({ status: 503, json: { error: { code: 'core_unavailable', message: 'Synthetic unavailable fixture', request_id: id, retryable: false } } });
     });

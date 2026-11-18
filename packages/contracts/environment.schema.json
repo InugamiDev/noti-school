@@ -105,9 +105,40 @@
       "const": "1536"
     },
     "JEV_MODEL": {
-      "default": "jev-1.13.0",
+      "default": "jev-1.14.0",
       "type": "string",
-      "const": "jev-1.13.0"
+      "enum": [
+        "jev-1.14.0",
+        "jev-1.13.0"
+      ]
+    },
+    "TINYFISH_API_KEY": {
+      "type": "string",
+      "minLength": 1
+    },
+    "TINYFISH_DAILY_SEARCH_LIMIT": {
+      "default": 1000,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 12000
+    },
+    "TINYFISH_DAILY_FETCH_LIMIT": {
+      "default": 300,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "WEB_EVIDENCE_MIN_CONFIDENCE": {
+      "default": 0.6,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "GRAPH_AUTO_APPROVE": {
+      "default": 0.9,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
     },
     "GOOGLE_CLIENT_ID": {
       "type": "string",

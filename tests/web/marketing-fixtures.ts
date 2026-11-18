@@ -121,7 +121,7 @@ export const test = base.extend<{ marketingAudit: MarketingAudit }>({
                   id: institutionId,
                   slug: "synthetic-qa",
                   name: institutionName,
-                  coverage: "synthetic_demo",
+                  kind: "school", domains: [], coverage: "synthetic_demo",
                 },
               ],
               next_cursor: null,

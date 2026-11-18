@@ -11,7 +11,16 @@ use axum::{
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-const EVIDENCE: &str = "SELECT jsonb_build_object('id',e.id,'source_id',c.source_id,'version_id',c.version_id,'chunk_id',c.id,'institution_id',c.institution_id,'title',s.title,'version_label',v.label,'locator',jsonb_build_object('page',c.page,'section',c.section,'start_char',c.start_char,'end_char',c.end_char),'quote',e.quote,'original_url',s.original_url) FROM product.citations e JOIN product.chunks c ON c.institution_id=e.institution_id AND c.id=e.chunk_id JOIN product.sources s ON s.institution_id=c.institution_id AND s.id=c.source_id JOIN product.source_versions v ON v.institution_id=c.institution_id AND v.id=c.version_id JOIN product.answers a ON a.institution_id=e.institution_id AND a.id=e.answer_id JOIN product.conversations conv ON conv.institution_id=a.institution_id AND conv.id=a.conversation_id JOIN product.memberships m ON m.institution_id=conv.institution_id AND m.user_id=conv.user_id AND m.revoked_at IS NULL WHERE e.institution_id=$1 AND conv.user_id=$2 AND (m.role='admin' OR s.visibility='institution') AND v.approved_at IS NOT NULL AND v.status IN ('approved','archived') AND conv.created_at>now()-interval '30 days'";
+const EVIDENCE: &str = "SELECT jsonb_build_object('id',e.id,'source_id',c.source_id,'version_id',c.version_id,'chunk_id',c.id,'institution_id',c.institution_id,'title',s.title,'version_label',v.label,'locator',jsonb_build_object('page',c.page,'section',c.section,'start_char',c.start_char,'end_char',c.end_char),'quote',e.quote,'original_url',s.original_url,'origin',s.origin,'domain',e.domain,'retrieved_at',e.retrieved_at,'confidence',e.confidence) FROM product.citations e JOIN product.chunks c ON c.institution_id=e.institution_id AND c.id=e.chunk_id JOIN product.sources s ON s.institution_id=c.institution_id AND s.id=c.source_id JOIN product.source_versions v ON v.institution_id=c.institution_id AND v.id=c.version_id JOIN product.answers a ON a.institution_id=e.institution_id AND a.id=e.answer_id JOIN product.conversations conv ON conv.institution_id=a.institution_id AND conv.id=a.conversation_id JOIN product.memberships m ON m.institution_id=conv.institution_id AND m.user_id=conv.user_id AND m.revoked_at IS NULL WHERE e.institution_id=$1 AND conv.user_id=$2 AND (m.role='admin' OR s.visibility='institution') AND ((v.approved_at IS NOT NULL AND v.status IN ('approved','archived')) OR (s.origin='web' AND v.status IN ('draft','archived'))) AND conv.created_at>now()-interval '30 days'";
+// Stored claims; answers persisted before confidence existed have no confidence key.
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredClaim {
+    text: String,
+    evidence_ids: Vec<Uuid>,
+    #[serde(default)]
+    confidence: Option<f64>,
+}
 pub(crate) async fn assemble(s: &AppState, i: Uuid, id: Uuid, user: &str) -> Result<Value> {
     assemble_in(&mut *s.pool()?.acquire().await?, i, id, user).await
 }
@@ -35,7 +44,7 @@ pub(crate) async fn assemble_in(
     .await?;
     let ids: std::collections::BTreeSet<_> =
         evidence.iter().filter_map(|v| v["id"].as_str()).collect();
-    let claims: Vec<crate::providers::Claim> =
+    let claims: Vec<StoredClaim> =
         serde_json::from_value(answer["claims"].clone()).map_err(|_| Error("internal_error"))?;
     // Previously visible evidence may have become admin-only. Do not leak its saved claim text.
     if evidence.len() > 50
@@ -47,6 +56,16 @@ pub(crate) async fn assemble_in(
     {
         return Err(Error("not_found"));
     }
+    // Answer confidence is the lowest claim confidence; unknown when any claim lacks one.
+    let confidence = claims
+        .iter()
+        .map(|c| c.confidence)
+        .try_fold(None::<f64>, |low, c| {
+            c.map(|c| Some(low.map_or(c, |l| l.min(c))))
+        })
+        .flatten();
+    answer["claims"] = json!(claims);
+    answer["confidence"] = json!(confidence);
     answer["evidence"] = json!(evidence);
     Ok(answer)
 }

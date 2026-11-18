@@ -2,13 +2,17 @@ pub mod accounts;
 pub mod answers;
 pub mod auth;
 pub mod budget;
+pub mod confidence;
 pub mod config;
+pub mod discovery;
 pub mod error;
 pub mod graph;
 pub mod http;
 pub mod ingestion;
 pub mod input;
+pub mod institutions;
 pub mod invitations;
+pub mod ontology;
 pub mod pagination;
 pub mod pdf;
 pub mod personal;
@@ -22,6 +26,8 @@ pub mod rag;
 pub mod retrieval;
 pub mod sources;
 pub mod ssrf;
+pub mod tinyfish;
+pub mod web;
 pub mod worker;
 
 use axum::{
@@ -48,6 +54,7 @@ pub struct AppState {
     pub identity_probe: Arc<auth::ProbeCache>,
     pub pipeline_slots: Arc<tokio::sync::Semaphore>,
     pub providers: provider_http::ProviderHttp,
+    pub web: tinyfish::TinyFish,
     #[cfg(test)]
     pub(crate) pricing_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -80,6 +87,7 @@ impl AppState {
             identity_probe: Arc::new(tokio::sync::Mutex::new(None)),
             pipeline_slots: Arc::new(tokio::sync::Semaphore::new(2)),
             providers: provider_http::ProviderHttp::new()?,
+            web: tinyfish::TinyFish::new()?,
             #[cfg(test)]
             pricing_at: None,
         })
@@ -98,6 +106,22 @@ pub fn router(s: AppState) -> Router {
         .route("/api/v1/capabilities", get(capabilities))
         .route("/api/v1/institutions", get(institutions))
         .route("/api/v1/me", get(me))
+        .route(
+            "/api/v1/me/personal-space",
+            post(institutions::personal_space),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/domains",
+            axum::routing::put(institutions::domains),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/web-documents",
+            get(web::list),
+        )
+        .route(
+            "/api/v1/institutions/{institution_id}/web-documents/{web_document_id}",
+            axum::routing::patch(web::act),
+        )
         .route("/internal/invitations/check", post(invitations::check))
         .route("/internal/invitations/redeem", post(invitations::redeem))
         .route("/internal/accounts/delete", post(accounts::delete))
@@ -318,17 +342,44 @@ async fn capabilities(State(s): State<AppState>) -> Json<Value> {
                 json!({"state":"unavailable","reason":"pricing_missing"})
             } else if !available {
                 json!({"state":"unavailable","reason":"budget_exhausted"})
-            } else if s.providers.failed(s.config.evidence_provider) {
+            } else if s.providers.failed(s.config.jev_dependency()) {
                 json!({"state":"unavailable","reason":"provider_failed"})
             } else {
                 json!({"state":"available","reason":"ready"})
             };
         }
     }
+    let discovery = discovery_capability(&s, &ai).await;
     Json(
-        json!({"mode":s.config.mode,"answers":ai,"indexing":ai,"discovery":{"state":"disabled","reason":"not_configured"},
+        json!({"mode":s.config.mode,"answers":ai,"indexing":ai,"discovery":discovery,
         "google":identity["google"],"email":identity["email"],"identity":identity["identity"]}),
     )
+}
+// Discovery needs live mode, TinyFish and Jev keys, Jev prices and budget (via answers) and both the
+// provider allowance (402) and this application's daily self-limits.
+async fn discovery_capability(s: &AppState, ai: &Value) -> Value {
+    if s.config.mode != "live" {
+        return json!({"state":"disabled","reason":"paid_calls_disabled"});
+    }
+    if s.config.tinyfish().is_none() || s.config.jev().is_none() {
+        return json!({"state":"disabled","reason":"not_configured"});
+    }
+    if ai["state"] != "available" {
+        return ai.clone();
+    }
+    let Some(db) = &s.db else {
+        return json!({"state":"unavailable","reason":"core_failed"});
+    };
+    let left = web::usage_left(db, "search", s.config.tinyfish_daily_search_limit).await;
+    let fetch = web::usage_left(db, "fetch", s.config.tinyfish_daily_fetch_limit).await;
+    match (s.web.health(), left, fetch) {
+        (_, Err(_), _) | (_, _, Err(_)) => json!({"state":"unavailable","reason":"core_failed"}),
+        (Some(tinyfish::WebError::Quota), _, _) | (_, Ok(false), _) | (_, _, Ok(false)) => {
+            json!({"state":"unavailable","reason":"quota_exhausted"})
+        }
+        (Some(_), _, _) => json!({"state":"unavailable","reason":"provider_failed"}),
+        (None, Ok(true), Ok(true)) => json!({"state":"available","reason":"ready"}),
+    }
 }
 async fn me(State(s): State<AppState>, h: axum::http::HeaderMap) -> Result<Json<Value>> {
     let identity = auth::session(&s, &h).await?;
@@ -348,7 +399,8 @@ async fn institutions(
     let Some(db) = &s.db else {
         return Ok(Json(json!({"items":[],"next_cursor":null})));
     };
-    let mut items:Vec<Value>=sqlx::query_scalar("SELECT jsonb_build_object('id',i.id,'slug',i.slug,'name',i.name,'coverage',CASE WHEN EXISTS(SELECT 1 FROM product.sources s JOIN product.source_versions v ON v.institution_id=s.institution_id AND v.id=s.current_version_id WHERE s.institution_id=i.id AND s.visibility='institution' AND v.status='approved' AND v.indexing='ready' AND (v.effective_from IS NULL OR v.effective_from<=now()) AND (v.effective_until IS NULL OR v.effective_until>now())) THEN 'approved_sources' ELSE 'none' END) FROM product.institutions i WHERE i.id>$1 ORDER BY i.id LIMIT $2")
+    // Personal spaces are private to their owner and never listed publicly.
+    let mut items: Vec<Value> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT {} FROM product.institutions i WHERE i.kind='school' AND i.id>$1 ORDER BY i.id LIMIT $2", institutions::INSTITUTION_JSON)))
         .bind(id).bind(n+1).fetch_all(db).await?;
     let more = items.len() > n as usize;
     items.truncate(n as usize);

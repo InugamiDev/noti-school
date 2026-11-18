@@ -48,9 +48,11 @@ missing prices remain invalid. A reservation must include at least one positive-
 No rates ship enabled; paid calls remain disabled by default. For default `EVIDENCE_PROVIDER=openai`,
 the coordinator supplies an OpenAI key, exact configured `OPENAI_CHAT_MODEL` and three reviewed rates
 whose dated validity windows cover dispatch: that chat model's `input_tokens` and `output_tokens`,
-plus `text-embedding-3-small`'s `embedding_tokens`. Only explicit `EVIDENCE_PROVIDER=jev` additionally
-requires the TypeSafe/Jev key, pinned `jev-1.13.0` model and its two current dated rates,
-`jev_input_tokens` and `jev_output_tokens`. Missing selected-provider configuration or prices fails
+plus `text-embedding-3-small`'s `embedding_tokens`. Explicit `EVIDENCE_PROVIDER=jev`, or any configured Jev key (confidence scoring and discovery),
+additionally requires the TypeSafe/Jev key, the pinned `JEV_MODEL` (`jev-1.14.0` default or `jev-1.13.0`) and its
+two current dated rates, `jev_input_tokens` and `jev_output_tokens` (operator `prices` import; Jev rows must
+name a pinned model; USD 0.042 per million input tokens and free output per docs.typesafe.ai/models, consulted
+2026-11-18, to be re-reviewed before import). Missing selected-provider configuration or prices fails
 closed; selected-provider failure never triggers automatic fallback. Unpriced components fail closed. Record
 cached tokens conservatively at uncached rate unless independently priced. Never overwrite a used price;
 insert a new ID. Retain old prices for reconciliation and audit.
@@ -81,3 +83,26 @@ amount in `[0, reserved]`, charging the reservation month and recording an immut
 and citation tables (conversation-cascade deletes still run as owner), adds BEFORE DELETE fences on
 versions/chunks/edges, expires invitations on membership revocation, and keeps a hashed
 `product.deleted_identities` tombstone indefinitely so redemption cannot recreate a deleted user. Pure estimate tests are not proof of SQL concurrency correctness.
+
+## Migration 0007: web evidence, confidence, ontology and personal spaces
+
+- `institutions.kind` (`school`|`personal`, immutable), `owner_user_id` (required exactly for personal, one
+  personal space per user via a partial unique index), `domains text[]` (`product.valid_domains`: at most 20
+  distinct lowercase ASCII/punycode hostnames, no IP literals) and coverage `web_discovery`.
+- `sources.origin` (`approved`|`web`, immutable). Web captures are web-origin sources whose versions stay
+  `draft` (superseded captures become `archived`); chunks, citations and graph FKs work unchanged.
+- `web_documents`: per-institution page cache keyed by `(institution_id,url)` with final URL, domain, title,
+  language, `fetched_at`, `stale_after = fetched_at + 7 days` (checked), sha256, ETag, Last-Modified, state
+  `fresh|stale|failed`, blocked flag/actor/time, internal web `source_id` and `promoted_source_id`.
+- `web_searches`: per-institution search cache by normalized parameter hash; params exclude the raw query
+  text; the worker deletes rows older than 30 days (the only runtime DELETE grant added).
+- `web_usage`: global UTC-day counters for TinyFish search/fetch self-limits.
+- `evidence_scores`: Jev components (school, source, relevance, answers, injection, overall; numeric(4,3)) and
+  model per `(institution_id,chunk_id,question_sha256,model)`; stores a hash, never question text.
+- `graph_entities` kinds add `deadline|fee|topic`, with a unique `(institution_id,kind,lower(label))` dedupe
+  index; `graph_edges.confidence numeric(4,3)` nullable; `ontology_jobs` queue (one job per version, rooted
+  in an idempotency key so its paid stages use the normal reservation fences).
+- `citations` gain `confidence jsonb`, `retrieved_at` and `domain` snapshots.
+- Runtime grants: SELECT/INSERT/UPDATE on the new tables (plus DELETE on `web_searches`). `web_documents` and
+  `evidence_scores` carry the `retained_evidence` BEFORE DELETE trigger like other evidence.
+No row-level security is added; tenant scope remains enforced by API queries and tested with the runtime role.

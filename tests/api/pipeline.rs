@@ -33,6 +33,8 @@ const SECRET: &str = "synthetic-internal-secret-test-only-0000";
 mod rag;
 #[path = "repairs.rs"]
 mod repairs;
+#[path = "web.rs"]
+mod web;
 
 async fn call(
     s: &AppState,
@@ -329,6 +331,8 @@ async fn runtime_sql_and_complete_pipeline() {
         ("AI_LIVE_CALLS_ENABLED".into(), "true".into()),
         ("OPENAI_API_KEY".into(), "synthetic-only".into()),
         ("OPENAI_CHAT_MODEL".into(), "synthetic-model".into()),
+        // The suite's Jev fixtures pin the older accepted model; the default is jev-1.14.0.
+        ("JEV_MODEL".into(), "jev-1.13.0".into()),
         ("UPLOAD_DIR".into(), upload_dir.clone()),
     ]);
     let mut s = AppState::new(Config::parse(&vars).unwrap()).unwrap();
@@ -906,7 +910,7 @@ async fn runtime_sql_and_complete_pipeline() {
         404
     );
     assert!(
-        crate::pipeline::candidates(&s, i, &student, "synthetic", &vec![0.01; 1536])
+        crate::pipeline::candidates(&s, i, &student, "synthetic", &vec![0.01; 1536], &[])
             .await
             .unwrap()
             .is_empty()
@@ -924,7 +928,7 @@ async fn runtime_sql_and_complete_pipeline() {
     .await
     .unwrap();
     assert!(
-        crate::pipeline::candidates(&s, i, &student, "synthetic", &vec![0.01; 1536])
+        crate::pipeline::candidates(&s, i, &student, "synthetic", &vec![0.01; 1536], &[])
             .await
             .unwrap()
             .is_empty()
@@ -984,9 +988,10 @@ async fn runtime_sql_and_complete_pipeline() {
         old_status, "approved",
         "approval cannot flip another version"
     );
-    let candidates = crate::pipeline::candidates(&s, i, &student, "synthetic", &vec![0.01; 1536])
-        .await
-        .unwrap();
+    let candidates =
+        crate::pipeline::candidates(&s, i, &student, "synthetic", &vec![0.01; 1536], &[])
+            .await
+            .unwrap();
     assert!(candidates.iter().all(|v| v["version_id"] == v2.to_string()));
     assert_eq!(
         call(
@@ -1051,10 +1056,16 @@ async fn runtime_sql_and_complete_pipeline() {
     assert_eq!(eligible.len(), 12);
     let seed = eligible[0];
     let target = eligible[11];
-    let baseline =
-        crate::pipeline::candidates(&s, i, &student, "zzzz-no-lexical-hit", &vec![0.01; 1536])
-            .await
-            .unwrap();
+    let baseline = crate::pipeline::candidates(
+        &s,
+        i,
+        &student,
+        "zzzz-no-lexical-hit",
+        &vec![0.01; 1536],
+        &[],
+    )
+    .await
+    .unwrap();
     assert_eq!(baseline.len(), 11);
     assert!(baseline.iter().all(|e| e["id"] != target.to_string()));
     let mut expanded_edges = Vec::new();
@@ -1076,10 +1087,16 @@ async fn runtime_sql_and_complete_pipeline() {
             200
         );
     }
-    let expanded =
-        crate::pipeline::candidates(&s, i, &student, "zzzz-no-lexical-hit", &vec![0.01; 1536])
-            .await
-            .unwrap();
+    let expanded = crate::pipeline::candidates(
+        &s,
+        i,
+        &student,
+        "zzzz-no-lexical-hit",
+        &vec![0.01; 1536],
+        &[],
+    )
+    .await
+    .unwrap();
     assert_eq!(expanded.len(), 12);
     assert!(expanded.iter().any(|e| e["id"] == target.to_string()));
     let graph_passage = expanded
@@ -1159,10 +1176,17 @@ async fn runtime_sql_and_complete_pipeline() {
         200
     );
     assert_eq!(
-        crate::pipeline::candidates(&s, i, &student, "zzzz-no-lexical-hit", &vec![0.01; 1536])
-            .await
-            .unwrap()
-            .len(),
+        crate::pipeline::candidates(
+            &s,
+            i,
+            &student,
+            "zzzz-no-lexical-hit",
+            &vec![0.01; 1536],
+            &[]
+        )
+        .await
+        .unwrap()
+        .len(),
         11
     );
     assert_eq!(call(&s,"POST",&format!("/api/v1/institutions/{other}/graph/edges"),&admin,json!({"from_entity_id":entity1["id"],"to_entity_id":entity2["id"],"relation":"forbidden","evidence_chunk_id":chunk_id}),None).await.0,404);

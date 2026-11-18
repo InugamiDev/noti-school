@@ -17,6 +17,10 @@ import { formatDate, type Lang } from './ui/format';
 export default function AnswerView(props: {
   institution: string;
   institutionName: string | undefined;
+  /** The reader's private space: it has no staff, so web pages are worded as unreviewed by anyone. */
+  personal: boolean;
+  /** The pending question also searches the web, so the waiting text says so. */
+  discovering: boolean;
   demo: boolean;
   busy: boolean;
   /** A deep link is rebuilding the thread from saved answers. */
@@ -150,7 +154,7 @@ export default function AnswerView(props: {
         if (!answer || !column) return;
         const last = column.querySelector('.turn:last-of-type');
         if (!last || !motionAllowed(last)) return;
-        enter(last.querySelectorAll('.answer-status'), { opacity: [0, 1] }, { duration: dur.sm });
+        enter(last.querySelectorAll('.answer-status, .answer-confidence, .web-notice'), { opacity: [0, 1] }, { duration: dur.sm });
         enter(
           last.querySelectorAll('.claim, .abstain, .answer-note'),
           { opacity: [0, 1], y: [8, 0] },
@@ -163,7 +167,7 @@ export default function AnswerView(props: {
         );
         enter(last.querySelectorAll('.report-button'), { opacity: [0, 1] }, { duration: dur.sm, delay: 0.3 });
         enter(
-          aside?.querySelectorAll('.source-list li'),
+          aside?.querySelectorAll('.source-list > li'),
           { opacity: [0, 1], x: [14, 0] },
           { duration: dur.md, delay: stagger(0.06, { startDelay: 0.26 }) },
         );
@@ -190,7 +194,7 @@ export default function AnswerView(props: {
             {title()}
           </h1>
           <p class="muted thread-meta">
-            {props.institutionName}
+            {props.personal ? t(lang(), 'mySpace') : props.institutionName}
             {props.demo ? ' · Demo' : ''}
             <Show when={answered().length > 1}>
               {` · ${answered().length} ${t(lang(), 'answersCount')}`}
@@ -218,7 +222,15 @@ export default function AnswerView(props: {
         <div class="thread">
           <For each={props.turns}>
             {(turn) => (
-              <TurnView turn={turn} citation={props.citation} setCitation={choose} hot={hot()} setHot={setHot}>
+              <TurnView
+                turn={turn}
+                citation={props.citation}
+                setCitation={choose}
+                hot={hot()}
+                setHot={setHot}
+                school={props.institutionName}
+                personal={props.personal}
+              >
                 <Show when={turn.answer}>
                   {(a) => (
                     <>
@@ -272,7 +284,8 @@ export default function AnswerView(props: {
           </For>
           <Show when={props.busy}>
             <div class="answer-loading">
-              <LoadingStatus>{t(props.pendingLanguage, 'findingAnswer')}</LoadingStatus>
+              {/* One truthful line: the API returns a single final answer, so there are no step updates. */}
+              <LoadingStatus>{t(props.pendingLanguage, props.discovering ? 'searchingWeb' : 'findingAnswer')}</LoadingStatus>
               <SkeletonLines lines={3} class="answer-skeleton" />
             </div>
           </Show>

@@ -1,7 +1,10 @@
 import { For, Show, type JSX } from 'solid-js';
-import { BookOpen, SearchX } from 'lucide-solid';
+import { BookOpen, Globe, SearchX } from 'lucide-solid';
 import type { AnswerOutput } from '@noti/contracts';
-import { t } from './ui/i18n';
+import { fill, t } from './ui/i18n';
+import { ConfidenceDetails, ConfidenceTag } from './ui/Confidence';
+import { FetchedDate, OriginTag } from './ui/Origin';
+import { confidenceLevel, sentenceKey } from './ui/confidence-level';
 import './ui/thread.css';
 
 export type Turn = { key: string; question: string | undefined; answer?: AnswerOutput };
@@ -29,11 +32,24 @@ export function TurnView(
     turn: Turn;
     /** Position in a list, for staggered entrances. */
     index?: number;
+    /** Name of the school whose staff have not reviewed web pages; omitted when unknown. */
+    school?: string | undefined;
+    /** The answer was asked in the reader's private space, which has no staff. */
+    personal?: boolean;
     children?: JSX.Element;
   },
 ) {
   const answer = () => props.turn.answer;
   const lang = () => answer()?.language;
+  // Web pages are never presented as approved: any cited web evidence adds the notice.
+  const webNotice = () => {
+    const a = answer();
+    if (!a?.evidence.some((e) => e.origin === 'web')) return '';
+    if (props.personal) return t(a.language, 'webNoticePersonal');
+    return props.school
+      ? fill(t(a.language, 'webNotice'), { school: props.school })
+      : t(a.language, 'webNoticeGeneric');
+  };
   const number = (id: string) => (answer()?.evidence.findIndex((e) => e.id === id) ?? -1) + 1;
   return (
     <article
@@ -53,6 +69,22 @@ export function TurnView(
         {(a) => (
           <div class="turn-answer" lang={a().language}>
             <p class="answer-status" data-status={a().status}>{t(a().language, statusKey(a().status))}</p>
+            <Show when={a().confidence !== null ? { value: a().confidence! } : undefined} keyed>
+              {(overall) => (
+                <p class="answer-confidence">
+                  <ConfidenceTag value={overall.value} lang={a().language} />
+                  <span>{t(a().language, sentenceKey[confidenceLevel(overall.value)])}</span>
+                </p>
+              )}
+            </Show>
+            <Show when={webNotice()}>
+              {(notice) => (
+                <p class="web-notice" role="note">
+                  <Globe size={16} aria-hidden="true" />
+                  <span>{notice()}</span>
+                </p>
+              )}
+            </Show>
             <Show
               when={a().status !== 'abstained'}
               fallback={
@@ -96,6 +128,9 @@ export function TurnView(
                         )}
                       </For>
                     </span>
+                    <Show when={claim.confidence !== null}>
+                      <ConfidenceTag class="claim-confidence" value={claim.confidence} lang={a().language} />
+                    </Show>
                   </p>
                 )}
               </For>
@@ -143,6 +178,13 @@ export function SourceList(props: Linking & { answer: AnswerOutput }) {
                   {body()}
                 </button>
               </Show>
+              <div class="source-meta">
+                <OriginTag origin={e.origin} domain={e.domain} lang={lang()} />
+                <Show when={e.origin === 'web'}>
+                  <FetchedDate at={e.retrieved_at} lang={lang()} />
+                </Show>
+                <ConfidenceDetails confidence={e.confidence} lang={lang()} />
+              </div>
             </li>
           );
         }}

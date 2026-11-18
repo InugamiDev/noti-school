@@ -40,15 +40,7 @@ pub async fn entity(
     Json(b): Json<Entity>,
 ) -> Result<(StatusCode, Json<Value>)> {
     let u = auth::member(&s, &h, i, true).await?;
-    if ![
-        "course",
-        "procedure",
-        "regulation",
-        "office",
-        "form",
-        "program",
-    ]
-    .contains(&b.kind.as_str())
+    if !crate::ontology::KINDS.contains(&b.kind.as_str())
         || b.label.trim().is_empty()
         || b.label.chars().count() > 300
     {
@@ -61,7 +53,7 @@ pub async fn entity(
 const READABLE: &str = "FROM product.graph_edges e JOIN product.chunks c ON c.institution_id=e.institution_id AND c.id=e.evidence_chunk_id JOIN product.source_versions v ON v.institution_id=c.institution_id AND v.id=c.version_id JOIN product.sources s ON s.institution_id=c.institution_id AND s.id=c.source_id JOIN product.memberships m ON m.institution_id=c.institution_id AND m.user_id=$2 AND m.revoked_at IS NULL WHERE e.institution_id=$1 AND (m.role='admin' OR (e.status='approved' AND s.visibility='institution' AND s.current_version_id=v.id AND v.status='approved' AND v.indexing='ready' AND (v.effective_from IS NULL OR v.effective_from<=now()) AND (v.effective_until IS NULL OR v.effective_until>now())))";
 fn projection() -> String {
     format!(
-        "jsonb_build_object('id',e.id,'institution_id',e.institution_id,'from_entity_id',e.from_entity_id,'to_entity_id',e.to_entity_id,'relation',e.relation,'status',e.status,'evidence',jsonb_build_array({EVIDENCE_JSON}))"
+        "jsonb_build_object('id',e.id,'institution_id',e.institution_id,'from_entity_id',e.from_entity_id,'to_entity_id',e.to_entity_id,'relation',e.relation,'status',e.status,'confidence',e.confidence::float8,'evidence',jsonb_build_array({EVIDENCE_JSON}))"
     )
 }
 async fn get(s: &AppState, i: Uuid, user: &str, id: Uuid) -> Result<Value> {

@@ -102,13 +102,19 @@ fn private_networks_and_redirect_targets_denied() {
 fn jev_schema_ids_usage_and_support_fail_closed() {
     let expected = BTreeSet::from(["claim_0".into(), "conflict".into()]);
     let good = serde_json::json!({"model":"jev-1.13.0","answers":{"claim_0":{"type":"noul","noul":0.98},"conflict":{"type":"noul","noul":0.0}},"usage":{"input_tokens":100,"output_tokens":10}});
-    assert!(providers::validate_jev(&serde_json::to_vec(&good).unwrap(), &expected).is_ok());
+    assert!(
+        providers::validate_jev(&serde_json::to_vec(&good).unwrap(), &expected, "jev-1.13.0")
+            .is_ok()
+    );
     for bad in [
         serde_json::json!({}),
         serde_json::json!({"model":"jev-latest"}),
         serde_json::json!({"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":1,"output_tokens":1}}),
     ] {
-        assert!(providers::validate_jev(&serde_json::to_vec(&bad).unwrap(), &expected).is_err());
+        assert!(
+            providers::validate_jev(&serde_json::to_vec(&bad).unwrap(), &expected, "jev-1.13.0")
+                .is_err()
+        );
     }
     for n in [
         serde_json::json!(-0.1),
@@ -118,9 +124,14 @@ fn jev_schema_ids_usage_and_support_fail_closed() {
     ] {
         let mut bad = good.clone();
         bad["answers"]["claim_0"]["noul"] = n;
-        assert!(providers::validate_jev(&serde_json::to_vec(&bad).unwrap(), &expected).is_err());
+        assert!(
+            providers::validate_jev(&serde_json::to_vec(&bad).unwrap(), &expected, "jev-1.13.0")
+                .is_err()
+        );
     }
-    let response = providers::validate_jev(&serde_json::to_vec(&good).unwrap(), &expected).unwrap();
+    let response =
+        providers::validate_jev(&serde_json::to_vec(&good).unwrap(), &expected, "jev-1.13.0")
+            .unwrap();
     let id = uuid::Uuid::new_v4();
     let claim = providers::Claim {
         text: "Synthetic fixture claim".into(),
@@ -242,7 +253,7 @@ fn unsupported_claims_and_rrf() {
     let id = uuid::Uuid::new_v4();
     let other = uuid::Uuid::new_v4();
     let expected = BTreeSet::from(["claim_0".into(), "conflict".into()]);
-    let response=providers::validate_jev(br#"{"model":"jev-1.13.0","answers":{"claim_0":{"type":"noul","noul":0.1},"conflict":{"type":"noul","noul":0.0}},"usage":{"input_tokens":100,"output_tokens":10}}"#,&expected).unwrap();
+    let response=providers::validate_jev(br#"{"model":"jev-1.13.0","answers":{"claim_0":{"type":"noul","noul":0.1},"conflict":{"type":"noul","noul":0.0}},"usage":{"input_tokens":100,"output_tokens":10}}"#,&expected,"jev-1.13.0").unwrap();
     assert!(
         providers::validate_claims(
             &[providers::Claim {

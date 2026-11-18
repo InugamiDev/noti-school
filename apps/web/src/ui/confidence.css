@@ -1,0 +1,228 @@
+/* Confidence and origin labels in the clay system. The word is the signal; tint, bars and number
+   repeat it. Tones reuse the sage, butter and warm chips already used for statuses. */
+.confidence-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 640;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  background: var(--bg-deep);
+}
+.confidence-tag[data-level='high'] {
+  color: #3f6338;
+  background: var(--sage-soft);
+}
+.confidence-tag[data-level='medium'] {
+  color: #6f5413;
+  background: var(--butter-soft);
+}
+.confidence-tag[data-level='low'] {
+  color: var(--vermilion);
+  background: var(--vermilion-soft);
+}
+.confidence-number {
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+.confidence-bars {
+  flex-shrink: 0;
+}
+.confidence-bars .on {
+  fill: currentColor;
+}
+.confidence-bars .off {
+  fill: currentColor;
+  opacity: 0.25;
+}
+
+/* Disclosure: the tag is the button; the four checks open beneath it. */
+.confidence {
+  display: contents;
+}
+button.confidence-toggle {
+  min-height: 32px;
+  padding: 3px 8px 3px 3px;
+  gap: 4px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+}
+button.confidence-toggle:hover,
+button.confidence-toggle:active {
+  background: rgb(255 255 255 / 0.5);
+  box-shadow: none;
+}
+.confidence-chevron {
+  transition: transform var(--dur-sm) var(--ease-out);
+}
+.confidence-toggle[aria-expanded='true'] .confidence-chevron {
+  transform: rotate(180deg);
+}
+.confidence-parts {
+  flex-basis: 100%;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  box-shadow: var(--clay-well);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.confidence-parts[hidden] {
+  display: none;
+}
+.confidence-parts ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.confidence-parts li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 38px;
+  align-items: center;
+  gap: 10px;
+}
+.confidence-meter {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-deep);
+  overflow: hidden;
+}
+.confidence-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--line-strong);
+}
+.confidence-meter[data-level='high'] span {
+  background: #6f9a64;
+}
+.confidence-meter[data-level='medium'] span {
+  background: #c9a443;
+}
+.confidence-meter[data-level='low'] span {
+  background: var(--vermilion);
+}
+.confidence-part-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 620;
+  color: var(--ink);
+}
+.confidence-model {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* Origin: approved document or web page with its domain. */
+.origin-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 620;
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+}
+.origin-tag svg {
+  flex-shrink: 0;
+}
+.origin-tag[data-origin='web'] {
+  color: var(--ink-soft);
+}
+.origin-domain {
+  font-weight: 560;
+}
+.fetched-date {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Answer header: overall confidence in one sentence, then a calm note about web pages. */
+.answer-confidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.web-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--sky-soft);
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.web-notice svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--cyan);
+}
+/* Claims: a quiet trailing label, never louder than the sentence it follows. */
+.claim-confidence {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.claim-confidence.confidence-tag {
+  min-height: 20px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 560;
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* Source cards: origin, fetch date and confidence sit under the card they describe. */
+.source-list > li {
+  margin-bottom: 14px;
+}
+.source-list .source-citation {
+  margin-bottom: 6px;
+}
+.source-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 0 6px;
+}
+.reader .source-meta {
+  padding: 0;
+  margin: 4px 0 2px;
+}
+
+[data-motion='off'] .confidence-chevron {
+  transition: none;
+}
+
+/* Private space: a short line under the composer says who can see it. */
+.space-note {
+  max-width: 62ch;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+}
+.space-note a {
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

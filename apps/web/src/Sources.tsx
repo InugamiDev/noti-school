@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { LoadingStatus, SkeletonList } from './ui/Loader';
 import { createRemoteResource as createResource, accessScope } from './resource';
-import { ArrowLeft, BookOpen, ExternalLink, Search, X } from 'lucide-solid';
+import { ArrowLeft, BookOpen, ExternalLink, Globe, Search, X } from 'lucide-solid';
 import { get, errorText, safeLink } from './api';
 import { scoped } from './App';
 import Pagination, { pageSuffix } from './Pagination';
@@ -9,6 +9,8 @@ import { SourceRow, formatLabel, type SourceItem, type VersionItem } from './Col
 import { DownloadButton, fileName } from './ui/Download';
 import { formatDate, type Lang } from './ui/format';
 import { t } from './ui/i18n';
+import { ConfidenceDetails } from './ui/Confidence';
+import { FetchedDate, OriginTag } from './ui/Origin';
 import './ui/sources.css';
 
 // Diacritic- and case-insensitive matching so "quy che" finds "Quy chế".
@@ -103,8 +105,13 @@ export default function Sources(props: {
     (key) =>
       get(scoped(key.id, '/citations/{citation_id}', { citation_id: key.citation }), 'Evidence'),
   );
+  // A web page is not a library document: it has no edition, stored passage or file to read here.
+  const approved = () => {
+    const e = evidence();
+    return e && e.origin !== 'web' ? e : false;
+  };
   const [version] = createResource(
-    () => evidence(),
+    approved,
     (e) =>
       get(
         scoped(e.institution_id, '/versions/{version_id}', { version_id: e.version_id }),
@@ -112,12 +119,12 @@ export default function Sources(props: {
       ),
   );
   const [chunk] = createResource(
-    () => evidence(),
+    approved,
     (e) => get(scoped(e.institution_id, '/chunks/{chunk_id}', { chunk_id: e.chunk_id }), 'Chunk'),
   );
   // The cited document's format decides the download's file extension.
   const [origin] = createResource(
-    () => evidence(),
+    approved,
     (e) => get(scoped(e.institution_id, '/sources/{source_id}', { source_id: e.source_id }), 'Source'),
   );
   createEffect(() => {
@@ -343,6 +350,7 @@ export default function Sources(props: {
       </Show>
       <Show when={evidence()}>
         {(e) => {
+          const web = () => e().origin === 'web';
           const expired = () => !!version() && ended(version()!);
           const superseded = () => expired() || version()?.status === 'archived';
           const locator = () =>
@@ -377,6 +385,19 @@ export default function Sources(props: {
                   <span class="chip chip-current">{t(lang(), 'inEffect')}</span>
                 </Show>
               </p>
+              <div class="source-meta">
+                <OriginTag origin={e().origin} domain={e().domain} lang={lang()} />
+                <Show when={web()}>
+                  <FetchedDate at={e().retrieved_at} lang={lang()} />
+                </Show>
+                <ConfidenceDetails confidence={e().confidence} lang={lang()} />
+              </div>
+              <Show when={web()}>
+                <p class="web-notice" role="note">
+                  <Globe size={16} aria-hidden="true" />
+                  <span>{t(lang(), 'webPassageNotice')}</span>
+                </p>
+              </Show>
               <Show when={expired()}>
                 <p class="notice">Expired version · historical citation</p>
               </Show>
@@ -390,23 +411,25 @@ export default function Sources(props: {
                 )}
               </Show>
               <div class="reader-links">
-                <a
-                  class="reader-open"
-                  href={documentHref(e().source_id, e().version_id, { page: e().locator.page, chunk: e().chunk_id, fromAnswer: true })}
-                >
-                  <BookOpen size={16} aria-hidden="true" />
-                  {t(lang(), 'openOriginal')}
-                  {e().locator.page ? ` · ${t(lang(), 'page')} ${e().locator.page}` : ''}
-                </a>
-                <DownloadButton
-                  href={scoped(props.institution, '/versions/{version_id}/file', { version_id: e().version_id })}
-                  filename={fileName(e().title, e().version_label, origin()?.kind)}
-                  label={`${t(lang(), 'downloadOriginal')} (${e().version_label})`}
-                />
+                <Show when={!web()}>
+                  <a
+                    class="reader-open"
+                    href={documentHref(e().source_id, e().version_id, { page: e().locator.page, chunk: e().chunk_id, fromAnswer: true })}
+                  >
+                    <BookOpen size={16} aria-hidden="true" />
+                    {t(lang(), 'openOriginal')}
+                    {e().locator.page ? ` · ${t(lang(), 'page')} ${e().locator.page}` : ''}
+                  </a>
+                  <DownloadButton
+                    href={scoped(props.institution, '/versions/{version_id}/file', { version_id: e().version_id })}
+                    filename={fileName(e().title, e().version_label, origin()?.kind)}
+                    label={`${t(lang(), 'downloadOriginal')} (${e().version_label})`}
+                  />
+                </Show>
                 <Show when={safeLink(e().original_url)}>
                   {(url) => (
                     <a href={url()} target="_blank" rel="noopener noreferrer">
-                      {t(lang(), 'publisherPage')} <ExternalLink size={16} aria-hidden="true" />
+                      {t(lang(), web() ? 'openWebPage' : 'publisherPage')} <ExternalLink size={16} aria-hidden="true" />
                     </a>
                   )}
                 </Show>

@@ -80,3 +80,35 @@ test('migration target guard rejects shared DBs, remote hosts, role confusion an
   ])
     assert.throws(() => databaseTarget(raw, 'migrator', true));
 });
+test('web discovery settings: pinned Jev model, bounded limits and thresholds, server-side key', () => {
+  const live = {
+    AI_MODE: 'live',
+    AI_LIVE_CALLS_ENABLED: 'true',
+    OPENAI_API_KEY: 'fixture',
+    OPENAI_CHAT_MODEL: 'fixture-model',
+  };
+  const defaults = parseEnvironment({}).env;
+  assert.equal(defaults.JEV_MODEL, 'jev-1.14.0');
+  assert.equal(defaults.TINYFISH_DAILY_SEARCH_LIMIT, 1000);
+  assert.equal(defaults.TINYFISH_DAILY_FETCH_LIMIT, 300);
+  assert.equal(defaults.WEB_EVIDENCE_MIN_CONFIDENCE, 0.6);
+  assert.equal(defaults.GRAPH_AUTO_APPROVE, 0.9);
+  assert.equal(parseEnvironment({ JEV_MODEL: 'jev-1.13.0' }).env.JEV_MODEL, 'jev-1.13.0');
+  assert.equal(parseEnvironment(live).configured.discovery, false);
+  assert.equal(parseEnvironment({ ...live, TINYFISH_API_KEY: 'fixture' }).configured.discovery, false);
+  assert.equal(
+    parseEnvironment({ ...live, TINYFISH_API_KEY: 'fixture', TYPESAFE_API_KEY: 'fixture' }).configured.discovery,
+    true,
+  );
+  for (const input of [
+    { JEV_MODEL: 'jev-latest' },
+    { JEV_MODEL: 'jev-1.14' },
+    { TINYFISH_DAILY_SEARCH_LIMIT: '0' },
+    { TINYFISH_DAILY_SEARCH_LIMIT: '12001' },
+    { TINYFISH_DAILY_FETCH_LIMIT: '1001' },
+    { WEB_EVIDENCE_MIN_CONFIDENCE: '1.5' },
+    { GRAPH_AUTO_APPROVE: '-0.1' },
+    { VITE_TINYFISH_API_KEY: 'fixture' },
+  ])
+    assert.throws(() => parseEnvironment(input), JSON.stringify(input));
+});

@@ -92,19 +92,20 @@ impl ProviderHttp {
         key: &str,
         body: &Value,
         ids: &BTreeSet<String>,
+        model: &str,
         attempt: Attempt,
     ) -> Result<providers::JevResponse> {
         if !attempt.is_for(OperationKind::Jev)
-            || body["model"] != providers::JEV_MODEL
+            || body["model"] != model
             || body["questions"]
                 .as_object()
                 .is_none_or(|m| m.keys().cloned().collect::<BTreeSet<_>>() != *ids)
             || ids.is_empty()
-            || ids.len() > 32
+            || ids.len() > providers::JEV_QUESTIONS
             || serde_json::to_vec(body)
                 .map_err(crate::error::invalid)?
                 .len()
-                > 30000
+                > providers::JEV_BODY_LIMIT
         {
             return Err(Self::unsent(attempt, Error("invalid_request")).await);
         }
@@ -115,10 +116,10 @@ impl ProviderHttp {
             Ok(bytes) => bytes,
             Err(e) => return Err(Self::reject(attempt, None, e).await),
         };
-        let response = match self.observe("jev", providers::validate_jev(&bytes, ids)) {
+        let response = match self.observe("jev", providers::validate_jev(&bytes, ids, model)) {
             Ok(response) => response,
             Err(e) => {
-                let usage = providers::validated_jev_usage(&bytes);
+                let usage = providers::validated_jev_usage(&bytes, model);
                 return Err(Self::reject(attempt, usage, e).await);
             }
         };
@@ -163,6 +164,52 @@ impl ProviderHttp {
             .settle(vec![tokens], serde_json::json!(vector))
             .await?;
         Ok(vector)
+    }
+    pub async fn embedding_batch(
+        &self,
+        key: &str,
+        inputs: &[String],
+        attempt: Attempt,
+    ) -> Result<Vec<Vec<f32>>> {
+        let body = serde_json::json!({"model":"text-embedding-3-small","input":inputs,"dimensions":1536,"encoding_format":"float"});
+        if !attempt.is_for(OperationKind::EmbeddingBatch)
+            || inputs.is_empty()
+            || inputs.len() > 40
+            || inputs.iter().any(|i| crate::input::validate(i).is_err())
+            || serde_json::to_vec(&body)
+                .map_err(crate::error::invalid)?
+                .len()
+                > 60_000
+        {
+            return Err(Self::unsent(attempt, Error("invalid_request")).await);
+        }
+        let bytes = match self
+            .exchange(
+                "https://api.openai.com/v1/embeddings",
+                key,
+                &body,
+                Duration::from_secs(30),
+            )
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(e) => return Err(Self::reject(attempt, None, e).await),
+        };
+        let usage = providers::validated_embeddings_usage(&bytes);
+        let vectors = match self.observe(
+            "openai",
+            providers::validate_embeddings(&bytes, inputs.len()),
+        ) {
+            Ok(vectors) => vectors,
+            Err(e) => return Err(Self::reject(attempt, usage.map(|n| vec![n]), e).await),
+        };
+        let Some(tokens) = usage else {
+            return Err(Self::reject(attempt, None, Error("provider_unavailable")).await);
+        };
+        attempt
+            .settle(vec![tokens], serde_json::json!(vectors))
+            .await?;
+        Ok(vectors)
     }
     pub async fn generate(
         &self,
@@ -341,6 +388,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let body = providers::jev_request(
+            "jev-1.13.0",
             serde_json::json!({"text":"Synthetic evidence"}),
             std::collections::BTreeMap::from([("support".into(), "Is this supported?".into())]),
         )
@@ -355,7 +403,10 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(providers::validate_jev(&bytes, &BTreeSet::from(["support".into()])).is_ok());
+        assert!(
+            providers::validate_jev(&bytes, &BTreeSet::from(["support".into()]), "jev-1.13.0")
+                .is_ok()
+        );
         server.abort();
         let _ = server.await;
     }

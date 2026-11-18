@@ -527,6 +527,50 @@ button.admin-quiet {
 .admin-disclosure-body .admin-version + .admin-version {
   margin-top: 12px;
 }
+/* Web pages: the cached list beside the school's own domains. */
+.admin-web {
+  margin-top: 28px;
+}
+.admin-web-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.web-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.web-page .confirm-row {
+  margin-top: 12px;
+}
+.web-page .actions {
+  align-items: center;
+}
+.admin-domains {
+  min-width: 0;
+  padding: 20px;
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: var(--clay-sm);
+}
+.admin-domains > p {
+  margin: 6px 0 14px;
+  font-size: 14px;
+}
+.admin-domains textarea {
+  width: 100%;
+  min-height: 112px;
+}
+.admin-edge-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 6px 0;
+}
 .admin-message {
   margin: 16px 0 0;
   padding: 2px 0;
@@ -556,6 +600,7 @@ button.admin-quiet {
 
 @media (max-width: 900px) {
   .admin-layout,
+  .admin-web-layout,
   .admin-graph-forms {
     grid-template-columns: 1fr;
   }

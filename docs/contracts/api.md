@@ -90,7 +90,9 @@ request hash and final response in the same transaction as job/operation creatio
 is 409, same in-flight key is 409. Ask also hashes the selected evidence provider, exact generation/embedding models and request templates, and pipeline/prompt/schema versions; secrets are excluded. Completed and racing replays require the same body and execution contract or return 409 without another provider call. Keys from older request-only hashes conflict; authorized historical answer reads remain separate from ask replay. Retain 24h.
 Retain in-flight/uncertain keys beyond 24h until terminal reconciliation; expiry alone is not cleanup permission.
 Conversation institution/owner is immutable. `discover=true` requires separately available discovery and
-explicit user opt-in; discovery candidates never enter approved answer evidence without review.
+explicit user opt-in (503 `provider_unavailable` when TinyFish/Jev are not configured). Discovered pages are
+answer evidence only after fetch, chunking, embedding and Jev scoring; they keep `origin: "web"` and are never
+approved corpus evidence unless an administrator promotes them into the normal review flow.
 
 Missing OpenAI or the explicitly selected evidence provider, unknown/stale required pricing, exhausted budget or selected-provider outage disables paid answers, embedding/indexing and discovery. EVIDENCE_PROVIDER defaults to openai; jev adds its own key/model/prices. Return 503 with the affected capability, never mock text in live mode or automatic OpenAI fallback for selected Jev. Lexical/source-only search may continue against approved indexed
 records, explicitly indicating coverage; no inference pass is implied. Provider failures mark capabilities
@@ -101,7 +103,7 @@ Answer persistence holds membership/source/graph mutation locks and bounds SQL l
 Persist dispatched state before HTTP; cancellation, disconnect, malformed usage or ambiguous timeout
 retains reservation (`uncertain`); a validated-usage reply rejected on content settles that usage. A
 replay of a definitively failed key returns the stored error code without dispatch. No retry on schema-invalid replies unless explicitly budgeted. Jev pinned version
-`jev-1.13.0`; validate expected question IDs exactly and finite probabilities in [0,1]. Never send auth
+from `JEV_MODEL` (`jev-1.14.0` default, `jev-1.13.0` accepted, no aliases); validate expected question IDs exactly and finite probabilities in [0,1]. Never send auth
 secrets or treat retrieved instructions as authority. English and Vietnamese need separate live evaluation.
 
 Default retention: conversations/answers/feedback 30 days; ordinary terminal idempotency records expire
@@ -144,3 +146,36 @@ An empty listing is explicitly empty; missing backend integration renders unavai
 unreviewed; graph ID cursors are the documented institution/role-bound exception to timestamp cursors.
 
 See [operator commands](operator.md) for the guarded setup, immutable price import and retention paths.
+
+## Web evidence, confidence and personal spaces (contract freeze 2026-11-18)
+
+Evidence always carries `origin` (`approved` or `web`), `domain` (web host, else null), `retrieved_at` (fetch
+time of the cited web capture, else null) and `confidence` (Jev Confidence, or null when Jev is not configured).
+`Claim.confidence` is the lowest cited-evidence overall confidence, times the Jev claim-support probability
+when `EVIDENCE_PROVIDER=jev`; null when any cited evidence lacks confidence. `Answer.confidence` is the lowest
+claim confidence (null for abstentions or unknown). Answers citing web evidence are `qualified`. Search
+results (`POST /search`) are approved-only and carry `origin: "approved"` with null domain/fetch time/confidence.
+Graph edges include `confidence` (Jev relation score, null for admin-created or unscored edges).
+
+`GET /institutions/{id}/web-documents` (admin): the institution's cached web pages, `(created_at,id)` cursor,
+blocked pages excluded. `state` is `fresh` until 7 days after `fetched_at`, then `stale` (also when an admin
+forced a refresh); `failed` when the last re-fetch failed. `source_id` is the promoted source (null until
+promoted); `confidence` is the best stored score among the current capture's chunks. `PATCH .../{id}` with
+`promote` creates a normal (`origin: approved`) url source and a `pending_review` version through ordinary
+ingestion (idempotent: a second promote returns the same source), `refresh` marks the page stale so its next
+use re-fetches it (no paid call in the request), `block` excludes it from retrieval, discovery and listing.
+Cross-institution IDs are 404; students 403.
+
+`PUT /institutions/{id}/domains` (admin) replaces the trusted domain list (1..20, IDNA/lowercase normalized,
+deduplicated, hostnames only; IP literals and paths are 400). A host matches when equal or a dot-separated
+subdomain. `POST /me/personal-space` (session, CSRF) returns 201 with the caller's single personal institution
+(`kind: personal`, coverage `web_discovery`), creating it with the caller as admin if absent; repeated calls
+return the same space. Personal spaces are excluded from `GET /institutions`; other users receive 404 on every
+scoped route. Deleted identities cannot create one, and account deletion pseudonymizes the stored owner.
+
+Capabilities: `discovery` is `disabled/paid_calls_disabled` outside live mode, `disabled/not_configured`
+without TinyFish or Jev keys, mirrors `answers` when answers are unavailable (including missing Jev prices
+or budget), `unavailable/quota_exhausted` after a TinyFish 402 (until 00:00 UTC) or when a daily self-limit is
+reached, `unavailable/provider_failed` during a 30 s cooldown after another TinyFish failure, else available.
+Discovery quota, rate limits or timeouts during an ask produce an abstention with an explanation, not an error.
+Live TinyFish behaviour, allowance accounting and Jev calibration are unverified (loopback mocks only).

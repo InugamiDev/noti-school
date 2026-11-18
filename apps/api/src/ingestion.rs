@@ -27,6 +27,17 @@ pub struct Metadata {
     #[serde(default = "default_language")]
     language: String,
 }
+impl Metadata {
+    // Promotion of a cached web page: a new pending_review version with no effective dates.
+    pub(crate) fn promoted(language: String) -> Self {
+        Self {
+            label: format!("Promoted web capture {}", Utc::now().format("%Y-%m-%d")),
+            effective_from: None,
+            effective_until: None,
+            language,
+        }
+    }
+}
 fn default_language() -> String {
     "en".into()
 }
@@ -44,7 +55,7 @@ pub async fn fetch(
         .parse()
         .map_err(crate::error::invalid)?;
     let url: String = sqlx::query_scalar(
-        "SELECT original_url FROM product.sources WHERE institution_id=$1 AND id=$2 AND kind='url'",
+        "SELECT original_url FROM product.sources WHERE institution_id=$1 AND id=$2 AND kind='url' AND origin='approved'",
     )
     .bind(i)
     .bind(source)
@@ -69,7 +80,7 @@ pub async fn fetch(
 }
 // Mirrors operator retention: an expired key may be reused or swept only once it no longer roots an
 // unfinished job, a paid stage or a reservation that recovery or reconciliation could still need.
-pub(crate) const RECLAIMABLE_KEY: &str = "k.expires_at<=now() AND k.state IN ('completed','failed') AND NOT EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state<>'succeeded') AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id) AND NOT EXISTS(SELECT 1 FROM product.ai_reservations r WHERE r.operation_id=k.operation_id)";
+pub(crate) const RECLAIMABLE_KEY: &str = "k.expires_at<=now() AND k.state IN ('completed','failed') AND NOT EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state<>'succeeded') AND NOT EXISTS(SELECT 1 FROM product.pipeline_stages p WHERE p.root_operation_id=k.operation_id) AND NOT EXISTS(SELECT 1 FROM product.ai_reservations r WHERE r.operation_id=k.operation_id) AND NOT EXISTS(SELECT 1 FROM product.ontology_jobs o WHERE o.id=k.operation_id AND o.state IN ('queued','running'))";
 // A fetch is identified by its source and metadata, not by remote bytes, so replay never refetches.
 fn request_hash(source: Uuid, b: &Metadata, upload: Option<&[u8]>) -> Result<String> {
     let mut hash = Sha256::new();
@@ -236,12 +247,13 @@ pub(crate) async fn ingest(
     };
     // Unlocked prechecks avoid writing and parsing for replays, wrong sources and known duplicates;
     // every condition is re-checked under the transaction's locks below.
-    let source_kind: Option<String> =
-        sqlx::query_scalar("SELECT kind FROM product.sources WHERE institution_id=$1 AND id=$2")
-            .bind(i)
-            .bind(source)
-            .fetch_optional(s.pool()?)
-            .await?;
+    let source_kind: Option<String> = sqlx::query_scalar(
+        "SELECT kind FROM product.sources WHERE institution_id=$1 AND id=$2 AND origin='approved'",
+    )
+    .bind(i)
+    .bind(source)
+    .fetch_optional(s.pool()?)
+    .await?;
     if source_kind.as_deref() != Some(kind) {
         return Err(Error("not_found"));
     }
@@ -357,7 +369,7 @@ pub(crate) async fn ingest(
     let enabled = s.config.ai_keys().is_ok() && !chunks.is_empty();
     let indexing = if enabled { "pending" } else { "disabled" };
     let mut tx = s.pool()?.begin().await?;
-    let source_kind:Option<String>=sqlx::query_scalar("SELECT s.kind FROM product.sources s JOIN product.memberships m ON m.institution_id=s.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE s.institution_id=$1 AND s.id=$2 FOR SHARE OF m FOR UPDATE OF s")
+    let source_kind:Option<String>=sqlx::query_scalar("SELECT s.kind FROM product.sources s JOIN product.memberships m ON m.institution_id=s.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE s.institution_id=$1 AND s.id=$2 AND s.origin='approved' FOR SHARE OF m FOR UPDATE OF s")
         .bind(i).bind(source).bind(user).fetch_optional(&mut *tx).await?;
     if source_kind.as_deref() != Some(kind) {
         return Err(Error("not_found"));
@@ -431,7 +443,7 @@ pub async fn action(
         crate::budget::admit(&s).await?;
     }
     let mut tx = s.pool()?.begin().await?;
-    let row=sqlx::query("SELECT v.status,v.source_id FROM product.source_versions v JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.id=$2 FOR UPDATE OF v FOR SHARE OF m").bind(i).bind(id).bind(&u.user_id).fetch_optional(&mut *tx).await?.ok_or(Error("not_found"))?;
+    let row=sqlx::query("SELECT v.status,v.source_id FROM product.source_versions v JOIN product.memberships m ON m.institution_id=v.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE v.institution_id=$1 AND v.id=$2 AND EXISTS(SELECT 1 FROM product.sources s WHERE s.institution_id=v.institution_id AND s.id=v.source_id AND s.origin='approved') FOR UPDATE OF v FOR SHARE OF m").bind(i).bind(id).bind(&u.user_id).fetch_optional(&mut *tx).await?.ok_or(Error("not_found"))?;
     let status: String = row.try_get("status")?;
     let source: Uuid = row.try_get("source_id")?;
     if b.action == "retry_index" {
@@ -484,7 +496,18 @@ pub async fn action(
     }
     let job = Uuid::new_v4();
     sqlx::query("INSERT INTO product.ingestion_jobs(id,institution_id,version_id,state) VALUES($1,$2,$3,'succeeded')").bind(job).bind(i).bind(id).execute(&mut *tx).await?;
+    let indexed: bool = sqlx::query_scalar(
+        "SELECT indexing='ready' FROM product.source_versions WHERE institution_id=$1 AND id=$2",
+    )
+    .bind(i)
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
     tx.commit().await?;
+    // An approved, already indexed version feeds the ontology queue (later indexing enqueues too).
+    if b.action == "approve" && indexed {
+        crate::ontology::enqueue(&s, i, id, &u.user_id).await?;
+    }
     Ok((
         StatusCode::ACCEPTED,
         Json(

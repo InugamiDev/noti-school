@@ -1619,17 +1619,25 @@ fn rejected_reply_usage_classification() {
     }
     let jev = br#"{"model":"jev-1.13.0","answers":{"other":{"type":"noul","noul":2.0}},"usage":{"input_tokens":20,"output_tokens":5}}"#;
     assert!(
-        crate::providers::validate_jev(jev, &std::collections::BTreeSet::from(["claim_0".into()]))
-            .is_err()
+        crate::providers::validate_jev(
+            jev,
+            &std::collections::BTreeSet::from(["claim_0".into()]),
+            "jev-1.13.0"
+        )
+        .is_err()
     );
-    assert_eq!(validated_jev_usage(jev), Some(vec![20, 5]));
+    assert_eq!(validated_jev_usage(jev, "jev-1.13.0"), Some(vec![20, 5]));
     for bad in [
         r#"{"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":0,"output_tokens":5}}"#,
         r#"{"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":20,"output_tokens":5,"extra":1}}"#,
         r#"{"model":"jev-0","answers":{},"usage":{"input_tokens":20,"output_tokens":5}}"#,
         r#"{"model":"jev-1.13.0","answers":{},"usage":{"input_tokens":20,"input_tokens":1,"output_tokens":5}}"#,
     ] {
-        assert_eq!(validated_jev_usage(bad.as_bytes()), None, "{bad}");
+        assert_eq!(
+            validated_jev_usage(bad.as_bytes(), "jev-1.13.0"),
+            None,
+            "{bad}"
+        );
     }
     let embedding = |index: u64, prompt: u64, total: u64| {
         serde_json::to_vec(&json!({"model":"text-embedding-3-small","data":[{"index":index,"embedding":vec![0.01f32;1536]}],"usage":{"prompt_tokens":prompt,"total_tokens":total}})).unwrap()

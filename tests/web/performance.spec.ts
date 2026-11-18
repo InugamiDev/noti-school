@@ -30,7 +30,7 @@ test('actual WebGL draw calls per rendered frame', async ({ page, browser }) => 
     } });
     if (route.request().url().endsWith('/institutions')) return route.fulfill({ json: { items: [{
       id: '11111111-1111-4111-8111-111111111111', slug: 'demo',
-      name: 'Demo university · synthetic test', coverage: 'synthetic_demo',
+      name: 'Demo university · synthetic test', kind: 'school', domains: [], coverage: 'synthetic_demo',
     }], next_cursor: null } });
     return route.fulfill({ status: 503, json: {} });
   });

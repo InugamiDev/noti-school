@@ -48,6 +48,73 @@ pub fn validate_url(raw: &str, allow: &[String]) -> Result<url::Url> {
     }
     Ok(u)
 }
+// intent: web evidence URLs are fetched remotely by TinyFish, but a page is only usable when its
+// (final) URL is https on a public DNS name; this keeps private/intranet hosts out of evidence.
+pub fn web_url(raw: &str) -> Result<url::Url> {
+    let mut u = url::Url::parse(raw).map_err(crate::error::invalid)?;
+    u.set_fragment(None);
+    let host = u
+        .host_str()
+        .ok_or(Error("forbidden"))?
+        .trim_end_matches('.')
+        .to_owned();
+    if u.scheme() != "https"
+        || raw.len() > 2048
+        || !u.username().is_empty()
+        || u.password().is_some()
+        || u.port().is_some_and(|p| p != 443)
+        || !matches!(u.host(), Some(url::Host::Domain(_)))
+        || !host.contains('.')
+        || [
+            "localhost",
+            ".local",
+            ".internal",
+            ".lan",
+            ".home.arpa",
+            ".localhost",
+            ".onion",
+        ]
+        .iter()
+        .any(|suffix| host == suffix.trim_start_matches('.') || host.ends_with(suffix))
+    {
+        return Err(Error("forbidden"));
+    }
+    Ok(u)
+}
+#[cfg(test)]
+pub(crate) static TEST_HOSTS: std::sync::Mutex<Vec<(String, IpAddr)>> =
+    std::sync::Mutex::new(Vec::new());
+// Every resolved address must be globally routable. Resolution failure is not public.
+pub async fn public_host(host: &str) -> Result<()> {
+    #[cfg(test)]
+    {
+        let fixtures: Vec<IpAddr> = TEST_HOSTS
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(h, _)| h == host)
+            .map(|(_, ip)| *ip)
+            .collect();
+        return if !fixtures.is_empty() && fixtures.iter().all(|ip| public_ip(*ip)) {
+            Ok(())
+        } else {
+            Err(Error("forbidden"))
+        };
+    }
+    #[allow(unreachable_code)]
+    {
+        let addresses: Vec<SocketAddr> =
+            tokio::time::timeout(Duration::from_secs(3), tokio::net::lookup_host((host, 443)))
+                .await
+                .map_err(|_| Error("forbidden"))?
+                .map_err(|_| Error("forbidden"))?
+                .collect();
+        if addresses.is_empty() || addresses.iter().any(|a| !public_ip(a.ip())) {
+            return Err(Error("forbidden"));
+        }
+        Ok(())
+    }
+}
 fn connected_address(remote: Option<SocketAddr>, pinned: &[SocketAddr]) -> Result<()> {
     if remote.is_none_or(|a| !public_ip(a.ip()) || !pinned.iter().any(|p| p.ip() == a.ip())) {
         return Err(Error("forbidden"));
@@ -139,6 +206,47 @@ pub async fn allowed_hosts(s: &crate::AppState, institution: uuid::Uuid) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn web_evidence_urls_are_https_public_dns_names() {
+        assert_eq!(
+            web_url("https://www.example.edu/a#frag").unwrap().as_str(),
+            "https://www.example.edu/a"
+        );
+        for bad in [
+            "http://www.example.edu/a",
+            "https://127.0.0.1/a",
+            "https://[::1]/a",
+            "https://user:pw@www.example.edu/",
+            "https://www.example.edu:8443/",
+            "https://localhost/",
+            "https://printer.local/",
+            "https://db.internal/",
+            "https://intranet/",
+            "ftp://www.example.edu/",
+        ] {
+            assert!(web_url(bad).is_err(), "{bad}");
+        }
+        TEST_HOSTS.lock().unwrap().extend([
+            (
+                "public.example.edu".into(),
+                "93.184.216.34".parse().unwrap(),
+            ),
+            ("private.example.edu".into(), "192.168.1.5".parse().unwrap()),
+            ("mixed.example.edu".into(), "93.184.216.34".parse().unwrap()),
+            (
+                "mixed.example.edu".into(),
+                "169.254.169.254".parse().unwrap(),
+            ),
+        ]);
+        assert!(public_host("public.example.edu").await.is_ok());
+        for host in [
+            "private.example.edu",
+            "mixed.example.edu",
+            "unresolved.example.edu",
+        ] {
+            assert!(public_host(host).await.is_err(), "{host}");
+        }
+    }
     #[tokio::test]
     async fn actual_connected_socket_and_redirect_denied() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

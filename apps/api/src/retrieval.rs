@@ -27,7 +27,7 @@ pub struct Ask {
     pub(crate) language: String,
     pub(crate) conversation_id: Option<Uuid>,
     #[serde(default)]
-    discover: bool,
+    pub(crate) discover: bool,
 }
 pub fn rrf(lists: &[Vec<Uuid>], limit: usize) -> Vec<Uuid> {
     let mut scores = BTreeMap::<Uuid, f64>::new();
@@ -59,7 +59,7 @@ pub async fn search(
         return Err(Error("invalid_request"));
     }
     // No model calls: lexical-only search is available for current approved extracted text.
-    let rows:Vec<Value>=sqlx::query_scalar("SELECT jsonb_build_object('id',c.id,'source_id',c.source_id,'version_id',c.version_id,'chunk_id',c.id,'institution_id',c.institution_id,'title',s.title,'version_label',v.label,'locator',jsonb_build_object('page',c.page,'section',c.section,'start_char',c.start_char,'end_char',c.end_char),'quote',left(c.content,4000),'original_url',s.original_url) FROM product.chunks c JOIN product.source_versions v ON v.institution_id=c.institution_id AND v.id=c.version_id JOIN product.sources s ON s.institution_id=c.institution_id AND s.id=c.source_id AND s.current_version_id=v.id JOIN product.memberships m ON m.institution_id=c.institution_id AND m.user_id=$2 AND m.revoked_at IS NULL WHERE c.institution_id=$1 AND (m.role='admin' OR s.visibility='institution') AND v.status='approved' AND v.indexing IN ('ready','disabled') AND (v.effective_from IS NULL OR v.effective_from<=now()) AND (v.effective_until IS NULL OR v.effective_until>now()) AND c.lexical @@ plainto_tsquery('simple',$3) ORDER BY ts_rank_cd(c.lexical,plainto_tsquery('simple',$3)) DESC,c.id LIMIT $4")
+    let rows:Vec<Value>=sqlx::query_scalar("SELECT jsonb_build_object('id',c.id,'source_id',c.source_id,'version_id',c.version_id,'chunk_id',c.id,'institution_id',c.institution_id,'title',s.title,'version_label',v.label,'locator',jsonb_build_object('page',c.page,'section',c.section,'start_char',c.start_char,'end_char',c.end_char),'quote',left(c.content,4000),'original_url',s.original_url,'origin','approved','domain',NULL,'retrieved_at',NULL,'confidence',NULL) FROM product.chunks c JOIN product.source_versions v ON v.institution_id=c.institution_id AND v.id=c.version_id JOIN product.sources s ON s.institution_id=c.institution_id AND s.id=c.source_id AND s.current_version_id=v.id JOIN product.memberships m ON m.institution_id=c.institution_id AND m.user_id=$2 AND m.revoked_at IS NULL WHERE c.institution_id=$1 AND s.origin='approved' AND (m.role='admin' OR s.visibility='institution') AND v.status='approved' AND v.indexing IN ('ready','disabled') AND (v.effective_from IS NULL OR v.effective_from<=now()) AND (v.effective_until IS NULL OR v.effective_until>now()) AND c.lexical @@ plainto_tsquery('simple',$3) ORDER BY ts_rank_cd(c.lexical,plainto_tsquery('simple',$3)) DESC,c.id LIMIT $4")
         .bind(b.institution_id).bind(u.user_id).bind(b.query).bind(limit).fetch_all(s.pool()?).await?;
     Ok(Json(json!({"items":rows,"next_cursor":null})))
 }
@@ -69,7 +69,7 @@ pub async fn chunk(
     h: HeaderMap,
 ) -> Result<Json<Value>> {
     let u = auth::member(&s, &h, i, false).await?;
-    let row=sqlx::query_scalar("SELECT jsonb_build_object('id',c.id,'institution_id',c.institution_id,'source_id',c.source_id,'version_id',c.version_id,'ordinal',c.ordinal,'text',c.content,'locator',jsonb_build_object('page',c.page,'section',c.section,'start_char',c.start_char,'end_char',c.end_char),'language',c.language) FROM product.chunks c JOIN product.source_versions v ON v.institution_id=c.institution_id AND v.id=c.version_id JOIN product.sources s ON s.institution_id=c.institution_id AND s.id=c.source_id JOIN product.memberships m ON m.institution_id=c.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE c.institution_id=$1 AND c.id=$2 AND (m.role='admin' OR (s.visibility='institution' AND v.approved_at IS NOT NULL AND v.status IN ('approved','archived')))")
+    let row=sqlx::query_scalar("SELECT jsonb_build_object('id',c.id,'institution_id',c.institution_id,'source_id',c.source_id,'version_id',c.version_id,'ordinal',c.ordinal,'text',c.content,'locator',jsonb_build_object('page',c.page,'section',c.section,'start_char',c.start_char,'end_char',c.end_char),'language',c.language) FROM product.chunks c JOIN product.source_versions v ON v.institution_id=c.institution_id AND v.id=c.version_id JOIN product.sources s ON s.institution_id=c.institution_id AND s.id=c.source_id JOIN product.memberships m ON m.institution_id=c.institution_id AND m.user_id=$3 AND m.revoked_at IS NULL WHERE c.institution_id=$1 AND c.id=$2 AND (m.role='admin' OR (s.visibility='institution' AND ((v.approved_at IS NOT NULL AND v.status IN ('approved','archived')) OR (s.origin='web' AND v.status IN ('draft','archived')))))")
         .bind(i).bind(id).bind(u.user_id).fetch_optional(s.pool()?).await?.ok_or(Error("not_found"))?;
     Ok(Json(row))
 }
@@ -179,7 +179,8 @@ pub async fn ask(
             return Err(Error("not_found"));
         }
     }
-    if b.discover {
+    // Opt-in discovery needs its own configuration; quota or time limits later abstain honestly.
+    if b.discover && !crate::discovery::configured(&s) {
         return Err(Error("provider_unavailable"));
     }
     if h.get_all("idempotency-key").iter().count() != 1 {

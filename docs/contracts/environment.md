@@ -17,7 +17,18 @@ Environment presence is never evidence of credential validity, mail delivery or 
 API restricted file (`shared/api.env`, 0600): NODE_ENV, APP_ORIGIN, DATABASE_URL, INTERNAL_AUTH_SECRET,
 API_BIND_ADDRESS, AUTH_INTERNAL_URL, WEB_DIST_DIR, UPLOAD_DIR, AI_MODE, AI_LIVE_CALLS_ENABLED,
 AI_MONTHLY_BUDGET_USD, EVIDENCE_PROVIDER, OPENAI_API_KEY, TYPESAFE_API_KEY, OPENAI_CHAT_MODEL,
-OPENAI_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, JEV_MODEL.
+OPENAI_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, JEV_MODEL, TINYFISH_API_KEY, TINYFISH_DAILY_SEARCH_LIMIT,
+TINYFISH_DAILY_FETCH_LIMIT, WEB_EVIDENCE_MIN_CONFIDENCE, GRAPH_AUTO_APPROVE.
+
+Web evidence settings (2026-11-18): `JEV_MODEL` is exactly `jev-1.14.0` (default) or `jev-1.13.0`; aliases such
+as `jev-latest` are rejected. `TINYFISH_API_KEY` is server-side only (never `VITE_*`). `TINYFISH_DAILY_SEARCH_LIMIT`
+(1..12000, default 1000) and `TINYFISH_DAILY_FETCH_LIMIT` (1..1000 URLs, default 300) are application
+self-limits below the shared free allowance (12,000 searches and 1,000 fetched URLs per UTC day).
+`WEB_EVIDENCE_MIN_CONFIDENCE` (0..1, default 0.6) drops low-confidence web passages; `GRAPH_AUTO_APPROVE`
+(0..1, default 0.9) auto-approves extracted relations from approved sources. A configured `TYPESAFE_API_KEY`
+enables Jev confidence even with `EVIDENCE_PROVIDER=openai` and then requires the Jev rates. Discovery is
+configured only with OpenAI, TinyFish and Jev keys (`configured.discovery`). Rust mirrors this validation
+(decimal thresholds without exponents, integer limits).
 Auth restricted file (`shared/auth.env`, 0600): NODE_ENV, APP_ORIGIN, AUTH_DATABASE_URL,
 BETTER_AUTH_SECRET, INTERNAL_AUTH_SECRET, AUTH_BIND_HOST, AUTH_PORT, GOOGLE_CLIENT_ID,
 GOOGLE_CLIENT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TLS_MODE,

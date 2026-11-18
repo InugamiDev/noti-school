@@ -12,14 +12,14 @@ pub async fn priced(s: &crate::AppState) -> Result<bool> {
     let at = s.pricing_at;
     #[cfg(not(test))]
     let at: Option<chrono::DateTime<chrono::Utc>> = None;
-    Ok(sqlx::query_scalar("WITH at AS (SELECT coalesce($2::timestamptz,clock_timestamp()) AS now) SELECT count(DISTINCT (provider,model,component))=CASE WHEN $3 THEN 5 ELSE 3 END FROM product.ai_prices,at WHERE effective_at<=at.now AND valid_until>at.now AND ((provider='openai' AND model=$1 AND component IN ('input_tokens','output_tokens')) OR (provider='openai' AND model='text-embedding-3-small' AND component='embedding_tokens') OR ($3 AND provider='jev' AND model='jev-1.13.0' AND component IN ('jev_input_tokens','jev_output_tokens')))").bind(model).bind(at).bind(s.config.evidence_provider == crate::config::EvidenceProvider::Jev).fetch_one(s.pool()?).await?)
+    Ok(sqlx::query_scalar("WITH at AS (SELECT coalesce($2::timestamptz,clock_timestamp()) AS now) SELECT count(DISTINCT (provider,model,component))=CASE WHEN $3 THEN 5 ELSE 3 END FROM product.ai_prices,at WHERE effective_at<=at.now AND valid_until>at.now AND ((provider='openai' AND model=$1 AND component IN ('input_tokens','output_tokens')) OR (provider='openai' AND model='text-embedding-3-small' AND component='embedding_tokens') OR ($3 AND provider='jev' AND model=$4 AND component IN ('jev_input_tokens','jev_output_tokens')))").bind(model).bind(at).bind(s.config.jev_dependency() == crate::config::EvidenceProvider::Jev).bind(&s.config.jev_model).fetch_one(s.pool()?).await?)
 }
 
 pub async fn admit(s: &crate::AppState) -> Result<()> {
     if !priced(s).await? {
         return Err(Error("pricing_unavailable"));
     }
-    s.providers.admit(s.config.evidence_provider)
+    s.providers.admit(s.config.jev_dependency())
 }
 
 // intent: a committed reservation is not permission to send; only a committed one-time dispatch is.
@@ -33,9 +33,12 @@ pub struct Attempt {
 pub enum OperationKind {
     Jev,
     Embedding,
+    // One OpenAI embeddings request for several web chunks; the request body is capped below 64 KiB.
+    EmbeddingBatch,
     Generation,
 }
 impl Attempt {
+    // `model` is the chat model for Generation and the pinned Jev model for Jev; embeddings are fixed.
     #[allow(clippy::too_many_arguments)]
     pub async fn reserve(
         pool: &PgPool,
@@ -45,7 +48,7 @@ impl Attempt {
         stage: &str,
         input: &[u8],
         kind: OperationKind,
-        generation_model: &str,
+        model: &str,
     ) -> Result<Self> {
         if stage.is_empty() || stage.len() > 100 || input.len() > 65536 {
             return Err(Error("invalid_request"));
@@ -53,20 +56,26 @@ impl Attempt {
         use sha2::{Digest, Sha256};
         let input_hash = format!("{:x}", Sha256::digest(input));
         let (provider, model, required): (&str, &str, &[(&str, u64)]) = match kind {
-            OperationKind::Jev => (
+            OperationKind::Jev if crate::config::JEV_MODELS.contains(&model) => (
                 "jev",
-                "jev-1.13.0",
+                model,
                 &[("jev_input_tokens", 64000), ("jev_output_tokens", 64000)],
             ),
+            OperationKind::Jev => return Err(Error("invalid_request")),
             OperationKind::Embedding => (
                 "openai",
                 "text-embedding-3-small",
                 // UTF-8 bytes conservatively bound byte-level tokens; scalars do not.
                 &[("embedding_tokens", 16000)],
             ),
+            OperationKind::EmbeddingBatch => (
+                "openai",
+                "text-embedding-3-small",
+                &[("embedding_tokens", 64000)],
+            ),
             OperationKind::Generation => (
                 "openai",
-                generation_model,
+                model,
                 &[("input_tokens", 65536), ("output_tokens", 4096)],
             ),
         };
@@ -74,7 +83,7 @@ impl Attempt {
         let mut plan = vec![];
         let mut id = Uuid::new_v4();
         let mut tx = pool.begin().await?;
-        let owned:Option<Uuid>=sqlx::query_scalar("SELECT k.operation_id FROM product.idempotency_keys k JOIN product.memberships m ON m.institution_id=k.institution_id AND m.user_id=k.user_id AND m.revoked_at IS NULL WHERE k.institution_id=$1 AND k.user_id=$2 AND k.operation_id=$3 AND k.expires_at>now() AND (k.state='pending' OR (k.state='completed' AND m.role='admin' AND EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state='running'))) FOR UPDATE OF k FOR SHARE OF m")
+        let owned:Option<Uuid>=sqlx::query_scalar("SELECT k.operation_id FROM product.idempotency_keys k JOIN product.memberships m ON m.institution_id=k.institution_id AND m.user_id=k.user_id AND m.revoked_at IS NULL WHERE k.institution_id=$1 AND k.user_id=$2 AND k.operation_id=$3 AND k.expires_at>now() AND (k.state='pending' OR (k.state='completed' AND m.role='admin' AND EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state='running')) OR (k.state='completed' AND EXISTS(SELECT 1 FROM product.ontology_jobs o WHERE o.id=k.operation_id AND o.state='running'))) FOR UPDATE OF k FOR SHARE OF m")
             .bind(institution).bind(user).bind(operation).fetch_optional(&mut *tx).await?;
         if owned.is_none() {
             return Err(Error("conflict"));
@@ -174,7 +183,7 @@ impl Attempt {
         tx.commit().await?;
         // Separate committed transition prevents a replay/collision from authorizing another request.
         let mut tx = pool.begin().await?;
-        let current:Option<Uuid>=sqlx::query_scalar("SELECT k.operation_id FROM product.idempotency_keys k JOIN product.memberships m ON m.institution_id=k.institution_id AND m.user_id=k.user_id AND m.revoked_at IS NULL WHERE k.institution_id=$1 AND k.user_id=$2 AND k.operation_id=$3 AND k.expires_at>now() AND (k.state='pending' OR (k.state='completed' AND m.role='admin' AND EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state='running'))) FOR SHARE OF k,m")
+        let current:Option<Uuid>=sqlx::query_scalar("SELECT k.operation_id FROM product.idempotency_keys k JOIN product.memberships m ON m.institution_id=k.institution_id AND m.user_id=k.user_id AND m.revoked_at IS NULL WHERE k.institution_id=$1 AND k.user_id=$2 AND k.operation_id=$3 AND k.expires_at>now() AND (k.state='pending' OR (k.state='completed' AND m.role='admin' AND EXISTS(SELECT 1 FROM product.ingestion_jobs j WHERE j.id=k.operation_id AND j.state='running')) OR (k.state='completed' AND EXISTS(SELECT 1 FROM product.ontology_jobs o WHERE o.id=k.operation_id AND o.state='running'))) FOR SHARE OF k,m")
             .bind(institution).bind(user).bind(operation).fetch_optional(&mut *tx).await?;
         if current.is_none() {
             return Err(Error("not_found"));

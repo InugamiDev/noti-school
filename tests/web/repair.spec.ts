@@ -6,8 +6,8 @@ const sourceId = '22222222-2222-4222-8222-222222222222';
 const versionId = '33333333-3333-4333-8333-333333333333';
 const evidenceId = '44444444-4444-4444-8444-444444444444';
 const time = '2026-09-25T00:00:00Z';
-const evidence = { id: evidenceId, institution_id: institution, source_id: sourceId, version_id: versionId, chunk_id: institution, title: 'Synthetic cited document', version_label: 'Review v1', locator: { page: 2, section: 'Synthetic section', start_char: 0, end_char: 20 }, quote: 'Current evidence <img src=x onerror=alert(1)>', original_url: 'https://example.test/original' };
-const answer = (text = 'PRIVATE A ANSWER') => ({ id: institution, conversation_id: institution, institution_id: institution, language: 'en', status: 'qualified', claims: [{ text, evidence_ids: [evidenceId] }], evidence: [evidence], explanation: 'Synthetic evidence only.', created_at: time });
+const evidence = { id: evidenceId, institution_id: institution, source_id: sourceId, version_id: versionId, chunk_id: institution, title: 'Synthetic cited document', version_label: 'Review v1', locator: { page: 2, section: 'Synthetic section', start_char: 0, end_char: 20 }, quote: 'Current evidence <img src=x onerror=alert(1)>', original_url: 'https://example.test/original', origin: 'approved', domain: null, retrieved_at: null, confidence: null };
+const answer = (text = 'PRIVATE A ANSWER') => ({ id: institution, conversation_id: institution, institution_id: institution, language: 'en', status: 'qualified', claims: [{ text, evidence_ids: [evidenceId], confidence: null }], evidence: [evidence], explanation: 'Synthetic evidence only.', confidence: null, created_at: time });
 const feedback = { id: institution, institution_id: institution, answer_id: institution, category: 'incorrect', evidence_id: null, comment: 'Synthetic report', status: 'open', created_at: time };
 const source = { id: sourceId, institution_id: institution, title: 'PRIVATE SOURCE A', kind: 'text', original_url: null, visibility: 'institution', current_version_id: versionId, created_at: time };
 const version = { id: versionId, institution_id: institution, source_id: sourceId, label: 'Review v1', sha256: 'a'.repeat(64), status: 'pending_review', indexing: 'ready', effective_from: null, effective_until: null, created_at: time };
@@ -19,7 +19,7 @@ async function fixture(page: Page, admin = false, initial: string | null = 'A') 
     const url = new URL(route.request().url()), path = url.pathname, method = route.request().method();
     let value: unknown;
     if (path.endsWith('/capabilities')) { const cap = { state: 'available', reason: 'ready' }; value = { mode: 'mock', answers: cap, indexing: cap, discovery: cap, google: cap, email: cap, identity: cap }; }
-    else if (path.endsWith('/institutions')) value = { items: [{ id: institution, name: 'Synthetic institution', slug: 'synthetic', coverage: 'synthetic_demo' }], next_cursor: null };
+    else if (path.endsWith('/institutions')) value = { items: [{ id: institution, name: 'Synthetic institution', slug: 'synthetic', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null };
     else if (path.endsWith('/me')) {
       if (!state.user) return route.fulfill({ status: 401, json: error('unauthenticated') });
       value = { identity: { user_id: state.user, session_id: `session-${state.user}`, email_verified: true, expires_at: '2027-01-01T00:00:00Z' }, memberships: state.member ? [{ institution_id: institution, role: state.admin ? 'admin' : 'student' }] : [] };
@@ -37,7 +37,7 @@ async function fixture(page: Page, admin = false, initial: string | null = 'A') 
       value = { feedback, question: 'PRIVATE REPORTED QUESTION <script>bad()</script>', answer: answer('REPORTED CLAIM') };
     } else if (path.endsWith('/feedback')) value = { items: [feedback], next_cursor: null };
     else if (path.endsWith(`/feedback/${institution}`)) { state.mutations.push(method); value = { ...feedback, status: route.request().postDataJSON().status }; }
-    else if (path.endsWith('/graph')) value = { items: [], next_cursor: null };
+    else if (path.endsWith('/graph') || path.endsWith('/web-documents')) value = { items: [], next_cursor: null };
     else if (path.endsWith('/budget')) value = { month: '2026-09', cap_micro_usd: 50000000, spent_micro_usd: 0, reserved_micro_usd: 0, currency: 'USD' };
     if (value) return route.fulfill({ json: value });
     return route.fulfill({ status: 404, json: error('not_found') });

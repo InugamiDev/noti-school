@@ -75,6 +75,13 @@ pub fn ids(evidence: &[Value]) -> Result<BTreeSet<Uuid>> {
         .map(|e| serde_json::from_value(e["id"].clone()).map_err(|_| Error("provider_unavailable")))
         .collect()
 }
+// Candidate IDs in their current order (rag::ids is an unordered set).
+pub fn ids_ordered(evidence: &[Value]) -> Result<Vec<Uuid>> {
+    evidence
+        .iter()
+        .map(|e| serde_json::from_value(e["id"].clone()).map_err(|_| Error("provider_unavailable")))
+        .collect()
+}
 fn subset(ids: &[Uuid], allowed: &BTreeSet<Uuid>, max: usize) -> Result<()> {
     if ids.len() > max
         || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()

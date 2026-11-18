@@ -1,9 +1,14 @@
 import { createEffect, createSignal, For, Show, on, onCleanup } from 'solid-js';
 import { Check, ChevronDown, FilePlus, FolderOpen, Globe, Info, MessageSquareWarning, Network, Plus, RefreshCw, ShieldAlert, Upload, Wallet } from 'lucide-solid';
+import type { z } from 'zod';
 import { LoadingStatus, SkeletonLines, SkeletonList } from './ui/Loader';
 import { Select } from './ui/Select';
 import { enter } from './ui/motion';
-import { formatDate } from './ui/format';
+import { formatDate, type Lang } from './ui/format';
+import { t } from './ui/i18n';
+import { ConfidenceDetails, ConfidenceTag } from './ui/Confidence';
+import { FetchedDate, OriginTag } from './ui/Origin';
+import { DomainsEditor, WebPages } from './WebPages';
 import { createRemoteResource as createResource } from './resource';
 import { SourceCreate, VersionCreate, VersionAction, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction } from '@noti/contracts';
 import { get, post, request, errorText, readAnswer, safeLink } from './api';
@@ -59,7 +64,16 @@ const monthName = (month: string) => {
     : new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date);
 };
 
-export default function Admin(props: { institution: string; allowed: boolean; signedIn: boolean }) {
+export default function Admin(props: {
+  institution: string;
+  allowed: boolean;
+  signedIn: boolean;
+  /** Language for the web pages and domains sections; the older sections are English only. */
+  lang: Lang;
+  /** The selected institution's own domains, as last read. */
+  domains: readonly string[];
+  institutionUpdated: (next: z.infer<typeof Schemas.Institution>) => void;
+}) {
   let disposed = false;
   onCleanup(() => { disposed = true; });
   const [selected, setSelected] = createSignal(''),
@@ -549,9 +563,15 @@ export default function Admin(props: { institution: string; allowed: boolean; si
                             <h4>{evidence.title} · {evidence.version_label}</h4>
                             <Show when={evidence.id === f.evidence_id}><span class="admin-chip" data-tone="warm">Citation in this report</span></Show>
                             <p class="muted">{evidence.locator.page ? `Page ${evidence.locator.page}` : ''}{evidence.locator.section ? ` · ${evidence.locator.section}` : ''}</p>
+                            <div class="source-meta">
+                              <OriginTag origin={evidence.origin} domain={evidence.domain} lang={props.lang} />
+                              <Show when={evidence.origin === 'web'}><FetchedDate at={evidence.retrieved_at} lang={props.lang} /></Show>
+                              <ConfidenceDetails confidence={evidence.confidence} lang={props.lang} />
+                            </div>
                             <blockquote>{evidence.quote}</blockquote>
                             <div class="actions">
-                              <a class="admin-link" href={documentHref(evidence.source_id, evidence.version_id, { page: evidence.locator.page, chunk: evidence.chunk_id })}>Open cited passage in the document</a>
+                              {/* A web page has no library edition to open; only its own address is offered. */}
+                              <Show when={evidence.origin !== 'web'}><a class="admin-link" href={documentHref(evidence.source_id, evidence.version_id, { page: evidence.locator.page, chunk: evidence.chunk_id })}>Open cited passage in the document</a></Show>
                               <Show when={safeLink(evidence.original_url)}>{url => <a href={url()} target="_blank" rel="noopener noreferrer">Original website</a>}</Show>
                             </div>
                             <label class="stack">Citation ID<input readonly value={evidence.id}/></label>
@@ -593,7 +613,25 @@ export default function Admin(props: { institution: string; allowed: boolean; si
           </div>
         </div>
 
-        <details class="admin-card admin-disclosure stagger-in" style={{ '--i': 3 }}>
+        <section class="admin-card admin-web stagger-in" style={{ '--i': 3 }} aria-labelledby="admin-web" lang={props.lang}>
+          <div class="admin-card-head">
+            <span class="admin-icon" aria-hidden="true"><Globe size={18} /></span>
+            <div>
+              <h2 id="admin-web">{t(props.lang, 'webPages')}</h2>
+              <p class="muted">{t(props.lang, 'webPagesAbout')}</p>
+            </div>
+          </div>
+          <div class="admin-web-layout">
+            <WebPages institution={props.institution} lang={props.lang} busy={busy()} act={act} promoted={refreshSources} />
+            <div class="admin-domains">
+              <h3>{t(props.lang, 'schoolDomains')}</h3>
+              <p class="muted">{t(props.lang, 'schoolDomainsAbout')}</p>
+              <DomainsEditor institution={props.institution} domains={props.domains} lang={props.lang} busy={busy()} act={act} saved={props.institutionUpdated} />
+            </div>
+          </div>
+        </section>
+
+        <details class="admin-card admin-disclosure stagger-in" style={{ '--i': 4 }}>
           <summary>
             <span class="admin-icon" aria-hidden="true"><Network size={18} /></span>
             <span class="admin-disclosure-text">
@@ -638,9 +676,17 @@ export default function Admin(props: { institution: string; allowed: boolean; si
             <Show when={graph.error}><p role="alert">{errorText(graph.error)}</p></Show>
             <Show when={graph()}>
               <For each={graph()?.items} fallback={<p class="muted">No graph relations returned for this institution.</p>}>{edge => <article class="admin-version">
-                <div class="admin-version-head"><h4>{edge.relation}</h4><span class="admin-chip" data-tone={edge.status === 'approved' ? 'sage' : edge.status === 'rejected' ? 'warm' : 'butter'}>{edge.status}</span></div>
+                <div class="admin-version-head"><h4>{edge.relation}</h4><span class="admin-chip" data-tone={edge.status === 'approved' ? 'sage' : edge.status === 'rejected' ? 'warm' : 'butter'}>{edge.status}</span><ConfidenceTag value={edge.confidence} lang={props.lang} /></div>
                 <p class="muted admin-ids-line">{edge.from_entity_id} → {edge.to_entity_id}</p>
-                <For each={edge.evidence}>{evidence => <a class="admin-link" href={`#/sources/${evidence.source_id}`}>{evidence.title} · {evidence.version_label} · {evidence.locator.page ? `Page ${evidence.locator.page}` : evidence.locator.section}</a>}</For>
+                <For each={edge.evidence}>{evidence => <p class="admin-edge-evidence">
+                  <Show
+                    when={evidence.origin !== 'web'}
+                    fallback={<Show when={safeLink(evidence.original_url)} fallback={<span>{evidence.title}</span>}>{url => <a class="admin-link" href={url()} target="_blank" rel="noopener noreferrer">{evidence.title}</a>}</Show>}
+                  >
+                    <a class="admin-link" href={`#/sources/${evidence.source_id}`}>{evidence.title} · {evidence.version_label} · {evidence.locator.page ? `Page ${evidence.locator.page}` : evidence.locator.section}</a>
+                  </Show>
+                  <OriginTag origin={evidence.origin} domain={evidence.domain} lang={props.lang} />
+                </p>}</For>
                 <div class="actions">
                   <For each={['approved', 'rejected'] as const}>{status => <button disabled={busy()} onClick={() => void act(async () => {
                     await request(scoped(props.institution, '/graph/edges/{edge_id}', { edge_id: edge.id }), Schemas.GraphEdge, { method: 'PATCH', body: JSON.stringify(GraphEdgeAction.parse({ status })) });
