@@ -14,10 +14,13 @@ const probability = z.number().min(0).max(1);
 export const Confidence = object({ overall: probability, school: probability, source: probability, relevance: probability, answers: probability, model: text.max(100) });
 export const EvidenceOrigin = z.enum(['approved', 'web']);
 export const ErrorCode = z.enum(['invalid_request', 'unauthenticated', 'forbidden', 'not_found', 'conflict', 'payload_too_large', 'unsupported_media', 'rate_limited', 'provider_unavailable', 'budget_exhausted', 'pricing_unavailable', 'core_unavailable', 'internal_error']);
-export const ApiError = object({ error: object({ code: ErrorCode, message: text, request_id: id, retryable: z.boolean(), capability: z.enum(['answers', 'indexing', 'discovery', 'google', 'email', 'identity']).optional() }) });
+export const ApiError = object({ error: object({ code: ErrorCode, message: text, request_id: id, retryable: z.boolean(), capability: z.enum(['answers', 'indexing', 'discovery', 'google', 'email', 'password', 'passkey', 'identity']).optional() }) });
 export const Capability = object({ state: z.enum(['available', 'disabled', 'unavailable']), reason: z.enum(['ready', 'not_configured', 'paid_calls_disabled', 'pricing_missing', 'budget_exhausted', 'provider_failed', 'core_failed', 'no_approved_evidence', 'quota_exhausted']) });
-export const Capabilities = object({ mode: z.enum(['disabled', 'mock', 'live']), answers: Capability, indexing: Capability, discovery: Capability, google: Capability, email: Capability, identity: Capability });
-export const IdentityCapabilities = object({ identity: Capability, google: Capability, email: Capability });
+export const Capabilities = object({ mode: z.enum(['disabled', 'mock', 'live']), answers: Capability, indexing: Capability, discovery: Capability, google: Capability, email: Capability, password: Capability, passkey: Capability, identity: Capability });
+// intent: contract freeze for campaign noti-passkey (2026-11-18). Owner decision: password + passkey sign-in
+// before mail exists; an operator-delivered invitation proves the invitee's email when AUTH_INVITE_VERIFIES_EMAIL=true.
+// status: done (frozen by coordinator) | next: auth + web workers implement | confidence: high
+export const IdentityCapabilities = object({ identity: Capability, google: Capability, email: Capability, password: Capability, passkey: Capability });
 export const AccountDelete = object({ user_id: text.max(256) });
 export const AccountDeleted = object({ deleted: z.literal(true) });
 export const Institution = object({ id, slug: text, name: text, kind: z.enum(['school', 'personal']), domains: z.array(text.max(253)).max(20), coverage: z.enum(['none', 'synthetic_demo', 'approved_sources', 'web_discovery']) });

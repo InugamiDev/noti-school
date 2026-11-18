@@ -49,6 +49,9 @@ export const Environment = z.object({
   SMTP_FROM: z.email().optional(),
   SMTP_TLS_MODE: z.enum(['starttls', 'implicit']).default('starttls'),
   REGISTRATION_MODE: z.literal('invite_only').default('invite_only'),
+  // Owner decision 2026-11-18: when true, a valid invitation handed to the invitee by the operator counts as
+  // proof of that email, so invite-only password sign-up works without SMTP. Off by default.
+  AUTH_INVITE_VERIFIES_EMAIL: z.enum(['true', 'false']).default('false'),
   WEB_DIST_DIR: z.string().default('./apps/web/dist'),
   UPLOAD_DIR: z.string().default('./data/uploads'),
 });
@@ -131,6 +134,10 @@ export function parseEnvironment(
       discovery,
       google: identity && !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
       email: identity && !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD && env.SMTP_FROM),
+      // Password sign-up needs a way to prove the email: working mail, or operator-delivered invitations.
+      password: identity && (!!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD && env.SMTP_FROM) || env.AUTH_INVITE_VERIFIES_EMAIL === 'true'),
+      // WebAuthn relying party is derived from APP_ORIGIN (localhost in development, noti.school in production).
+      passkey: identity,
     },
   };
 }

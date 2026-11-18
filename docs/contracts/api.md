@@ -26,7 +26,11 @@ Browser uses relative paths with credentials. Production origin is exactly `http
 development is exactly `http://localhost:3000` with Vite proxying auth before other `/api` routes.
 Auth worker uses Better Auth 1.7.6 Node handler (`better-auth/node`), basePath `/api/auth`, fixed
 baseURL/trustedOrigins, secure HttpOnly SameSite=Lax cookies in production, no cross-domain cookies,
-cookie cache disabled, verified email required, invite-only registration. Disable automatic account
+cookie cache disabled, verified email required, invite-only registration. Owner decision 2026-11-18:
+with `AUTH_INVITE_VERIFIES_EMAIL=true`, a valid operator-delivered invitation matching the sign-up email
+sets emailVerified at creation (no mail needed); the Better Auth passkey plugin (`@better-auth/passkey`
+1.7.6, rpID from APP_ORIGIN host) adds passkey sign-in for existing verified users only.
+`IdentityCapabilities` and `Capabilities` carry `password` and `passkey`. Disable automatic account
 linking by email. Google email verification never grants institution/admin membership.
 
 Rust forwards only the original Cookie and an internal `Authorization: Bearer <INTERNAL_AUTH_SECRET>`

@@ -190,6 +190,14 @@
       "type": "string",
       "const": "invite_only"
     },
+    "AUTH_INVITE_VERIFIES_EMAIL": {
+      "default": "false",
+      "type": "string",
+      "enum": [
+        "true",
+        "false"
+      ]
+    },
     "WEB_DIST_DIR": {
       "default": "./apps/web/dist",
       "type": "string"

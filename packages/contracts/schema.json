@@ -1030,12 +1030,78 @@
             "reason"
           ],
           "additionalProperties": false
+        },
+        "password": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "disabled",
+                "unavailable"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "not_configured",
+                "paid_calls_disabled",
+                "pricing_missing",
+                "budget_exhausted",
+                "provider_failed",
+                "core_failed",
+                "no_approved_evidence",
+                "quota_exhausted"
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "passkey": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "disabled",
+                "unavailable"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "not_configured",
+                "paid_calls_disabled",
+                "pricing_missing",
+                "budget_exhausted",
+                "provider_failed",
+                "core_failed",
+                "no_approved_evidence",
+                "quota_exhausted"
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "reason"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "identity",
         "google",
-        "email"
+        "email",
+        "password",
+        "passkey"
       ],
       "additionalProperties": false
     },
@@ -1332,6 +1398,8 @@
                 "discovery",
                 "google",
                 "email",
+                "password",
+                "passkey",
                 "identity"
               ]
             }
@@ -1522,6 +1590,70 @@
           ],
           "additionalProperties": false
         },
+        "password": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "disabled",
+                "unavailable"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "not_configured",
+                "paid_calls_disabled",
+                "pricing_missing",
+                "budget_exhausted",
+                "provider_failed",
+                "core_failed",
+                "no_approved_evidence",
+                "quota_exhausted"
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "passkey": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "disabled",
+                "unavailable"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "not_configured",
+                "paid_calls_disabled",
+                "pricing_missing",
+                "budget_exhausted",
+                "provider_failed",
+                "core_failed",
+                "no_approved_evidence",
+                "quota_exhausted"
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
         "identity": {
           "type": "object",
           "properties": {
@@ -1562,6 +1694,8 @@
         "discovery",
         "google",
         "email",
+        "password",
+        "passkey",
         "identity"
       ],
       "additionalProperties": false
