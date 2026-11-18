@@ -1,17 +1,27 @@
 import { Show } from 'solid-js';
-import { FileCheck, Globe } from 'lucide-solid';
+import { Bookmark, FileCheck, Globe } from 'lucide-solid';
 import { t } from './i18n';
 import { formatDate, type Lang } from './format';
 import './confidence.css';
 
-/** Where an evidence item came from. A web page names its domain and is never worded as approved. */
-export function OriginTag(props: { origin: 'approved' | 'web'; domain: string | null; lang?: Lang | undefined }) {
+/**
+ * Where an evidence item came from. A web page names its domain and is never worded as approved.
+ * In a private space nobody approves anything: a page its owner kept reads "Saved by you". The API
+ * documents no marker for this yet, so `personal` comes from the institution kind.
+ */
+export function OriginTag(props: {
+  origin: 'approved' | 'web';
+  domain: string | null;
+  lang?: Lang | undefined;
+  personal?: boolean | undefined;
+}) {
+  const saved = () => props.origin === 'approved' && !!props.personal;
   return (
-    <span class="origin-tag" data-origin={props.origin}>
-      <Show when={props.origin === 'web'} fallback={<FileCheck size={14} aria-hidden="true" />}>
+    <span class="origin-tag" data-origin={props.origin} data-saved={saved() ? '' : undefined}>
+      <Show when={props.origin === 'web'} fallback={saved() ? <Bookmark size={14} aria-hidden="true" /> : <FileCheck size={14} aria-hidden="true" />}>
         <Globe size={14} aria-hidden="true" />
       </Show>
-      {t(props.lang, props.origin === 'web' ? 'originWeb' : 'originApproved')}
+      {t(props.lang, props.origin === 'web' ? 'originWeb' : saved() ? 'originSaved' : 'originApproved')}
       <Show when={props.origin === 'web' && props.domain}>
         {' · '}
         <span class="origin-domain">{props.domain}</span>

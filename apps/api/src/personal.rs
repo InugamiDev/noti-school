@@ -24,6 +24,15 @@ pub struct Feedback {
 pub struct FeedbackAction {
     status: String,
 }
+// Budget and feedback administration are school views: the budget is the application-wide monthly
+// ceiling and reports come from other members. In a personal space they answer 403 forbidden.
+async fn school_admin(s: &AppState, h: &HeaderMap, i: Uuid) -> Result<auth::Session> {
+    let u = auth::member(s, h, i, true).await?;
+    if crate::web::space(s.pool()?, i).await?.personal {
+        return Err(Error("forbidden"));
+    }
+    Ok(u)
+}
 pub async fn delete_conversation(
     State(s): State<AppState>,
     Path((i, id)): Path<(Uuid, Uuid)>,
@@ -59,7 +68,7 @@ pub async fn feedback_list(
     h: HeaderMap,
     Query(p): Query<Page>,
 ) -> Result<Json<Value>> {
-    let u = auth::member(&s, &h, i, true).await?;
+    let u = school_admin(&s, &h, i).await?;
     let scope = format!("feedback:{i}:{}", u.user_id);
     let key = s
         .config
@@ -78,7 +87,7 @@ pub async fn feedback_action(
     h: HeaderMap,
     Json(b): Json<FeedbackAction>,
 ) -> Result<Json<Value>> {
-    let u = auth::member(&s, &h, i, true).await?;
+    let u = school_admin(&s, &h, i).await?;
     if !["open", "reviewed", "resolved"].contains(&b.status.as_str()) {
         return Err(Error("invalid_request"));
     }
@@ -94,7 +103,7 @@ pub async fn feedback_context(
     h: HeaderMap,
 ) -> Result<Json<Value>> {
     use sqlx::Row;
-    let u = auth::member(&s, &h, i, true).await?;
+    let u = school_admin(&s, &h, i).await?;
     let mut tx = s.pool()?.begin().await?;
     let row = sqlx::query("SELECT to_jsonb(f)-'user_id' AS feedback,a.id,a.question,c.user_id FROM product.feedback f JOIN product.answers a ON a.institution_id=f.institution_id AND a.id=f.answer_id JOIN product.conversations c ON c.institution_id=a.institution_id AND c.id=a.conversation_id JOIN product.memberships m ON m.institution_id=f.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE f.institution_id=$1 AND f.id=$2 FOR SHARE OF f,a,c,m")
         .bind(i).bind(report).bind(&u.user_id).fetch_optional(&mut *tx).await?.ok_or(Error("not_found"))?;
@@ -115,7 +124,7 @@ pub async fn budget(
     Path(i): Path<Uuid>,
     h: HeaderMap,
 ) -> Result<Json<Value>> {
-    let u = auth::member(&s, &h, i, true).await?;
+    let u = school_admin(&s, &h, i).await?;
     let row:Value=sqlx::query_scalar("SELECT jsonb_build_object('month',to_char(now() AT TIME ZONE 'UTC','YYYY-MM'),'cap_micro_usd',50000000,'spent_micro_usd',coalesce((SELECT spent_micro_usd FROM product.ai_months WHERE month=date_trunc('month',now() AT TIME ZONE 'UTC')::date),0),'reserved_micro_usd',coalesce((SELECT sum(reserved_micro_usd) FROM product.ai_months),0),'currency','USD') WHERE EXISTS(SELECT 1 FROM product.memberships WHERE institution_id=$1 AND user_id=$2 AND role='admin' AND revoked_at IS NULL)")
         .bind(i).bind(u.user_id).fetch_optional(s.pool()?).await?.ok_or(Error("not_found"))?;
     Ok(Json(row))

@@ -28,10 +28,16 @@ pub struct Metadata {
     language: String,
 }
 impl Metadata {
-    // Promotion of a cached web page: a new pending_review version with no effective dates.
-    pub(crate) fn promoted(language: String) -> Self {
+    // Promotion of a cached web page: a new pending_review version with no effective dates. In a
+    // personal space the label marks it as saved by the owner, never as institution approval.
+    pub(crate) fn promoted(language: String, personal: bool) -> Self {
+        let date = Utc::now().format("%Y-%m-%d");
         Self {
-            label: format!("Promoted web capture {}", Utc::now().format("%Y-%m-%d")),
+            label: if personal {
+                format!("{} {date}", crate::web::PERSONAL_LABEL)
+            } else {
+                format!("Promoted web capture {date}")
+            },
             effective_from: None,
             effective_until: None,
             language,

@@ -29,8 +29,9 @@ pub fn configured(s: &AppState) -> bool {
 
 pub struct Session {
     key: String,
-    fetch_limit: u32,
-    search_limit: u32,
+    // (global, per-institution) daily limits.
+    fetch_limit: (u32, u32),
+    search_limit: (u32, u32),
     started: Option<Instant>,
     fetched: usize,
     embedded: usize,
@@ -44,8 +45,14 @@ impl Session {
     pub fn new(s: &AppState) -> Option<Self> {
         configured(s).then(|| Self {
             key: s.config.tinyfish().unwrap_or_default().to_owned(),
-            fetch_limit: s.config.tinyfish_daily_fetch_limit,
-            search_limit: s.config.tinyfish_daily_search_limit,
+            fetch_limit: (
+                s.config.tinyfish_daily_fetch_limit,
+                s.config.tinyfish_daily_fetch_limit_per_space,
+            ),
+            search_limit: (
+                s.config.tinyfish_daily_search_limit,
+                s.config.tinyfish_daily_search_limit_per_space,
+            ),
             started: None,
             fetched: 0,
             embedded: 0,
@@ -100,7 +107,7 @@ impl Session {
         let Some(left) = self.remaining() else {
             return Ok(vec![]);
         };
-        if !web::take_usage(pool, "search", 1, self.search_limit).await? {
+        if !web::take_usage(pool, institution, "search", 1, self.search_limit).await? {
             self.notes.insert("quota_exhausted");
             return Ok(vec![]);
         }
@@ -144,7 +151,7 @@ impl Session {
         let Some(left) = self.remaining() else {
             return Ok(vec![]);
         };
-        if !web::take_usage(pool, "fetch", n as i32, self.fetch_limit).await? {
+        if !web::take_usage(pool, run.institution, "fetch", n as i32, self.fetch_limit).await? {
             self.notes.insert("quota_exhausted");
             return Ok(vec![]);
         }
@@ -184,7 +191,8 @@ impl Session {
         }
         Ok(stored)
     }
-    // https final URL on a public host only; not_modified refreshes just the fetch time.
+    // https final URL on a public host only, never a variant or redirect target of a blocked page;
+    // not_modified refreshes just the fetch time.
     async fn accept(
         &mut self,
         run: &Run<'_>,
@@ -199,7 +207,9 @@ impl Session {
         let Some(host) = web::host_of(final_url.as_str()) else {
             return Ok(None);
         };
-        if crate::ssrf::public_host(&host).await.is_err() {
+        if crate::ssrf::public_host(&host).await.is_err()
+            || web::blocked(pool, run.institution, &[requested, final_url.as_str()]).await?
+        {
             return Ok(None);
         }
         if page.not_modified {
@@ -341,7 +351,11 @@ impl Session {
                 continue;
             };
             let url = url.to_string();
-            if !seen.insert(url.clone()) || seen.len() > 3 * MAX_FETCH {
+            // URL variants (tracking parameters, trailing slash, case) count once.
+            let Some(key) = web::url_key(&url) else {
+                continue;
+            };
+            if !seen.insert(key) || seen.len() > 3 * MAX_FETCH {
                 continue;
             }
             match web::doc_by_url(pool, run.institution, &url).await? {
@@ -349,7 +363,11 @@ impl Session {
                 Some(doc) if doc.fresh => sources.extend(doc.source_id),
                 doc => {
                     if targets.len() < MAX_FETCH.saturating_sub(self.fetched) {
-                        targets.push((url, doc));
+                        // A known page is re-fetched under its stored URL, not the variant.
+                        let url = doc.as_ref().map_or(url, |d| d.url.clone());
+                        if !targets.iter().any(|(u, _)| *u == url) {
+                            targets.push((url, doc));
+                        }
                     }
                 }
             }

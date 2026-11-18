@@ -41,8 +41,8 @@ const call = async (method: string, path: string, body?: unknown) => {
   return { status: response.status, json: response.status === 204 ? null : await response.json() };
 };
 const school = async () => Schemas.InstitutionPage.parse((await call('GET', '/api/v1/institutions')).json).items[0]!;
-const ask = async (institution_id: string, question: string, discover: boolean) =>
-  validateAnswer((await call('POST', '/api/v1/answers', { institution_id, question, language: 'en', discover })).json);
+const ask = async (institution_id: string, question: string, discover: boolean, language: 'en' | 'vi' = 'en') =>
+  validateAnswer((await call('POST', '/api/v1/answers', { institution_id, question, language, discover })).json);
 
 test('demo institutions and seeded history follow the frozen shapes', async () => {
   const page = Schemas.InstitutionPage.parse((await call('GET', '/api/v1/institutions')).json);
@@ -79,6 +79,50 @@ test('discovery adds labelled web evidence with confidence; without it the web i
   const withoutWeb = await ask(id, 'Is motorbike parking free?', false);
   assert.equal(withoutWeb.status, 'abstained');
   assert.equal(withoutWeb.confidence, null);
+});
+
+test('the second demo school answers with an abstention, never a refusal', async () => {
+  const second = Schemas.InstitutionPage.parse((await call('GET', '/api/v1/institutions')).json).items[1]!;
+  const me = Schemas.Me.parse((await call('GET', '/api/v1/me')).json);
+  assert.ok(me.memberships.some((m) => m.institution_id === second.id && m.role === 'student'));
+  const response = await call('POST', '/api/v1/answers', { institution_id: second.id, question: 'When is the exam timetable published?', language: 'en', discover: true });
+  assert.equal(response.status, 200);
+  const answer = validateAnswer(response.json);
+  assert.equal(answer.status, 'abstained');
+  assert.equal(answer.institution_id, second.id);
+  assert.ok(answer.explanation);
+  // A student there still cannot read or change what administrators manage.
+  assert.equal((await call('GET', `/api/v1/institutions/${second.id}/web-documents`)).status, 403);
+  assert.equal((await call('PUT', `/api/v1/institutions/${second.id}/domains`, { domains: ['example.edu'] })).status, 403);
+});
+
+test('an approved passage is scored by how well it matches, and an unrelated one is never cited', async () => {
+  const { id } = await school();
+  // "miễn phí" (free) shares one syllable with "học phí" (tuition). That is not a match.
+  const withoutWeb = await ask(id, 'Gửi xe máy có miễn phí không', false, 'vi');
+  assert.equal(withoutWeb.status, 'abstained');
+  assert.deepEqual(withoutWeb.evidence, []);
+  const withWeb = await ask(id, 'Gửi xe máy có miễn phí không', true, 'vi');
+  assert.deepEqual(withWeb.evidence.map((e) => [e.origin, e.domain]), [['web', 'news.example.org']]);
+  assert.ok(withWeb.evidence.every((e) => !/Scholarships/.test(e.title)));
+  // Sharing only ordinary words with a passage does not make it on topic either.
+  assert.equal((await ask(id, 'Where can students collect a parcel in person?', false)).status, 'abstained');
+  // A close match reads High; a single shared topic reads Medium and the answer says so.
+  const strong = await ask(id, 'How do I get an official transcript?', false);
+  assert.equal(strong.status, 'answered');
+  assert.ok(strong.evidence[0]!.confidence!.relevance >= 0.8 && strong.confidence! >= 0.8);
+  const partial = await ask(id, 'Is there a fee?', false);
+  assert.equal(partial.status, 'qualified');
+  assert.match(partial.evidence[0]!.title, /Scholarships/);
+  const { relevance, overall } = partial.evidence[0]!.confidence!;
+  assert.ok(relevance >= 0.6 && relevance < 0.8 && overall >= 0.6 && overall < 0.8);
+  for (const answer of [strong, partial]) {
+    for (const e of answer.evidence) {
+      assert.equal(e.origin, 'approved');
+      assert.ok(e.confidence!.relevance >= 0.6, 'a cited passage is on topic');
+      assert.match(e.confidence!.model, /synthetic-demo \(not a model score\)/);
+    }
+  }
 });
 
 test('web pages can be promoted into review, refreshed and blocked; domains are replaced', async () => {
@@ -120,4 +164,25 @@ test('the personal space is created once, listed for its owner and answers insid
   assert.ok(answer.evidence.length > 0 && answer.evidence.every((e) => e.origin === 'web' && e.institution_id === space.id));
   const conversations = Schemas.ConversationPage.parse((await call('GET', `/api/v1/institutions/${space.id}/conversations`)).json);
   assert.deepEqual(conversations.items.map((c) => c.institution_id), [space.id]);
+});
+
+test('a page saved in the personal space joins answers only after its owner chooses to use it', async () => {
+  const space = Schemas.Institution.parse((await call('POST', '/api/v1/me/personal-space')).json);
+  const scope = `/api/v1/institutions/${space.id}`;
+  const question = 'When is the exam timetable published?';
+  const pages = Schemas.WebDocumentPage.parse((await call('GET', `${scope}/web-documents`)).json).items;
+  const exam = pages.find((p) => p.final_url.endsWith('/exam-timetable'))!;
+  const saved = Schemas.WebDocument.parse((await call('PATCH', `${scope}/web-documents/${exam.id}`, { action: 'promote' })).json);
+  assert.ok(saved.source_id);
+  const versions = Schemas.VersionPage.parse((await call('GET', `${scope}/sources/${saved.source_id}/versions`)).json).items;
+  assert.deepEqual(versions.map((v) => v.status), ['pending_review']);
+  // Saving alone approves nothing: the space has no document in use and the page is still cited as web.
+  const listed = async () => Schemas.SourcePage.parse((await call('GET', `${scope}/sources`)).json).items;
+  assert.ok((await listed()).every((s) => s.current_version_id === null));
+  assert.ok((await ask(space.id, question, true)).evidence.every((e) => e.origin === 'web'));
+  Schemas.Job.parse((await call('POST', `${scope}/versions/${versions[0]!.id}/actions`, { action: 'approve', expected_status: 'pending_review' })).json);
+  assert.ok((await listed()).some((s) => s.id === saved.source_id && s.current_version_id === versions[0]!.id));
+  const answer = await ask(space.id, question, true);
+  assert.deepEqual(answer.evidence.map((e) => [e.origin, e.source_id, e.domain]), [['approved', saved.source_id, null]]);
+  assert.match(answer.evidence[0]!.quote, /^Synthetic demo text/);
 });

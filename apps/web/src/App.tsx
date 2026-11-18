@@ -1,6 +1,7 @@
 import {
   createComputed,
   createEffect,
+  createMemo,
   createSignal,
   For,
   Show,
@@ -202,8 +203,11 @@ export default function App() {
       return;
     }
     // The selection is gone (signed out of a private space, or another account): fall back to a school.
+    // A session read that only failed (offline, or cut short by a reload) is not a sign-out: falling
+    // back then would also save the school as the preference and lose My space on the next load.
+    const unread = !!me.error && !isAuthError(me.error);
     const first = schools()[0];
-    if (first && sessionKnown && !institutions.loading) setInstitution(first.id);
+    if (first && sessionKnown && !institutions.loading && !unread) setInstitution(first.id);
   });
   const selected = () => available().find((i) => i.id === institution());
   const institutionLabel = (id: string) => {
@@ -237,8 +241,9 @@ export default function App() {
     return { text: reasons[answers.reason] || 'Answers are unavailable.', blocking: true };
   };
   const answersUnavailable = () => !!answerState()?.blocking;
-  // Questions also search the web by default. Only a server that reports discovery as not available
-  // turns it off, so the waiting text never claims a web search that cannot run.
+  // Questions also search the web by default (owner decision, 18 Nov 2026): there is no opt-in
+  // toggle. Only a server that reports discovery as not available turns it off, so the waiting text
+  // never claims a web search that cannot run.
   const discover = () => {
     const discovery = capabilities()?.discovery;
     return !discovery || discovery.state === 'available';
@@ -332,6 +337,13 @@ export default function App() {
       window.scrollTo({ top: saved && current !== '/history' ? saved : 0, left: 0, behavior: 'instant' });
     });
   });
+  // The private space's manager is titled like its heading. Kept apart from the effect above, which
+  // also resets scroll and focus and must not re-run when the language or selection changes.
+  createEffect(() => {
+    if (!route().startsWith('/admin')) return;
+    const title = selected()?.kind === 'personal' ? t(language(), 'mySpace') : 'Collection administration';
+    document.title = `${title} — noti.school`;
+  });
   let transitionTimer: ReturnType<typeof setTimeout> | undefined;
   const [busy, setBusy] = createSignal(false),
     [error, setErrorText] = createSignal(''),
@@ -355,6 +367,18 @@ export default function App() {
     window.history.replaceState(null, '', `#${route()}${next ? `?${next}` : ''}`);
   };
   const [conversation, setConversation] = createSignal<{ id: string; institution: string }>();
+  // A private space starts with no documents; it has some only after its owner saved pages and chose
+  // to use them. Read outside the manager so a change made there is seen on the way back.
+  const savedSpace = createMemo(() =>
+    selected()?.kind === 'personal' && member() && !route().startsWith('/admin') ? institution() : '',
+  );
+  const [spaceSaved] = createResource(
+    () => savedSpace() || false,
+    async (id) => {
+      const page = await get(scoped(id, '/sources'), 'SourcePage');
+      return page.items.some((source) => source.institution_id === id && source.current_version_id !== null);
+    },
+  );
   const [feedback, setFeedback] = createSignal(''),
     [feedbackMessage, setFeedbackMessage] = createSignal('');
   const [listCursor, setListCursor] = createSignal('');
@@ -911,7 +935,7 @@ export default function App() {
               </Show>
             </section>
             <Show when={route() === '/'}>
-              <HomeSections motion={siteMotion()} institution={institution()} />
+              <HomeSections motion={siteMotion()} institution={institution()} lang={language()} />
             </Show>
           </div>
         </Show>
@@ -923,7 +947,7 @@ export default function App() {
           }
           keyed
         >
-          {(page) => <MarketingPages route={page} motion={siteMotion()} />}
+          {(page) => <MarketingPages route={page} motion={siteMotion()} lang={language()} />}
         </Show>
         <Show when={isAnswer()}>
           <AnswerView
@@ -931,6 +955,7 @@ export default function App() {
             institutionName={selected()?.name}
             personal={selected()?.kind === 'personal'}
             discovering={discovering()}
+            savedPages={spaceSaved() === true}
             demo={demo()}
             busy={busy()}
             restoring={restoring()}
@@ -1028,6 +1053,7 @@ export default function App() {
               {(_scope) => (
                 <Admin
                   institution={institution()}
+                  personal={selected()?.kind === 'personal'}
                   lang={language()}
                   domains={selected()?.domains ?? []}
                   institutionUpdated={(next) => {

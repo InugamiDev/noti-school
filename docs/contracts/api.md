@@ -89,10 +89,13 @@ Ask returns one final validated Answer; progress streaming is deferred (no unval
 request hash and final response in the same transaction as job/operation creation. Same key/different body
 is 409, same in-flight key is 409. Ask also hashes the selected evidence provider, exact generation/embedding models and request templates, and pipeline/prompt/schema versions; secrets are excluded. Completed and racing replays require the same body and execution contract or return 409 without another provider call. Keys from older request-only hashes conflict; authorized historical answer reads remain separate from ask replay. Retain 24h.
 Retain in-flight/uncertain keys beyond 24h until terminal reconciliation; expiry alone is not cleanup permission.
-Conversation institution/owner is immutable. `discover=true` requires separately available discovery and
-explicit user opt-in (503 `provider_unavailable` when TinyFish/Jev are not configured). Discovered pages are
-answer evidence only after fetch, chunking, embedding and Jev scoring; they keep `origin: "web"` and are never
-approved corpus evidence unless an administrator promotes them into the normal review flow.
+Conversation institution/owner is immutable. Web discovery (owner decision 2026-11-18): the web client sends
+`discover: true` by default whenever `capabilities.discovery` is available (and `false` otherwise), and the
+API honours it whenever discovery is available; `AskRequest.discover` still defaults to false for other
+callers. `discover=true` while TinyFish/Jev are not configured is 503 `provider_unavailable`. Discovery runs
+only when approved and cached evidence is insufficient. Discovered pages are answer evidence only after fetch,
+chunking, embedding and Jev scoring (pinned `JEV_MODEL`, default `jev-1.14.0`); they keep `origin: "web"` and
+are never approved corpus evidence unless an administrator promotes them into the normal review flow.
 
 Missing OpenAI or the explicitly selected evidence provider, unknown/stale required pricing, exhausted budget or selected-provider outage disables paid answers, embedding/indexing and discovery. EVIDENCE_PROVIDER defaults to openai; jev adds its own key/model/prices. Return 503 with the affected capability, never mock text in live mode or automatic OpenAI fallback for selected Jev. Lexical/source-only search may continue against approved indexed
 records, explicitly indicating coverage; no inference pass is implied. Provider failures mark capabilities
@@ -158,24 +161,42 @@ results (`POST /search`) are approved-only and carry `origin: "approved"` with n
 Graph edges include `confidence` (Jev relation score, null for admin-created or unscored edges).
 
 `GET /institutions/{id}/web-documents` (admin): the institution's cached web pages, `(created_at,id)` cursor,
-blocked pages excluded. `state` is `fresh` until 7 days after `fetched_at`, then `stale` (also when an admin
-forced a refresh); `failed` when the last re-fetch failed. `source_id` is the promoted source (null until
-promoted); `confidence` is the best stored score among the current capture's chunks. `PATCH .../{id}` with
-`promote` creates a normal (`origin: approved`) url source and a `pending_review` version through ordinary
-ingestion (idempotent: a second promote returns the same source), `refresh` marks the page stale so its next
-use re-fetches it (no paid call in the request), `block` excludes it from retrieval, discovery and listing.
-Cross-institution IDs are 404; students 403.
+blocked pages excluded. `state` is `fresh` until exactly 168 hours (absolute time, independent of time zone
+and DST) after `fetched_at`, then `stale` (also when an admin forced a refresh); `failed` when the last
+re-fetch failed. `source_id` is the promoted source (null until promoted); `confidence` is the best stored
+score among the current capture's chunks. `PATCH .../{id}` with `promote` creates a url source and a
+`pending_review` version through ordinary ingestion. It is idempotent once that version exists (a second
+promote returns the same source); if ingestion failed and the promoted source has no version, the next
+promote completes ingestion into the same source. `refresh` marks the page stale so its next use re-fetches
+it (no paid call in the request). `block` excludes the page from retrieval, discovery, scoring and listing,
+including every URL variant and redirect: pages are compared by a normalized URL key (http and https equal,
+lowercase host, no default port, fragment, trailing slash or `utm_*`/`fbclid`/`gclid` parameters) of both the
+requested and the final URL. Blocking also blocks cached pages sharing either key; a fetch whose final URL
+matches a blocked key is discarded before it is stored. Cross-institution IDs are 404; students 403.
+
+Promotion in a school institution creates an `origin: approved`, `visibility: institution` source. In a
+personal space nobody approves for an institution: the promoted source is private to its owner
+(`visibility: admin`) and its version label starts with `Saved by you`. Wire `origin` stays `approved` for
+saved pages after the owner approves them (the ingestion and review flow only operates on that origin), so
+clients must label `origin: approved` evidence in a `kind: personal` institution as "Saved by you", never as
+an approved or official document.
 
 `PUT /institutions/{id}/domains` (admin) replaces the trusted domain list (1..20, IDNA/lowercase normalized,
 deduplicated, hostnames only; IP literals and paths are 400). A host matches when equal or a dot-separated
 subdomain. `POST /me/personal-space` (session, CSRF) returns 201 with the caller's single personal institution
-(`kind: personal`, coverage `web_discovery`), creating it with the caller as admin if absent; repeated calls
-return the same space. Personal spaces are excluded from `GET /institutions`; other users receive 404 on every
-scoped route. Deleted identities cannot create one, and account deletion pseudonymizes the stored owner.
+(`kind: personal`, coverage `web_discovery`, or `approved_sources` once a saved page is approved), creating
+it with the caller as admin if absent; repeated calls return the same existing space (also 201). Personal
+spaces are never listed by `GET /institutions` (public, schools only); the owner finds theirs through `GET /me`
+memberships or `POST /me/personal-space`. Other users receive 404 on every scoped route. Deleted identities
+cannot create one, and account deletion pseudonymizes the stored owner. `GET /institutions/{id}/budget` and
+the feedback administration routes (`GET .../feedback`, `PATCH .../feedback/{id}`, `GET
+.../feedback/{id}/context`) are school views: in a personal space they return 403 `forbidden` (the budget is
+the application-wide monthly ceiling, which a space owner must not see). Students submit feedback as before.
 
 Capabilities: `discovery` is `disabled/paid_calls_disabled` outside live mode, `disabled/not_configured`
 without TinyFish or Jev keys, mirrors `answers` when answers are unavailable (including missing Jev prices
-or budget), `unavailable/quota_exhausted` after a TinyFish 402 (until 00:00 UTC) or when a daily self-limit is
-reached, `unavailable/provider_failed` during a 30 s cooldown after another TinyFish failure, else available.
+or budget), `unavailable/quota_exhausted` after a TinyFish 402 (until 00:00 UTC) or when a global daily
+self-limit is reached (a single institution's exhausted share ends only that institution's discovery, as an
+abstention with an explanation), `unavailable/provider_failed` during a 30 s cooldown after another TinyFish failure, else available.
 Discovery quota, rate limits or timeouts during an ask produce an abstention with an explanation, not an error.
 Live TinyFish behaviour, allowance accounting and Jev calibration are unverified (loopback mocks only).

@@ -29,6 +29,8 @@ const MIGRATOR: &str =
     "postgresql://noti_school_migrator:synthetic-test-only@127.0.0.1:54390/noti_school_test_api2";
 const SECRET: &str = "synthetic-internal-secret-test-only-0000";
 
+#[path = "migrations.rs"]
+mod migrations;
 #[path = "rag.rs"]
 mod rag;
 #[path = "repairs.rs"]

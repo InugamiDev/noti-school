@@ -9,6 +9,8 @@ import { t } from './ui/i18n';
 import { ConfidenceDetails, ConfidenceTag } from './ui/Confidence';
 import { FetchedDate, OriginTag } from './ui/Origin';
 import { DomainsEditor, WebPages } from './WebPages';
+import SpaceAdmin from './SpaceAdmin';
+import { createActions } from './ui/actions';
 import { createRemoteResource as createResource } from './resource';
 import { SourceCreate, VersionCreate, VersionAction, GraphEntityCreate, GraphEdgeCreate, GraphEdgeAction } from '@noti/contracts';
 import { get, post, request, errorText, readAnswer, safeLink } from './api';
@@ -64,21 +66,32 @@ const monthName = (month: string) => {
     : new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date);
 };
 
-export default function Admin(props: {
+type AdminProps = {
   institution: string;
   allowed: boolean;
   signedIn: boolean;
+  /** The reader's private space: it gets the small My space manager, never the school console. */
+  personal: boolean;
   /** Language for the web pages and domains sections; the older sections are English only. */
   lang: Lang;
   /** The selected institution's own domains, as last read. */
   domains: readonly string[];
   institutionUpdated: (next: z.infer<typeof Schemas.Institution>) => void;
-}) {
-  let disposed = false;
-  onCleanup(() => { disposed = true; });
+};
+
+// The school console reads budget, feedback, domains and the graph as soon as it mounts, so a
+// private space is routed away before any of that exists: none of those requests are made for it.
+export default function Admin(props: AdminProps) {
+  return (
+    <Show when={props.personal && props.allowed} fallback={<CollectionAdmin {...props} />}>
+      <SpaceAdmin institution={props.institution} lang={props.lang} />
+    </Show>
+  );
+}
+
+function CollectionAdmin(props: AdminProps) {
+  const { busy, message, act, line: messageLine } = createActions();
   const [selected, setSelected] = createSignal(''),
-    [message, setMessage] = createSignal(''),
-    [busy, setBusy] = createSignal(false),
     [jobId, setJobId] = createSignal('');
   const [sourceCursor,setSourceCursor]=createSignal(''),[versionCursor,setVersionCursor]=createSignal(''),[feedbackCursor,setFeedbackCursor]=createSignal('');
   const [graphCursor, setGraphCursor] = createSignal(''), [entityId, setEntityId] = createSignal('');
@@ -160,24 +173,6 @@ export default function Admin(props: {
     const timer = setTimeout(() => { polls++; void refreshJob(); }, 2000);
     onCleanup(() => clearTimeout(timer));
   }));
-  let messageLine: HTMLParagraphElement | undefined;
-  async function act(work: () => Promise<unknown>, done = 'Action accepted. Check the updated status below.') {
-    if (busy()) return;
-    setBusy(true);
-    setMessage('');
-    try {
-      await work();
-      if (!disposed) setMessage(done);
-    } catch (e) {
-      if (!disposed) setMessage(errorText(e));
-    } finally {
-      if (!disposed) setBusy(false);
-      // Re-rendered lists drop focus to the page; land it on the outcome instead.
-      queueMicrotask(() => {
-        if (!disposed && document.activeElement === document.body) messageLine?.focus();
-      });
-    }
-  }
   const stepState = (n: number) => (n < step() ? 'done' : n === step() ? 'current' : 'upcoming');
   return (
     <div class="admin-page">

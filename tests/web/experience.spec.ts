@@ -10,6 +10,9 @@ const capability={state:'disabled',reason:'not_configured'};
 async function fixture(page:Page){await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;if(path.endsWith('/capabilities'))return route.fulfill({json:{mode:'disabled',answers:{state:'available',reason:'ready'},indexing:capability,discovery:capability,google:capability,email:capability,identity:capability}});if(path.endsWith('/institutions'))return route.fulfill({json:{items:[{id,slug:'demo',name:'Demo university · synthetic test',kind: 'school', domains: [], coverage: 'synthetic_demo'}],next_cursor:null}});return route.fulfill({status:503,json:error});});}
 // The cold-load splash covers the hero until the app has mounted; frames are compared only after it is gone.
 async function canvasShot(page:Page,name:string){await expect(page.locator('#splash')).toHaveCount(0);const canvas=page.locator('canvas');await expect(canvas).toBeVisible();const hide=await page.addStyleTag({content:'.hero-content,.motion-control,.archive-shade{visibility:hidden!important}'});const bytes=await canvas.screenshot({path:`${artifacts}${name}.png`,animations:'allow'});await hide.evaluate(el=>el.remove());return createHash('sha256').update(bytes).digest('hex');}
+// A still canvas: two consecutive frames are identical. A scene that is still moving never gets
+// there, so this fails (it does not pass) when pause or reduced motion does not stop the animation.
+async function settledShot(page:Page,name:string){let previous=await canvasShot(page,name);await expect.poll(async()=>{await page.waitForTimeout(250);const next=await canvasShot(page,name);const same=next===previous;previous=next;return same;},{timeout:40_000,intervals:[0],message:`${name}: the canvas never became still`}).toBe(true);return previous;}
 test.beforeAll(async()=>{await mkdir(artifacts,{recursive:true});});
 for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:1920,height:1080},{name:'mobile',width:390,height:844}])test(`render ${size.name}: scene, responsive prompt, keyboard, failure`,async({page})=>{
  await page.setViewportSize(size);await fixture(page);await page.goto('/');await expect(page.getByRole('heading',{name:'noti.school',exact:true})).toBeVisible();await page.waitForTimeout(2200);
@@ -29,10 +32,20 @@ test('available identity still reports a failed sign-in request without claiming
  await page.goto('/#/auth');await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Password',{exact:true}).fill('synthetic-password');const submit=page.locator('form').getByRole('button',{name:'Sign in',exact:true});await expect(submit).toBeEnabled();await submit.click();await expect(page.getByRole('status')).toContainText('unavailable');
 });
 for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:1920,height:1080},{name:'mobile',width:390,height:844}])test(`actual canvas pixels move, pause, and reduced-motion remain stable: ${size.name}`,async({page})=>{
+ // Stabilised, not weakened. The scene is drawn by software WebGL (SwiftShader) and each full-canvas
+ // screenshot at 1920x1080 takes seconds, so on the shared homelab the wide case failed in two ways,
+ // both reproduced at the base commit with 10 busy cores:
+ // 1. "Test timeout of 30000ms exceeded": the test needs about 21 s on an idle machine. The budget
+ //    is now 180 s; no wait was shortened.
+ // 2. paused-a differed from paused-b: 150 ms (pause) or 1000 ms (reload) was not always enough for
+ //    the last drawn frame to reach the screen, so the first "still" frame was a stale one. The first
+ //    frame is now taken once two consecutive frames agree (settledShot), and the original check
+ //    still follows: 550 ms later the canvas must be that same frame.
+ test.setTimeout(180_000);
  await page.setViewportSize(size);await fixture(page);await page.goto('/');await page.waitForTimeout(2500);
  const first=await canvasShot(page,`${size.name}-motion-a`);await page.waitForTimeout(550);const second=await canvasShot(page,`${size.name}-motion-b`);expect(first).not.toBe(second);
- await page.getByRole('button',{name:'Pause animation'}).click();await page.waitForTimeout(150);const paused=await canvasShot(page,`${size.name}-paused-a`);await page.waitForTimeout(550);expect(await canvasShot(page,`${size.name}-paused-b`)).toBe(paused);
- await page.emulateMedia({reducedMotion:'reduce'});await page.reload();await page.waitForTimeout(1000);const reduced=await canvasShot(page,`${size.name}-reduced-a`);await page.waitForTimeout(550);expect(await canvasShot(page,`${size.name}-reduced-b`)).toBe(reduced);
+ await page.getByRole('button',{name:'Pause animation'}).click();await page.waitForTimeout(150);const paused=await settledShot(page,`${size.name}-paused-a`);await page.waitForTimeout(550);expect(await canvasShot(page,`${size.name}-paused-b`)).toBe(paused);
+ await page.emulateMedia({reducedMotion:'reduce'});await page.reload();await page.waitForTimeout(1000);const reduced=await settledShot(page,`${size.name}-reduced-a`);await page.waitForTimeout(550);expect(await canvasShot(page,`${size.name}-reduced-b`)).toBe(reduced);
  // Decode actual screenshot pixels, independently of any DOM scene marker.
  const sharp=createRequire(new URL('../../apps/web/package.json',import.meta.url))('sharp');const stats=await sharp(`${artifacts}${size.name}-motion-a.png`).stats();expect(Math.max(...stats.channels.map((c:{stdev:number})=>c.stdev))).toBeGreaterThan(5);
  await writeFile(`${artifacts}${size.name}-canvas-evidence.json`,JSON.stringify({motionHashes:[first,second],pausedHash:paused,reducedHash:reduced,channelStandardDeviation:stats.channels.map((c:{stdev:number})=>c.stdev)},null,2));

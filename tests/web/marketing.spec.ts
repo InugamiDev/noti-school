@@ -348,7 +348,11 @@ test("Help filters real FAQ answers by search and category, with empty-state rec
   const surface = await visit(page, "help");
   const search = surface.getByRole("searchbox", { name: "Search help", exact: true });
   const details = surface.locator("details");
-  await expect(details).toHaveCount(10);
+  // Eleven answers since "Where do answers come from?" joined the Answers category.
+  await expect(details).toHaveCount(11);
+  await expect(details.filter({ hasText: "Where do answers come from?" })).toContainText(
+    "Web pages are labelled and never shown as approved.",
+  );
   await search.fill("VIETNAMESE");
   await expect(details).toHaveCount(1);
   await expect(details.locator("summary")).toHaveText("Can I ask in Vietnamese?");
@@ -361,7 +365,7 @@ test("Help filters real FAQ answers by search and category, with empty-state rec
   await search.fill("");
   const categories = surface.getByRole("group", { name: "Help categories" });
   for (const [category, count] of [
-    ["Answers", 3],
+    ["Answers", 4],
     ["Sources", 3],
     ["Accounts", 2],
     ["Pilot", 2],
@@ -382,7 +386,7 @@ test("Help filters real FAQ answers by search and category, with empty-state rec
     "aria-pressed",
     "true",
   );
-  await expect(details).toHaveCount(10);
+  await expect(details).toHaveCount(11);
   await assertGeometry(page);
 });
 

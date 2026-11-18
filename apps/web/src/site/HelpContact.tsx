@@ -2,13 +2,14 @@ import { createMemo, createSignal, For, Show } from 'solid-js';
 import { Select } from '../ui/Select';
 import { ArrowUpRight, Search, ArrowRight } from 'lucide-solid';
 import { questions } from './Sections';
+import type { Lang } from '../ui/format';
 
-export function Help() {
+export function Help(props: { lang: Lang }) {
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal('All');
   const results = createMemo(() => {
     const term = query().trim().toLocaleLowerCase();
-    return questions.filter(
+    return questions(props.lang).filter(
       (item) =>
         (category() === 'All' || item.category === category()) &&
         `${item.question} ${item.answer}`.toLocaleLowerCase().includes(term),
@@ -44,7 +45,7 @@ export function Help() {
       <div class="site-faq">
         <For each={results()}>
           {(item) => (
-            <details>
+            <details lang={item.lang}>
               <summary>{item.question}</summary>
               <p>{item.answer}</p>
               <a class="site-inline-link" href={item.href}>

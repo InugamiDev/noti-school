@@ -65,6 +65,8 @@ const strings = {
   // Where evidence came from. Web pages are never worded as approved.
   originApproved: { en: 'Approved document', vi: 'Tài liệu đã duyệt' },
   originWeb: { en: 'Web page', vi: 'Trang web' },
+  // A private space has no reviewers: a page its owner kept is theirs, never an approved document.
+  originSaved: { en: 'Saved by you', vi: 'Bạn đã lưu' },
   fetched: { en: 'Fetched', vi: 'Tải về ngày' },
   openWebPage: { en: 'Open web page', vi: 'Mở trang web' },
   webNotice: { en: 'Includes pages found on the web. They have not been reviewed by {school} staff.', vi: 'Có dùng các trang tìm thấy trên web. Nhân viên {school} chưa kiểm duyệt các trang này.' },
@@ -72,6 +74,8 @@ const strings = {
   webNoticePersonal: { en: 'Includes pages found on the web. Nobody has reviewed them.', vi: 'Có dùng các trang tìm thấy trên web. Chưa có ai kiểm duyệt các trang này.' },
   webPassageNotice: { en: 'Found on the web. This page is not an approved document.', vi: 'Tìm thấy trên web. Trang này không phải tài liệu đã duyệt.' },
   searchingWeb: { en: 'Searching approved documents and the web…', vi: 'Đang tìm trong tài liệu đã duyệt và trên web…' },
+  searchingWebOnly: { en: 'Searching the web…', vi: 'Đang tìm trên web…' },
+  searchingSavedAndWeb: { en: 'Searching your saved pages and the web…', vi: 'Đang tìm trong các trang bạn đã lưu và trên web…' },
   // Personal space
   mySpace: { en: 'My space', vi: 'Không gian của tôi' },
   mySpaceHint: { en: 'Private to you', vi: 'Chỉ mình bạn thấy' },
@@ -80,6 +84,20 @@ const strings = {
   mySpaceOpening: { en: 'Opening your private space…', vi: 'Đang mở không gian riêng của bạn…' },
   mySpaceSignIn: { en: 'Sign in to open your private space.', vi: 'Hãy đăng nhập để mở không gian riêng của bạn.' },
   signIn: { en: 'Sign in', vi: 'Đăng nhập' },
+  // My space manager: the owner's small view of the web pages found for their questions.
+  spaceAbout: { en: 'Pages found on the web for your questions. Save a page to keep it, or block it so it is not used again.', vi: 'Các trang tìm thấy trên web cho câu hỏi của bạn. Bạn có thể lưu một trang để giữ lại, hoặc chặn để trang không được dùng nữa.' },
+  spacePagesAbout: { en: 'Pages are kept for 7 days, then fetched again when needed. Nobody has reviewed them. A page you save is labelled Saved by you.', vi: 'Các trang được lưu 7 ngày, sau đó được tải lại khi cần. Chưa có ai kiểm duyệt các trang này. Trang bạn lưu được ghi nhãn Bạn đã lưu.' },
+  spacePagesEmpty: { en: 'No web pages yet. Ask a question in My space and the pages it finds appear here.', vi: 'Chưa có trang web nào. Hãy đặt câu hỏi trong Không gian của tôi, các trang tìm được sẽ hiện ở đây.' },
+  save: { en: 'Save', vi: 'Lưu' },
+  saveDone: { en: 'Page saved. Read the saved copy, then choose Use in answers.', vi: 'Đã lưu trang. Hãy đọc bản đã lưu, rồi chọn Dùng trong câu trả lời.' },
+  viewSaved: { en: 'View saved copy', vi: 'Xem bản đã lưu' },
+  savedPending: { en: 'Not used in your answers yet. Read the saved copy first.', vi: 'Chưa được dùng trong câu trả lời của bạn. Hãy đọc bản đã lưu trước.' },
+  savedInUse: { en: 'Used in your answers.', vi: 'Đang được dùng trong câu trả lời của bạn.' },
+  savedPreparing: { en: 'The saved copy is not ready yet.', vi: 'Bản đã lưu chưa sẵn sàng.' },
+  savedChecking: { en: 'Checking the saved copy…', vi: 'Đang kiểm tra bản đã lưu…' },
+  useInAnswers: { en: 'Use in answers', vi: 'Dùng trong câu trả lời' },
+  useInAnswersDone: { en: 'Done. This page can now support your answers, labelled Saved by you.', vi: 'Xong. Trang này giờ có thể hỗ trợ câu trả lời của bạn, với nhãn Bạn đã lưu.' },
+  checkAgain: { en: 'Check again', vi: 'Kiểm tra lại' },
   // Collection management: cached web pages and school domains
   webPages: { en: 'Web pages', vi: 'Trang web' },
   webPagesAbout: { en: 'Pages found on the web and kept for 7 days. They can support answers with a confidence score, but they are not approved documents.', vi: 'Các trang tìm thấy trên web, được lưu 7 ngày. Chúng có thể hỗ trợ câu trả lời kèm độ tin cậy, nhưng không phải tài liệu đã duyệt.' },
@@ -108,7 +126,22 @@ const strings = {
   domainsLabel: { en: 'Domains, one per line', vi: 'Tên miền, mỗi dòng một tên' },
   saveDomains: { en: 'Save domains', vi: 'Lưu tên miền' },
   domainsSaved: { en: 'Domains saved.', vi: 'Đã lưu tên miền.' },
-  domainsInvalid: { en: 'Enter 1 to 20 domain names such as example.edu, one per line, without https:// or paths.', vi: 'Nhập từ 1 đến 20 tên miền như example.edu, mỗi dòng một tên, không kèm https:// hay đường dẫn.' },
+  domainsHint: { en: 'Write each domain as a bare name such as example.edu, without https:// or a path. A name with accented letters, such as trường.example, is saved in its ASCII form (xn--trng-rib8295b.example).', vi: 'Viết mỗi tên miền ở dạng tên trần như example.edu, không kèm https:// hay đường dẫn. Tên miền có dấu, ví dụ trường.example, được lưu ở dạng ASCII (xn--trng-rib8295b.example).' },
+  domainsInvalid: { en: 'Enter 1 to 20 domain names such as example.edu, one per line, without https:// or paths. Names with accented letters are accepted.', vi: 'Nhập từ 1 đến 20 tên miền như example.edu, mỗi dòng một tên, không kèm https:// hay đường dẫn. Tên miền có dấu được chấp nhận.' },
+  // Landing and help: where answers come from. Web pages are never worded as approved.
+  storyLabel: { en: 'How it works', vi: 'Cách hoạt động' },
+  storyHeading: { en: 'From question to source in four steps.', vi: 'Từ câu hỏi đến nguồn trong bốn bước.' },
+  storyAskTitle: { en: 'Ask the way you speak', vi: 'Hỏi như cách bạn nói' },
+  storyAskBody: { en: 'Type your question in English or Vietnamese. No keywords, no menus.', vi: 'Gõ câu hỏi bằng tiếng Anh hoặc tiếng Việt. Không cần từ khóa, không cần menu.' },
+  storyEvidenceTitle: { en: 'Reviewed documents first', vi: 'Tài liệu đã duyệt trước' },
+  storyEvidenceBody: { en: 'noti.school checks your school’s reviewed documents first, then pages from the web.', vi: 'noti.school tìm trong các tài liệu đã duyệt của trường bạn trước, sau đó đến các trang trên web.' },
+  storyCitedTitle: { en: 'Every part shows its source', vi: 'Mỗi phần đều ghi nguồn' },
+  storyCitedBody: { en: 'Every answer shows where each part came from and how sure it is. Web pages are labelled and never shown as approved.', vi: 'Mỗi câu trả lời cho biết từng phần lấy từ đâu và chắc chắn đến mức nào. Trang web luôn được ghi nhãn và không bao giờ hiển thị như tài liệu đã duyệt.' },
+  storyGapsTitle: { en: 'Honest about gaps', vi: 'Nói rõ khi chưa đủ căn cứ' },
+  storyGapsBody: { en: 'If the sources do not cover your question, you are told so and shown where to go next.', vi: 'Nếu các nguồn không đề cập câu hỏi của bạn, bạn sẽ được báo rõ và được gợi ý bước tiếp theo.' },
+  faqEvidenceQuestion: { en: 'Where do answers come from?', vi: 'Câu trả lời lấy từ đâu?' },
+  faqEvidenceAnswer: { en: 'noti.school checks your school’s reviewed documents first, then pages from the web. Every answer shows where each part came from and how sure it is. Web pages are labelled and never shown as approved.', vi: 'noti.school tìm trong các tài liệu đã duyệt của trường bạn trước, sau đó đến các trang trên web. Mỗi câu trả lời cho biết từng phần lấy từ đâu và chắc chắn đến mức nào. Trang web luôn được ghi nhãn và không bao giờ hiển thị như tài liệu đã duyệt.' },
+  faqEvidenceAction: { en: 'Browse reviewed documents', vi: 'Xem tài liệu đã duyệt' },
 } as const;
 
 export type StringKey = keyof typeof strings;

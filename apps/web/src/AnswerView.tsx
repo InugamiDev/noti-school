@@ -21,6 +21,8 @@ export default function AnswerView(props: {
   personal: boolean;
   /** The pending question also searches the web, so the waiting text says so. */
   discovering: boolean;
+  /** The private space holds pages its owner saved for answers; without them only the web is searched. */
+  savedPages: boolean;
   demo: boolean;
   busy: boolean;
   /** A deep link is rebuilding the thread from saved answers. */
@@ -81,6 +83,15 @@ export default function AnswerView(props: {
     return first?.answer ? `${t(lang(), 'conversationFrom')} ${formatDate(first.answer.created_at, lang())}` : 'Your answer';
   };
   const empty = () => !props.turns.length && !props.busy && !props.restoring;
+  // One truthful waiting line. A private space has no approved documents, so it never claims to search them.
+  const waitingKey = () =>
+    !props.discovering
+      ? 'findingAnswer'
+      : !props.personal
+        ? 'searchingWeb'
+        : props.savedPages
+          ? 'searchingSavedAndWeb'
+          : 'searchingWebOnly';
   // Closing returns focus to the chip that opened the passage.
   const close = () => {
     const chip = column?.querySelector<HTMLElement>('.citation-buttons button[aria-pressed="true"]');
@@ -285,7 +296,7 @@ export default function AnswerView(props: {
           <Show when={props.busy}>
             <div class="answer-loading">
               {/* One truthful line: the API returns a single final answer, so there are no step updates. */}
-              <LoadingStatus>{t(props.pendingLanguage, props.discovering ? 'searchingWeb' : 'findingAnswer')}</LoadingStatus>
+              <LoadingStatus>{t(props.pendingLanguage, waitingKey())}</LoadingStatus>
               <SkeletonLines lines={3} class="answer-skeleton" />
             </div>
           </Show>
@@ -350,12 +361,12 @@ export default function AnswerView(props: {
               </p>
             }
           >
-            <SourceList answer={activeAnswer()!} citation={props.citation} setCitation={choose} hot={hot()} setHot={setHot} />
+            <SourceList answer={activeAnswer()!} citation={props.citation} setCitation={choose} hot={hot()} setHot={setHot} personal={props.personal} />
           </Show>
         </Show>
         <Show when={props.citation}>
           <Show when={accessScope()} keyed>
-            {(_scope) => <Sources institution={props.institution} citation={props.citation} lang={lang()} onClose={close} />}
+            {(_scope) => <Sources institution={props.institution} citation={props.citation} lang={lang()} personal={props.personal} onClose={close} />}
           </Show>
         </Show>
       </aside>

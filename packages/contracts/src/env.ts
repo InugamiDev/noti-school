@@ -5,6 +5,11 @@ const boolean = z
   .enum(['true', 'false'])
   .default('false')
   .transform((v) => v === 'true');
+// Mirrors apps/api config.rs: plain ASCII decimals only (no sign, exponent, hex or whitespace).
+const decimalInteger = (min: number, max: number, fallback: number) =>
+  z.string().regex(/^[0-9]+$/).default(String(fallback)).pipe(z.coerce.number<string>().int().min(min).max(max));
+const decimalProbability = (fallback: number) =>
+  z.string().regex(/^[0-9]+(\.[0-9]+)?$/).default(String(fallback)).pipe(z.coerce.number<string>().min(0).max(1));
 export const Environment = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   APP_ORIGIN: z.url().default('http://localhost:3000'),
@@ -28,10 +33,13 @@ export const Environment = z.object({
   // Exact pinned Jev models (docs.typesafe.ai/models, consulted 2026-11-18); no aliases.
   JEV_MODEL: z.enum(['jev-1.14.0', 'jev-1.13.0']).default('jev-1.14.0'),
   TINYFISH_API_KEY: optional,
-  TINYFISH_DAILY_SEARCH_LIMIT: z.coerce.number().int().min(1).max(12000).default(1000),
-  TINYFISH_DAILY_FETCH_LIMIT: z.coerce.number().int().min(1).max(1000).default(300),
-  WEB_EVIDENCE_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.6),
-  GRAPH_AUTO_APPROVE: z.coerce.number().min(0).max(1).default(0.9),
+  TINYFISH_DAILY_SEARCH_LIMIT: decimalInteger(1, 12000, 1000),
+  TINYFISH_DAILY_FETCH_LIMIT: decimalInteger(1, 1000, 300),
+  // Per institution (school or personal space) per UTC day, in addition to the global limits above.
+  TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE: decimalInteger(1, 12000, 200),
+  TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE: decimalInteger(1, 1000, 60),
+  WEB_EVIDENCE_MIN_CONFIDENCE: decimalProbability(0.6),
+  GRAPH_AUTO_APPROVE: decimalProbability(0.9),
   GOOGLE_CLIENT_ID: optional,
   GOOGLE_CLIENT_SECRET: optional,
   SMTP_HOST: optional,

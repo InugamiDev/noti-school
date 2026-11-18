@@ -564,6 +564,26 @@ button.admin-quiet {
   width: 100%;
   min-height: 112px;
 }
+.admin-domains-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+/* My space: a saved page says whether answers use it, with the one action that changes that. */
+.saved-use {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+.saved-use .admin-hint {
+  margin: 0;
+}
+.space-admin .admin-card {
+  max-width: 860px;
+}
 .admin-edge-evidence {
   display: flex;
   flex-wrap: wrap;

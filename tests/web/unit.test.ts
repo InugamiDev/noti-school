@@ -4,6 +4,7 @@ import { endpoint, request, safeLink, readAnswer, RequestError, takeAuthCallback
 import { Schemas } from '../../packages/contracts/src/index.ts';
 import { confidenceLevel, percent } from '../../apps/web/src/ui/confidence-level.ts';
 import { allStrings, fill, t } from '../../apps/web/src/ui/i18n.ts';
+import { asciiHost, parseDomains } from '../../apps/web/src/ui/domains.ts';
 test('public endpoint registry excludes internals and encodes IDs',()=>{
   assert.throws(()=>endpoint('/internal/session'));
   assert.throws(()=>endpoint('/internal/accounts/delete'));
@@ -46,6 +47,31 @@ test('every interface string exists in English and Vietnamese without em or en d
   }
   assert.equal(t('en','searchingWeb'),'Searching approved documents and the web…');
   assert.notEqual(t('vi','searchingWeb'),t('en','searchingWeb'));
+  assert.equal(t('en','searchingWebOnly'),'Searching the web…');
+  assert.equal(t('vi','searchingWebOnly'),'Đang tìm trên web…');
+});
+test('typed domains become ASCII hosts; Unicode names are converted and non-hosts are refused',()=>{
+  assert.equal(asciiHost('Library.Example.edu'),'library.example.edu');
+  assert.equal(asciiHost('trường.example'),'xn--trng-rib8295b.example');
+  assert.equal(asciiHost('TRƯỜNG.example'),'xn--trng-rib8295b.example');
+  assert.equal(asciiHost('xn--trng-rib8295b.example'),'xn--trng-rib8295b.example');
+  // The hint shown to administrators names exactly the form that is saved.
+  for(const lang of ['en','vi'] as const)assert.ok(t(lang,'domainsHint').includes(`trường.example`)&&t(lang,'domainsHint').includes(asciiHost('trường.example')!));
+  for(const value of ['','https://example.edu','example.edu/path','example.edu:8443','user@example.edu','192.168.1.1','0x7f.1','[::1]','localhost','*.example.edu','a_b.example','example.edu.','ex%61mple.edu','exa mple.edu','example.edu?x=1','example.edu#top'])assert.equal(asciiHost(value),undefined,value);
+  assert.deepEqual(parseDomains('example.edu\nTrường.example, example.edu'),['example.edu','xn--trng-rib8295b.example']);
+  assert.equal(parseDomains('example.edu\nhttps://example.edu/path'),undefined);
+  assert.deepEqual(parseDomains('  '),[]);
+});
+test('where answers come from is stated in both languages without promising approved-only answers',()=>{
+  const en=t('en','faqEvidenceAnswer'),vi=t('vi','faqEvidenceAnswer');
+  assert.match(en,/reviewed documents first, then pages from the web/);
+  assert.match(en,/where each part came from and how sure it is/);
+  assert.match(en,/Web pages are labelled and never shown as approved/);
+  assert.match(vi,/tài liệu đã duyệt của trường bạn trước, sau đó đến các trang trên web/);
+  assert.match(vi,/không bao giờ hiển thị như tài liệu đã duyệt/);
+  for(const {key,en:english,vi:vietnamese} of allStrings())if(/^(story|faq)/.test(key))assert.doesNotMatch(english+vietnamese,/only approved|nothing else|chỉ .*tài liệu đã duyệt/i,key);
+  assert.equal(t('en','originSaved'),'Saved by you');
+  assert.notEqual(t('en','originSaved'),t('en','originApproved'));
 });
 test('the web notice names the school and never calls web pages approved',()=>{
   assert.equal(fill(t('en','webNotice'),{school:'Synthetic School'}),'Includes pages found on the web. They have not been reviewed by Synthetic School staff.');

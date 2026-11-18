@@ -1,5 +1,6 @@
 // intent: per-institution web cache (TinyFish pages/searches), domain trust and the admin web-documents
 // endpoints. No page, search or score crosses tenants; every query is scoped by institution_id.
+// Blocking matches normalized URL keys of both the requested and the final (redirected) URL.
 // status: done | next: live TinyFish verification, cache retention sweeps for searches only
 // confidence: medium
 use crate::{
@@ -13,15 +14,18 @@ use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
 
-pub const CACHE_DAYS: i64 = 7;
+// The cache window is exactly 168 hours of absolute time: SQL uses interval '168 hours' (never '7 days',
+// which follows the session TimeZone across DST), and the migration CHECK enforces the same interval.
 pub const PAGE_CHUNKS: usize = 128;
+// Version label prefix of a page saved in a personal space; the web labels it "Saved by you".
+pub const PERSONAL_LABEL: &str = "Saved by you";
 
 // IDNA (UTS 46) to lowercase ASCII, then the same shape the migration's valid_domains() accepts.
 pub fn normalize_domain(raw: &str) -> Result<String> {
@@ -90,9 +94,41 @@ pub fn host_matches(host: &str, domain: &str) -> bool {
 pub fn trusted(host: &str, domains: &[String]) -> bool {
     domains.iter().any(|d| host_matches(host, d))
 }
-// A page fetched at `fetched_at` is reused strictly before fetched_at + 7 days.
-pub fn is_fresh(fetched_at: DateTime<Utc>, now: DateTime<Utc>) -> bool {
-    now < fetched_at + chrono::Duration::days(CACHE_DAYS)
+// Comparison key for blocking and cache lookup: http and https compare equal, the host is lowercased
+// (IDNA), default ports, fragments, trailing slashes and utm_*/fbclid/gclid parameters are dropped.
+// Other query parameters keep their order. None for anything that is not an http(s) URL with a host.
+pub fn url_key(raw: &str) -> Option<String> {
+    let u = url::Url::parse(raw.trim()).ok()?;
+    if !["http", "https"].contains(&u.scheme()) {
+        return None;
+    }
+    let host = match u.host()? {
+        url::Host::Domain(d) => d.trim_end_matches('.').to_ascii_lowercase(),
+        url::Host::Ipv4(ip) => ip.to_string(),
+        url::Host::Ipv6(ip) => format!("[{ip}]"),
+    };
+    let port = u
+        .port()
+        .filter(|p| ![80, 443].contains(p))
+        .map(|p| format!(":{p}"))
+        .unwrap_or_default();
+    let path = u.path().trim_end_matches('/');
+    let query: Vec<(String, String)> = u
+        .query_pairs()
+        .filter(|(k, _)| {
+            let k = k.to_ascii_lowercase();
+            !k.starts_with("utm_") && k != "fbclid" && k != "gclid"
+        })
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    let query = if query.is_empty() {
+        String::new()
+    } else {
+        let mut q = url::form_urlencoded::Serializer::new(String::new());
+        q.extend_pairs(&query);
+        format!("?{}", q.finish())
+    };
+    Some(format!("https://{host}{port}{path}{query}"))
 }
 
 // Markdown headings become section locators (page stays null); bodies reuse the 2000-scalar chunker.
@@ -176,15 +212,33 @@ pub async fn space(pool: &sqlx::PgPool, id: Uuid) -> Result<Space> {
     })
 }
 
-// Atomically counts `n` calls against today's UTC self-limit; false means the limit is reached.
-pub async fn take_usage(pool: &sqlx::PgPool, kind: &str, n: i32, limit: u32) -> Result<bool> {
-    let limit = i32::try_from(limit).map_err(crate::error::invalid)?;
-    if n <= 0 || n > limit {
+// Atomically counts `n` calls against today's UTC application limit and the institution's own share of
+// it; false (nothing charged) when either is reached. The global row is always locked first.
+pub async fn take_usage(
+    pool: &sqlx::PgPool,
+    institution: Uuid,
+    kind: &str,
+    n: i32,
+    (global, space): (u32, u32),
+) -> Result<bool> {
+    let global = i32::try_from(global).map_err(crate::error::invalid)?;
+    let space = i32::try_from(space).map_err(crate::error::invalid)?;
+    if n <= 0 || n > global || n > space {
         return Ok(false);
     }
+    let mut tx = pool.begin().await?;
     let used: Option<i32> = sqlx::query_scalar("INSERT INTO product.web_usage(day,kind,used) VALUES((clock_timestamp() AT TIME ZONE 'UTC')::date,$1,$2) ON CONFLICT(day,kind) DO UPDATE SET used=web_usage.used+EXCLUDED.used WHERE web_usage.used+EXCLUDED.used<=$3 RETURNING used")
-        .bind(kind).bind(n).bind(limit).fetch_optional(pool).await?;
-    Ok(used.is_some())
+        .bind(kind).bind(n).bind(global).fetch_optional(&mut *tx).await?;
+    if used.is_none() {
+        return Ok(false);
+    }
+    let own: Option<i32> = sqlx::query_scalar("INSERT INTO product.web_space_usage(day,institution_id,kind,used) VALUES((clock_timestamp() AT TIME ZONE 'UTC')::date,$1,$2,$3) ON CONFLICT(day,institution_id,kind) DO UPDATE SET used=web_space_usage.used+EXCLUDED.used WHERE web_space_usage.used+EXCLUDED.used<=$4 RETURNING used")
+        .bind(institution).bind(kind).bind(n).bind(space).fetch_optional(&mut *tx).await?;
+    if own.is_none() {
+        return Ok(false);
+    }
+    tx.commit().await?;
+    Ok(true)
 }
 pub async fn usage_left(pool: &sqlx::PgPool, kind: &str, limit: u32) -> Result<bool> {
     let used: i32 = sqlx::query_scalar("SELECT coalesce((SELECT used FROM product.web_usage WHERE day=(clock_timestamp() AT TIME ZONE 'UTC')::date AND kind=$1),0)")
@@ -213,7 +267,7 @@ pub async fn cached_search(
     institution: Uuid,
     hash: &str,
 ) -> Result<Option<Vec<String>>> {
-    let results: Option<Value> = sqlx::query_scalar("SELECT results FROM product.web_searches WHERE institution_id=$1 AND query_sha256=$2 AND fetched_at>clock_timestamp()-interval '7 days'")
+    let results: Option<Value> = sqlx::query_scalar("SELECT results FROM product.web_searches WHERE institution_id=$1 AND query_sha256=$2 AND fetched_at>clock_timestamp()-interval '168 hours'")
         .bind(institution).bind(hash).fetch_optional(pool).await?;
     Ok(results.map(|r| {
         r.as_array()
@@ -259,11 +313,25 @@ fn doc(row: &sqlx::postgres::PgRow) -> Result<Doc> {
         blocked: row.try_get("blocked")?,
     })
 }
-// A URL is known when it was requested or redirected to; any blocked match wins.
+// A URL is known when its key matches a requested or redirected-to URL; any blocked match wins, then an
+// exact requested URL, then the oldest capture.
 pub async fn doc_by_url(pool: &sqlx::PgPool, institution: Uuid, url: &str) -> Result<Option<Doc>> {
-    let row = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT {DOC_COLUMNS} FROM product.web_documents WHERE institution_id=$1 AND (url=$2 OR final_url=$2) ORDER BY blocked DESC,(url=$2) DESC,created_at LIMIT 1")))
-        .bind(institution).bind(url).fetch_optional(pool).await?;
+    let Some(key) = url_key(url) else {
+        return Ok(None);
+    };
+    let row = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT {DOC_COLUMNS} FROM product.web_documents WHERE institution_id=$1 AND (url_key=$2 OR final_url_key=$2) ORDER BY blocked DESC,(url=$3) DESC,created_at,id LIMIT 1")))
+        .bind(institution).bind(key).bind(url).fetch_optional(pool).await?;
     row.as_ref().map(doc).transpose()
+}
+// True when any blocked page of the institution shares a key with one of `urls`.
+pub async fn blocked<'c, E: sqlx::PgExecutor<'c>>(
+    db: E,
+    institution: Uuid,
+    urls: &[&str],
+) -> Result<bool> {
+    let keys: Vec<String> = urls.iter().filter_map(|u| url_key(u)).collect();
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM product.web_documents WHERE institution_id=$1 AND blocked AND (url_key=ANY($2) OR final_url_key=ANY($2)))")
+        .bind(institution).bind(&keys).fetch_one(db).await?)
 }
 pub async fn doc_by_source(
     pool: &sqlx::PgPool,
@@ -281,7 +349,7 @@ pub async fn doc_by_source(
 }
 // not_modified only refreshes the fetch time; content, version and ETag stay as they were.
 pub async fn touch(pool: &sqlx::PgPool, institution: Uuid, id: Uuid) -> Result<()> {
-    sqlx::query("UPDATE product.web_documents SET fetched_at=now(),stale_after=now()+interval '7 days',state='fresh' WHERE institution_id=$1 AND id=$2 AND NOT blocked")
+    sqlx::query("UPDATE product.web_documents SET fetched_at=now(),stale_after=now()+interval '168 hours',state='fresh' WHERE institution_id=$1 AND id=$2 AND NOT blocked")
         .bind(institution).bind(id).execute(pool).await?;
     Ok(())
 }
@@ -334,11 +402,16 @@ pub async fn store_page(
         .bind(format!("{institution}:{requested}"))
         .execute(&mut *tx)
         .await?;
+    let (Some(url_key), Some(final_key)) = (url_key(requested), url_key(final_url.as_str())) else {
+        return Ok(None);
+    };
     let existing = sqlx::query("SELECT id,source_id,sha256,blocked FROM product.web_documents WHERE institution_id=$1 AND url=$2 FOR UPDATE")
         .bind(institution).bind(requested).fetch_optional(&mut *tx).await?;
+    // Re-checked under the page lock: a variant or redirect target of a blocked page is never stored.
     if existing
         .as_ref()
         .is_some_and(|r| r.try_get::<bool, _>("blocked").unwrap_or(true))
+        || blocked(&mut *tx, institution, &[requested, final_url.as_str()]).await?
     {
         return Ok(None);
     }
@@ -358,8 +431,8 @@ pub async fn store_page(
         .bind(source)
         .fetch_one(&mut *tx)
         .await?;
-        sqlx::query("UPDATE product.web_documents SET final_url=$3,domain=$4,fetched_at=now(),stale_after=now()+interval '7 days',state='fresh',etag=$5,last_modified=$6 WHERE institution_id=$1 AND id=$2")
-            .bind(institution).bind(row.try_get::<Uuid, _>("id")?).bind(final_url.as_str()).bind(host).bind(&page.etag).bind(&page.last_modified).execute(&mut *tx).await?;
+        sqlx::query("UPDATE product.web_documents SET final_url=$3,final_url_key=$7,domain=$4,fetched_at=now(),stale_after=now()+interval '168 hours',state='fresh',etag=$5,last_modified=$6 WHERE institution_id=$1 AND id=$2")
+            .bind(institution).bind(row.try_get::<Uuid, _>("id")?).bind(final_url.as_str()).bind(host).bind(&page.etag).bind(&page.last_modified).bind(&final_key).execute(&mut *tx).await?;
         tx.commit().await?;
         return Ok(Some(Stored {
             doc: row.try_get("id")?,
@@ -411,8 +484,8 @@ pub async fn store_page(
     }
     sqlx::query("UPDATE product.sources SET current_version_id=$3,title=$4,original_url=$5 WHERE institution_id=$1 AND id=$2")
         .bind(institution).bind(source).bind(version).bind(&title).bind(final_url.as_str()).execute(&mut *tx).await?;
-    let doc: Uuid = sqlx::query_scalar("INSERT INTO product.web_documents(id,institution_id,url,final_url,domain,title,language,fetched_at,stale_after,sha256,etag,last_modified,state,source_id) VALUES($1,$2,$3,$4,$5,$6,$7,now(),now()+interval '7 days',$8,$9,$10,'fresh',$11) ON CONFLICT(institution_id,url) DO UPDATE SET final_url=EXCLUDED.final_url,domain=EXCLUDED.domain,title=EXCLUDED.title,language=EXCLUDED.language,fetched_at=EXCLUDED.fetched_at,stale_after=EXCLUDED.stale_after,sha256=EXCLUDED.sha256,etag=EXCLUDED.etag,last_modified=EXCLUDED.last_modified,state='fresh',source_id=EXCLUDED.source_id RETURNING id")
-        .bind(Uuid::new_v4()).bind(institution).bind(requested).bind(final_url.as_str()).bind(host).bind(&title).bind(page_language(page.language.as_deref())).bind(&sha).bind(&page.etag).bind(&page.last_modified).bind(source).fetch_one(&mut *tx).await?;
+    let doc: Uuid = sqlx::query_scalar("INSERT INTO product.web_documents(id,institution_id,url,final_url,domain,title,language,fetched_at,stale_after,sha256,etag,last_modified,state,source_id,url_key,final_url_key) VALUES($1,$2,$3,$4,$5,$6,$7,now(),now()+interval '168 hours',$8,$9,$10,'fresh',$11,$12,$13) ON CONFLICT(institution_id,url) DO UPDATE SET final_url=EXCLUDED.final_url,final_url_key=EXCLUDED.final_url_key,domain=EXCLUDED.domain,title=EXCLUDED.title,language=EXCLUDED.language,fetched_at=EXCLUDED.fetched_at,stale_after=EXCLUDED.stale_after,sha256=EXCLUDED.sha256,etag=EXCLUDED.etag,last_modified=EXCLUDED.last_modified,state='fresh',source_id=EXCLUDED.source_id RETURNING id")
+        .bind(Uuid::new_v4()).bind(institution).bind(requested).bind(final_url.as_str()).bind(host).bind(&title).bind(page_language(page.language.as_deref())).bind(&sha).bind(&page.etag).bind(&page.last_modified).bind(source).bind(&url_key).bind(&final_key).fetch_one(&mut *tx).await?;
     let unembedded: Vec<(Uuid, String)> = sqlx::query_as("SELECT id,content FROM product.chunks WHERE institution_id=$1 AND version_id=$2 AND embedding IS NULL ORDER BY ordinal")
         .bind(institution).bind(version).fetch_all(&mut *tx).await?;
     tx.commit().await?;
@@ -481,10 +554,11 @@ pub async fn act(
     let u = auth::member(&s, &h, i, true).await?;
     let admin = "EXISTS(SELECT 1 FROM product.memberships m WHERE m.institution_id=$1 AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL)";
     match b.action.as_str() {
+        // Every cached variant or redirect sharing a URL key with the page is blocked with it.
         "block" => {
-            let n = sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE product.web_documents SET blocked=true,blocked_by=coalesce(blocked_by,$3),blocked_at=coalesce(blocked_at,now()) WHERE institution_id=$1 AND id=$2 AND {admin}")))
+            let n = sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE product.web_documents w SET blocked=true,blocked_by=coalesce(w.blocked_by,$3),blocked_at=coalesce(w.blocked_at,now()) FROM product.web_documents t WHERE t.institution_id=$1 AND t.id=$2 AND {admin} AND w.institution_id=t.institution_id AND (w.id=t.id OR w.url_key IN (t.url_key,t.final_url_key) OR w.final_url_key IN (t.url_key,t.final_url_key))")))
                 .bind(i).bind(id).bind(&u.user_id).execute(s.pool()?).await?.rows_affected();
-            if n != 1 {
+            if n == 0 {
                 return Err(Error("not_found"));
             }
         }
@@ -500,14 +574,19 @@ pub async fn act(
     }
     Ok(Json(get(&s, i, id).await?))
 }
+// intent: in a school, promotion creates an origin-approved source visible to the institution. In a
+// personal space nobody approves for an institution: the source is private to the owner (visibility
+// 'admin') and its version label starts with PERSONAL_LABEL so the web shows "Saved by you", never
+// "Approved document". A promotion whose ingestion failed (source without any version) is completed by
+// the next promote instead of reporting an idempotent success.
+// status: done | next: none | confidence: high
 async fn promote(s: &AppState, i: Uuid, id: Uuid, user: &str) -> Result<()> {
+    let personal = space(s.pool()?, i).await?.personal;
     let mut tx = s.pool()?.begin().await?;
-    let row = sqlx::query("SELECT w.final_url,w.title,w.blocked,w.promoted_source_id,v.language,(SELECT string_agg(c.content,'' ORDER BY c.ordinal) FROM product.chunks c WHERE c.institution_id=v.institution_id AND c.version_id=v.id) AS text FROM product.web_documents w JOIN product.sources s ON s.institution_id=w.institution_id AND s.id=w.source_id JOIN product.source_versions v ON v.institution_id=s.institution_id AND v.id=s.current_version_id JOIN product.memberships m ON m.institution_id=w.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE w.institution_id=$1 AND w.id=$2 FOR UPDATE OF w FOR SHARE OF m")
+    let row = sqlx::query("SELECT w.final_url,w.title,w.blocked,w.promoted_source_id,v.language,(SELECT string_agg(c.content,'' ORDER BY c.ordinal) FROM product.chunks c WHERE c.institution_id=v.institution_id AND c.version_id=v.id) AS text,(w.promoted_source_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM product.source_versions pv WHERE pv.institution_id=w.institution_id AND pv.source_id=w.promoted_source_id)) AS unfinished FROM product.web_documents w JOIN product.sources s ON s.institution_id=w.institution_id AND s.id=w.source_id JOIN product.source_versions v ON v.institution_id=s.institution_id AND v.id=s.current_version_id JOIN product.memberships m ON m.institution_id=w.institution_id AND m.user_id=$3 AND m.role='admin' AND m.revoked_at IS NULL WHERE w.institution_id=$1 AND w.id=$2 FOR UPDATE OF w FOR SHARE OF m")
         .bind(i).bind(id).bind(user).fetch_optional(&mut *tx).await?.ok_or(Error("not_found"))?;
-    if row
-        .try_get::<Option<Uuid>, _>("promoted_source_id")?
-        .is_some()
-    {
+    let promoted: Option<Uuid> = row.try_get("promoted_source_id")?;
+    if promoted.is_some() && !row.try_get::<bool, _>("unfinished")? {
         return Ok(());
     }
     let text: Option<String> = row.try_get("text")?;
@@ -516,25 +595,27 @@ async fn promote(s: &AppState, i: Uuid, id: Uuid, user: &str) -> Result<()> {
     else {
         return Err(Error("conflict"));
     };
-    let source = Uuid::new_v4();
-    let title: String = row
-        .try_get::<String, _>("title")?
-        .chars()
-        .take(300)
-        .collect();
-    sqlx::query("INSERT INTO product.sources(id,institution_id,title,kind,original_url,visibility,origin) VALUES($1,$2,$3,'url',$4,'institution','approved')")
-        .bind(source).bind(i).bind(title).bind(row.try_get::<String, _>("final_url")?).execute(&mut *tx).await?;
-    sqlx::query(
-        "UPDATE product.web_documents SET promoted_source_id=$3 WHERE institution_id=$1 AND id=$2",
-    )
-    .bind(i)
-    .bind(id)
-    .bind(source)
-    .execute(&mut *tx)
-    .await?;
+    let source = match promoted {
+        Some(source) => source,
+        None => {
+            let source = Uuid::new_v4();
+            let title: String = row
+                .try_get::<String, _>("title")?
+                .chars()
+                .take(300)
+                .collect();
+            let visibility = if personal { "admin" } else { "institution" };
+            sqlx::query("INSERT INTO product.sources(id,institution_id,title,kind,original_url,visibility,origin) VALUES($1,$2,$3,'url',$4,$5,'approved')")
+                .bind(source).bind(i).bind(title).bind(row.try_get::<String, _>("final_url")?).bind(visibility).execute(&mut *tx).await?;
+            sqlx::query("UPDATE product.web_documents SET promoted_source_id=$3 WHERE institution_id=$1 AND id=$2")
+                .bind(i).bind(id).bind(source).execute(&mut *tx).await?;
+            source
+        }
+    };
     tx.commit().await?;
-    let metadata = crate::ingestion::Metadata::promoted(row.try_get::<String, _>("language")?);
-    let _job = crate::ingestion::ingest(
+    let metadata =
+        crate::ingestion::Metadata::promoted(row.try_get::<String, _>("language")?, personal);
+    let ingested = crate::ingestion::ingest(
         s,
         i,
         source,
@@ -545,8 +626,17 @@ async fn promote(s: &AppState, i: Uuid, id: Uuid, user: &str) -> Result<()> {
         text.as_bytes(),
         true,
     )
-    .await?;
-    Ok(())
+    .await;
+    match ingested {
+        Ok(_) => Ok(()),
+        // A concurrent retry already stored this capture as the source's version.
+        Err(Error("conflict")) => {
+            let done: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM product.source_versions WHERE institution_id=$1 AND source_id=$2)")
+                .bind(i).bind(source).fetch_one(s.pool()?).await?;
+            if done { Ok(()) } else { Err(Error("conflict")) }
+        }
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]
@@ -613,15 +703,42 @@ mod tests {
         ));
     }
     #[test]
-    fn cache_freshness_boundary_is_exactly_seven_days() {
-        let at = chrono::DateTime::parse_from_rfc3339("2026-11-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        let week = chrono::Duration::days(7);
-        assert!(is_fresh(at, at));
-        assert!(is_fresh(at, at + week - chrono::Duration::milliseconds(1)));
-        assert!(!is_fresh(at, at + week));
-        assert!(!is_fresh(at, at + week + chrono::Duration::seconds(1)));
+    fn url_keys_ignore_tracking_scheme_case_and_trailing_slash() {
+        let key = url_key("https://x.example/notice").unwrap();
+        assert_eq!(key, "https://x.example/notice");
+        for variant in [
+            "https://x.example/notice?utm_source=a&utm_campaign=b",
+            "https://x.example/notice?fbclid=1",
+            "https://x.example/notice?GCLID=1",
+            "https://x.example/notice/",
+            "http://x.example/notice",
+            "http://X.EXAMPLE:80/notice/#top",
+            "https://x.example:443/notice#section",
+            "https://X.Example./notice",
+        ] {
+            assert_eq!(url_key(variant).as_deref(), Some(key.as_str()), "{variant}");
+        }
+        for different in [
+            "https://x.example/notice?id=2",
+            "https://x.example:8443/notice",
+            "https://x.example/notices",
+            "https://y.example/notice",
+        ] {
+            assert_ne!(
+                url_key(different).as_deref(),
+                Some(key.as_str()),
+                "{different}"
+            );
+        }
+        assert_eq!(
+            url_key("https://x.example/a?b=1&utm_x=2&c=3").as_deref(),
+            Some("https://x.example/a?b=1&c=3")
+        );
+        assert_eq!(
+            url_key("https://x.example/").as_deref(),
+            Some("https://x.example")
+        );
+        assert!(url_key("ftp://x.example/a").is_none() && url_key("not a url").is_none());
     }
     #[test]
     fn markdown_headings_become_sections() {

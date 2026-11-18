@@ -91,16 +91,22 @@ versions/chunks/edges, expires invitations on membership revocation, and keeps a
   distinct lowercase ASCII/punycode hostnames, no IP literals) and coverage `web_discovery`.
 - `sources.origin` (`approved`|`web`, immutable). Web captures are web-origin sources whose versions stay
   `draft` (superseded captures become `archived`); chunks, citations and graph FKs work unchanged.
-- `web_documents`: per-institution page cache keyed by `(institution_id,url)` with final URL, domain, title,
-  language, `fetched_at`, `stale_after = fetched_at + 7 days` (checked), sha256, ETag, Last-Modified, state
+- `web_documents`: per-institution page cache keyed by `(institution_id,url)` with final URL, normalized
+  `url_key`/`final_url_key` (indexed; blocking and cache lookup compare these), domain, title, language,
+  `fetched_at`, `stale_after = fetched_at + interval '168 hours'` (checked; absolute hours, never a calendar
+  '7 days' that follows the session TimeZone across DST), sha256, ETag, Last-Modified, state
   `fresh|stale|failed`, blocked flag/actor/time, internal web `source_id` and `promoted_source_id`.
 - `web_searches`: per-institution search cache by normalized parameter hash; params exclude the raw query
   text; the worker deletes rows older than 30 days (the only runtime DELETE grant added).
-- `web_usage`: global UTC-day counters for TinyFish search/fetch self-limits.
+- `web_usage`: global UTC-day counters for TinyFish search/fetch self-limits; `web_space_usage`: the same
+  counters per institution (`TINYFISH_DAILY_*_LIMIT_PER_SPACE`), charged in one transaction with the global row.
 - `evidence_scores`: Jev components (school, source, relevance, answers, injection, overall; numeric(4,3)) and
   model per `(institution_id,chunk_id,question_sha256,model)`; stores a hash, never question text.
 - `graph_entities` kinds add `deadline|fee|topic`, with a unique `(institution_id,kind,lower(label))` dedupe
-  index; `graph_edges.confidence numeric(4,3)` nullable; `ontology_jobs` queue (one job per version, rooted
+  index. Before the index is created, existing case duplicates are merged into the oldest entity of each group
+  (no creation timestamp exists, so oldest = earliest inserting transaction, `age(xmin)` descending, then id):
+  `graph_edges` are repointed (never deleted, so status, approver and evidence chunk stay), then the duplicate
+  entity rows are removed through a transient view (provisioning revokes TEMPORARY); `graph_edges.confidence numeric(4,3)` nullable; `ontology_jobs` queue (one job per version, rooted
   in an idempotency key so its paid stages use the normal reservation fences).
 - `citations` gain `confidence jsonb`, `retrieved_at` and `domain` snapshots.
 - Runtime grants: SELECT/INSERT/UPDATE on the new tables (plus DELETE on `web_searches`). `web_documents` and

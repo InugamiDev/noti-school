@@ -18,17 +18,28 @@ API restricted file (`shared/api.env`, 0600): NODE_ENV, APP_ORIGIN, DATABASE_URL
 API_BIND_ADDRESS, AUTH_INTERNAL_URL, WEB_DIST_DIR, UPLOAD_DIR, AI_MODE, AI_LIVE_CALLS_ENABLED,
 AI_MONTHLY_BUDGET_USD, EVIDENCE_PROVIDER, OPENAI_API_KEY, TYPESAFE_API_KEY, OPENAI_CHAT_MODEL,
 OPENAI_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, JEV_MODEL, TINYFISH_API_KEY, TINYFISH_DAILY_SEARCH_LIMIT,
-TINYFISH_DAILY_FETCH_LIMIT, WEB_EVIDENCE_MIN_CONFIDENCE, GRAPH_AUTO_APPROVE.
+TINYFISH_DAILY_FETCH_LIMIT, TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE, TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE,
+WEB_EVIDENCE_MIN_CONFIDENCE, GRAPH_AUTO_APPROVE.
 
 Web evidence settings (2026-11-18): `JEV_MODEL` is exactly `jev-1.14.0` (default) or `jev-1.13.0`; aliases such
 as `jev-latest` are rejected. `TINYFISH_API_KEY` is server-side only (never `VITE_*`). `TINYFISH_DAILY_SEARCH_LIMIT`
 (1..12000, default 1000) and `TINYFISH_DAILY_FETCH_LIMIT` (1..1000 URLs, default 300) are application
 self-limits below the shared free allowance (12,000 searches and 1,000 fetched URLs per UTC day).
+`TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE` (1..12000, default 200) and `TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE`
+(1..1000 URLs, default 60) cap each institution (school or personal space) per UTC day in addition to the
+global limits, so one space cannot use up discovery for everyone; both counters are charged atomically.
 `WEB_EVIDENCE_MIN_CONFIDENCE` (0..1, default 0.6) drops low-confidence web passages; `GRAPH_AUTO_APPROVE`
-(0..1, default 0.9) auto-approves extracted relations from approved sources. A configured `TYPESAFE_API_KEY`
-enables Jev confidence even with `EVIDENCE_PROVIDER=openai` and then requires the Jev rates. Discovery is
-configured only with OpenAI, TinyFish and Jev keys (`configured.discovery`). Rust mirrors this validation
-(decimal thresholds without exponents, integer limits).
+(0..1, default 0.9) auto-approves extracted relations from approved sources. Discovery is configured only with
+OpenAI, TinyFish and Jev keys (`configured.discovery`). The four limits accept plain decimal integers only and
+the two thresholds plain decimals only (digits, optionally `.` and digits): no sign, exponent, hex, `.5`,
+`5.` or surrounding whitespace. `env.ts` and the Rust config reject exactly the same forms.
+
+Upgrade warning: a configured `TYPESAFE_API_KEY` makes Jev confidence a hard dependency of answers even with
+`EVIDENCE_PROVIDER=openai`. Admission then requires dated Jev rates for the pinned `JEV_MODEL`, and a Jev
+outage or cooldown makes answers unavailable. The default `JEV_MODEL` is now `jev-1.14.0` (previously
+`jev-1.13.0`). Before deploying, import the `jev-1.14.0` input and output prices with the operator price
+import (or pin `JEV_MODEL=jev-1.13.0` while its prices are current); otherwise answers report
+`unavailable/pricing_missing` until the prices exist. Remove `TYPESAFE_API_KEY` to run without Jev.
 Auth restricted file (`shared/auth.env`, 0600): NODE_ENV, APP_ORIGIN, AUTH_DATABASE_URL,
 BETTER_AUTH_SECRET, INTERNAL_AUTH_SECRET, AUTH_BIND_HOST, AUTH_PORT, GOOGLE_CLIENT_ID,
 GOOGLE_CLIENT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TLS_MODE,

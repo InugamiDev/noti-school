@@ -5,8 +5,9 @@ import type { Lang } from './format';
 import { confidenceLevel, levelKey, parts, percent, type ConfidenceParts, type Level } from './confidence-level';
 import './confidence.css';
 
-// intent: show a calibrated score as a word first (High, Medium, Low), then the number, then a small
-// bar glyph. Colour only reinforces the word, and the accessible name always carries the label.
+// intent: show a calibrated score as "Confidence: High 86%": the visible label says what the score
+// is, the word carries the level, then the number, beside a small bar glyph. Colour only reinforces
+// the word, and the accessible name is the same text a sighted reader sees.
 // status: done | next: none | confidence: high
 const filled: Record<Level, number> = { low: 1, medium: 2, high: 3 };
 
@@ -30,7 +31,7 @@ function Bars(props: { level: Level }) {
   );
 }
 
-/** "High 86%" with a spoken "Confidence:" prefix. A missing score says so instead of guessing. */
+/** "Confidence: High 86%", label included for every reader. A missing score says so instead of guessing. */
 export function ConfidenceTag(props: { value: number | null; lang?: Lang | undefined; class?: string | undefined }) {
   return (
     <Show
@@ -38,15 +39,15 @@ export function ConfidenceTag(props: { value: number | null; lang?: Lang | undef
       keyed
       fallback={
         <span class={`confidence-tag ${props.class ?? ''}`} data-level="none">
-          <span class="sr-only">{t(props.lang, 'confidence')}: </span>
+          <span class="confidence-label">{t(props.lang, 'confidence')}: </span>
           {t(props.lang, 'confidenceNotScored')}
         </span>
       }
     >
       {(score) => (
         <span class={`confidence-tag ${props.class ?? ''}`} data-level={score.level}>
-          <span class="sr-only">{t(props.lang, 'confidence')}: </span>
           <Bars level={score.level} />
+          <span class="confidence-label">{t(props.lang, 'confidence')}: </span>
           <span class="confidence-word">{t(props.lang, levelKey[score.level])}</span>{' '}
           <span class="confidence-number">{percent(score.value)}</span>
         </span>

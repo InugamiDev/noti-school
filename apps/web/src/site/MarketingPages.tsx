@@ -5,6 +5,7 @@ import { Closing, DocumentRows, Workflow } from './Sections';
 import ProductExample from './ProductExample';
 import { Contact, Help } from './HelpContact';
 import type { SiteRoute } from './SiteShell';
+import type { Lang } from '../ui/format';
 
 const introductions = {
   '/product': [
@@ -74,7 +75,7 @@ function TextSection(props: { title: string; children: JSX.Element }) {
 }
 
 // intent: distinct product pages without replacing the application route controller; status: implemented.
-export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; motion: boolean }) {
+export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; motion: boolean; lang: Lang }) {
   const intro = () => introductions[props.route];
   return (
     <article
@@ -128,8 +129,9 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
                 Several ways in.
               </h2>
               <p>
-                Every document is reviewed before it can support an answer, and you see the ones
-                your account can access.
+                Documents in the collection are reviewed before they are shown as approved, and you
+                see the ones your account can access. Pages found on the web are labelled as web
+                pages.
               </p>
             </div>
             <DocumentRows />
@@ -164,6 +166,10 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
               <ol>
                 <li>Check that the institution matches your question.</li>
                 <li>Open the cited passage and read its context.</li>
+                <li>
+                  See whether it comes from an approved document or a web page, and how sure the
+                  answer is.
+                </li>
                 <li>Check the document version and any effective date.</li>
                 <li>
                   Confirm important deadlines or individual decisions with the responsible office.
@@ -216,7 +222,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
             </TextSection>
             <TextSection title="Keep approval separate from upload">
               <p>
-                Proposing a URL or uploading a file does not make it answer evidence. Review the
+                Proposing a URL or uploading a file does not make it an approved source. Review the
                 extracted text, document version and source status before publication. Restricted
                 material requires an explicit access decision.
               </p>
@@ -341,7 +347,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
         </Match>
         <Match when={props.route === '/help'}>
           <Band motion={props.motion} class="site-help-band">
-            <Help />
+            <Help lang={props.lang} />
           </Band>
         </Match>
         <Match when={props.route === '/contact'}>
@@ -353,10 +359,11 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
           <Band motion={props.motion} class="site-reading">
             <TextSection title="Evidence has an owner and a version">
               <p>
-                The product is designed to use approved sources within the selected institution and
-                permitted visibility. Citations identify original document versions and passage
-                locations. Source text is treated as material to read, not instructions that can
-                change account permissions.
+                Answers use the selected institution’s reviewed documents first, within permitted
+                visibility, then pages found on the web. Web pages are labelled, carry a confidence
+                score and are never shown as approved. Citations identify original document versions
+                and passage locations. Source text is treated as material to read, not instructions
+                that can change account permissions.
               </p>
             </TextSection>
             <TextSection title="Access does not come from an answer">
@@ -466,7 +473,7 @@ export default function MarketingPages(props: { route: Exclude<SiteRoute, '/'>; 
               <p>
                 Only contribute material you are authorized to share. Respect document access
                 restrictions and the rights of source owners. An uploaded document requires review
-                before it can support ordinary answers.
+                before it is shown as an approved source.
               </p>
             </TextSection>
             <TextSection title="Protect accounts and people">

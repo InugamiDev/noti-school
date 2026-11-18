@@ -147,7 +147,13 @@ export function TurnView(
 }
 
 /** Numbered source cards for one answer, matching the chip numbers in the answer text. */
-export function SourceList(props: Linking & { answer: AnswerOutput }) {
+export function SourceList(
+  props: Linking & {
+    answer: AnswerOutput;
+    /** The answer belongs to the reader's private space, where a kept page reads "Saved by you". */
+    personal?: boolean | undefined;
+  },
+) {
   const lang = () => props.answer.language;
   return (
     <ol class="source-list">
@@ -179,7 +185,7 @@ export function SourceList(props: Linking & { answer: AnswerOutput }) {
                 </button>
               </Show>
               <div class="source-meta">
-                <OriginTag origin={e.origin} domain={e.domain} lang={lang()} />
+                <OriginTag origin={e.origin} domain={e.domain} lang={lang()} personal={props.personal} />
                 <Show when={e.origin === 'web'}>
                   <FetchedDate at={e.retrieved_at} lang={lang()} />
                 </Show>

@@ -61,6 +61,8 @@ export default function Sources(props: {
   source?: string;
   citation?: string;
   lang?: Lang;
+  /** The citation belongs to the reader's private space, where a kept page reads "Saved by you". */
+  personal?: boolean | undefined;
   /** Closes the citation reader; rendered as a close button when supplied. */
   onClose?: () => void;
 }) {
@@ -386,7 +388,7 @@ export default function Sources(props: {
                 </Show>
               </p>
               <div class="source-meta">
-                <OriginTag origin={e().origin} domain={e().domain} lang={lang()} />
+                <OriginTag origin={e().origin} domain={e().domain} lang={lang()} personal={props.personal} />
                 <Show when={web()}>
                   <FetchedDate at={e().retrieved_at} lang={lang()} />
                 </Show>

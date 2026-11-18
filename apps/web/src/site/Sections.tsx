@@ -11,8 +11,23 @@ import { Band } from './Band';
 import ProductExample from './ProductExample';
 import CollectionPreview from '../CollectionPreview';
 import { Kinetic, Marquee, Story } from './Flash';
+import { t } from '../ui/i18n';
+import type { Lang } from '../ui/format';
 
-export const questions = [
+type Question = { category: string; question: string; answer: string; href: string; action: string; lang?: Lang };
+
+// Where answers come from is the one help answer kept in both languages: it is the promise the
+// product makes about evidence, so a Vietnamese reader gets it in Vietnamese.
+const evidenceQuestion = (lang: Lang): Question => ({
+  category: 'Answers',
+  question: t(lang, 'faqEvidenceQuestion'),
+  answer: t(lang, 'faqEvidenceAnswer'),
+  href: '#/sources',
+  action: t(lang, 'faqEvidenceAction'),
+  lang,
+});
+
+const englishQuestions: readonly Question[] = [
   {
     category: 'Answers',
     question: 'Can I ask in Vietnamese?',
@@ -89,18 +104,26 @@ export const questions = [
     category: 'Pilot',
     question: 'Can my institution contribute documents?',
     answer:
-      'Start by discussing scope, ownership and who can approve updates. A proposed document is not answer evidence until it has been reviewed and published into the collection.',
+      'Start by discussing scope, ownership and who can approve updates. A proposed document is not shown as an approved source until it has been reviewed and published into the collection.',
     href: '#/universities',
     action: 'Explore institutional participation',
   },
-] as const;
+];
 
-export function FAQ(props: { compact?: boolean }) {
+/** Help answers for a reader, with the evidence answer first after the language question. */
+export const questions = (lang: Lang): readonly Question[] => [
+  englishQuestions[0]!,
+  evidenceQuestion(lang),
+  ...englishQuestions.slice(1),
+];
+
+export function FAQ(props: { compact?: boolean; lang: Lang }) {
+  const items = () => (props.compact ? questions(props.lang).slice(0, 6) : questions(props.lang));
   return (
     <div class="site-faq">
-      <For each={props.compact ? questions.slice(0, 6) : questions}>
+      <For each={items()}>
         {(item) => (
-          <details>
+          <details lang={item.lang}>
             <summary>{item.question}</summary>
             <p>{item.answer}</p>
             <a class="site-inline-link" href={item.href}>
@@ -232,7 +255,7 @@ export function Closing(props: { motion: boolean }) {
   );
 }
 
-export function HomeSections(props: { motion: boolean; institution: string }) {
+export function HomeSections(props: { motion: boolean; institution: string; lang: Lang }) {
   return (
     <div class="site-content">
       <Band motion={props.motion} class="site-example-band">
@@ -249,7 +272,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
         </div>
         <ProductExample />
       </Band>
-      <Story motion={props.motion} />
+      <Story motion={props.motion} lang={props.lang} />
       <Marquee />
       <Band motion={props.motion}>
         <div class="site-section-heading">
@@ -301,7 +324,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
           </h2>
           <p>
             Give institutional knowledge a path from reviewed documents to the questions students
-            are asking.
+            are asking. Pages from the web stay labelled as web pages.
           </p>
           <a class="site-inline-link" href="#/universities">
             Explore the institutional pilot <ArrowRight size={18} />
@@ -381,7 +404,7 @@ export function HomeSections(props: { motion: boolean; institution: string }) {
             Visit Help <ArrowRight size={17} />
           </a>
         </div>
-        <FAQ compact />
+        <FAQ compact lang={props.lang} />
       </Band>
       <Closing motion={props.motion} />
     </div>

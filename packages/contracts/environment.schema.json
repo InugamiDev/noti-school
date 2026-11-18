@@ -117,28 +117,34 @@
       "minLength": 1
     },
     "TINYFISH_DAILY_SEARCH_LIMIT": {
-      "default": 1000,
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 12000
+      "default": "1000",
+      "type": "string",
+      "pattern": "^[0-9]+$"
     },
     "TINYFISH_DAILY_FETCH_LIMIT": {
-      "default": 300,
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 1000
+      "default": "300",
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE": {
+      "default": "200",
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE": {
+      "default": "60",
+      "type": "string",
+      "pattern": "^[0-9]+$"
     },
     "WEB_EVIDENCE_MIN_CONFIDENCE": {
-      "default": 0.6,
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
+      "default": "0.6",
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
     },
     "GRAPH_AUTO_APPROVE": {
-      "default": 0.9,
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
+      "default": "0.9",
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
     },
     "GOOGLE_CLIENT_ID": {
       "type": "string",

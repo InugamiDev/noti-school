@@ -1,5 +1,6 @@
-/* Confidence and origin labels in the clay system. The word is the signal; tint, bars and number
-   repeat it. Tones reuse the sage, butter and warm chips already used for statuses. */
+/* Confidence and origin labels in the clay system. The visible "Confidence:" label names the score,
+   the word is the signal; tint, bars and number repeat it. Tones reuse the sage, butter and warm
+   chips already used for statuses. */
 .confidence-tag {
   display: inline-flex;
   align-items: center;
@@ -25,6 +26,9 @@
 .confidence-tag[data-level='low'] {
   color: var(--vermilion);
   background: var(--vermilion-soft);
+}
+.confidence-label {
+  font-weight: 560;
 }
 .confidence-number {
   font-weight: 560;
@@ -139,7 +143,8 @@ button.confidence-toggle:active {
 .origin-tag svg {
   flex-shrink: 0;
 }
-.origin-tag[data-origin='web'] {
+.origin-tag[data-origin='web'],
+.origin-tag[data-saved] {
   color: var(--ink-soft);
 }
 .origin-domain {

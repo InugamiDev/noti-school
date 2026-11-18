@@ -1,6 +1,8 @@
 import { createEffect, createSignal, For, onCleanup } from 'solid-js';
 import { BookOpen, FileText, Library, SearchX } from 'lucide-solid';
 import { motionAllowed } from '../ui/motion';
+import { t, type StringKey } from '../ui/i18n';
+import type { Lang } from '../ui/format';
 import './flash.css';
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -193,15 +195,17 @@ export function HeroOrbit() {
   );
 }
 
+// The walkthrough says where answers come from: reviewed documents first, then the web, with every
+// part labelled. It follows the language chosen in the composer, like the labels around an answer.
 const steps = [
-  { title: 'Ask the way you speak', body: 'Type your question in English or Vietnamese. No keywords, no menus.' },
-  { title: 'Only approved documents', body: 'noti.school searches reviewed, published sources for your institution, nothing else.' },
-  { title: 'Every claim cited', body: 'Each sentence links to the page or section it came from, in the version that applies.' },
-  { title: 'Honest about gaps', body: 'If the sources do not cover your question, you are told so and shown where to go next.' },
-] as const;
+  { title: 'storyAskTitle', body: 'storyAskBody' },
+  { title: 'storyEvidenceTitle', body: 'storyEvidenceBody' },
+  { title: 'storyCitedTitle', body: 'storyCitedBody' },
+  { title: 'storyGapsTitle', body: 'storyGapsBody' },
+] as const satisfies readonly { title: StringKey; body: StringKey }[];
 
 /** A pinned walkthrough on wide screens: the stage changes as you scroll. Without motion it is a plain list. */
-export function Story(props: { motion: boolean }) {
+export function Story(props: { motion: boolean; lang: Lang }) {
   let root!: HTMLElement;
   const [active, setActive] = createSignal(0);
   const [pinned, setPinned] = createSignal(false);
@@ -244,17 +248,17 @@ export function Story(props: { motion: boolean }) {
   return (
     <section ref={root} class="site-story" data-pinned={pinned() ? 'true' : 'false'} aria-labelledby="story-heading">
       <div class="story-sticky">
-        <div class="story-copy">
-          <span class="site-label">How it works</span>
-          <h2 id="story-heading">From question to source in four steps.</h2>
+        <div class="story-copy" lang={props.lang}>
+          <span class="site-label">{t(props.lang, 'storyLabel')}</span>
+          <h2 id="story-heading">{t(props.lang, 'storyHeading')}</h2>
           <ol class="story-steps">
             <For each={steps}>
               {(step, i) => (
                 <li aria-current={pinned() && active() === i() ? 'step' : undefined} data-done={pinned() && i() < active()}>
                   <span class="story-number" aria-hidden="true">0{i() + 1}</span>
                   <div>
-                    <h3>{step.title}</h3>
-                    <p>{step.body}</p>
+                    <h3>{t(props.lang, step.title)}</h3>
+                    <p>{t(props.lang, step.body)}</p>
                   </div>
                 </li>
               )}
@@ -307,7 +311,7 @@ export function Story(props: { motion: boolean }) {
             <div class="sv-abstain">
               <SearchX size={28} />
               <strong>Not enough evidence</strong>
-              <span>No approved document covers this yet.</span>
+              <span>No document or web page covers this yet.</span>
               <span class="sv-next">Browse sources · Ask the responsible office</span>
             </div>
           </div>

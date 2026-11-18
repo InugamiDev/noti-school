@@ -93,6 +93,11 @@ test('web discovery settings: pinned Jev model, bounded limits and thresholds, s
   assert.equal(defaults.TINYFISH_DAILY_FETCH_LIMIT, 300);
   assert.equal(defaults.WEB_EVIDENCE_MIN_CONFIDENCE, 0.6);
   assert.equal(defaults.GRAPH_AUTO_APPROVE, 0.9);
+  assert.equal(defaults.TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE, 200);
+  assert.equal(defaults.TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE, 60);
+  const set = parseEnvironment({ TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE: '7', GRAPH_AUTO_APPROVE: '0.85' }).env;
+  assert.equal(set.TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE, 7);
+  assert.equal(set.GRAPH_AUTO_APPROVE, 0.85);
   assert.equal(parseEnvironment({ JEV_MODEL: 'jev-1.13.0' }).env.JEV_MODEL, 'jev-1.13.0');
   assert.equal(parseEnvironment(live).configured.discovery, false);
   assert.equal(parseEnvironment({ ...live, TINYFISH_API_KEY: 'fixture' }).configured.discovery, false);
@@ -109,6 +114,28 @@ test('web discovery settings: pinned Jev model, bounded limits and thresholds, s
     { WEB_EVIDENCE_MIN_CONFIDENCE: '1.5' },
     { GRAPH_AUTO_APPROVE: '-0.1' },
     { VITE_TINYFISH_API_KEY: 'fixture' },
+    { TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE: '0' },
+    { TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE: '1001' },
   ])
     assert.throws(() => parseEnvironment(input), JSON.stringify(input));
+});
+test('web numeric settings accept only plain decimals, exactly as the Rust config does', () => {
+  const integers = [
+    'TINYFISH_DAILY_SEARCH_LIMIT',
+    'TINYFISH_DAILY_FETCH_LIMIT',
+    'TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE',
+    'TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE',
+  ];
+  const probabilities = ['WEB_EVIDENCE_MIN_CONFIDENCE', 'GRAPH_AUTO_APPROVE'];
+  // Exponent, sign, hex, whitespace, fractions for integers, and non-plain decimal forms.
+  for (const key of integers)
+    for (const raw of ['1e3', '+5', '-5', '0x10', ' 5', '5 ', '5\t', '5.0', '5_0', 'Infinity', 'NaN'])
+      assert.throws(() => parseEnvironment({ [key]: raw }), `${key}=${JSON.stringify(raw)}`);
+  for (const key of probabilities)
+    for (const raw of ['9e-1', '1E0', '+0.6', '-0', '0x1', ' 0.6 ', '0.6\n', '.6', '6.', '0,6', 'NaN', 'Infinity', '1.01'])
+      assert.throws(() => parseEnvironment({ [key]: raw }), `${key}=${JSON.stringify(raw)}`);
+  for (const key of integers) assert.equal(parseEnvironment({ [key]: '5' }).env[key as 'TINYFISH_DAILY_FETCH_LIMIT'], 5);
+  for (const key of probabilities)
+    for (const [raw, value] of [['0', 0], ['1', 1], ['0.75', 0.75], ['1.0', 1]] as const)
+      assert.equal(parseEnvironment({ [key]: raw }).env[key as 'GRAPH_AUTO_APPROVE'], value);
 });

@@ -31,6 +31,8 @@ pub struct Config {
     pub tinyfish_key: Option<String>,
     pub tinyfish_daily_search_limit: u32,
     pub tinyfish_daily_fetch_limit: u32,
+    pub tinyfish_daily_search_limit_per_space: u32,
+    pub tinyfish_daily_fetch_limit_per_space: u32,
     pub web_min_confidence: f64,
     pub graph_auto_approve: f64,
 }
@@ -94,17 +96,22 @@ impl Config {
                 _ => Err(Error("invalid_request")),
             }
         };
+        // Plain decimal only (digits, optionally '.' and digits), as packages/contracts/src/env.ts.
         let probability = |key: &str, default: &str| -> Result<f64> {
             let raw = get(key, default);
+            let (whole, fraction) = raw.split_once('.').unwrap_or((&raw, "0"));
+            let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
             match raw.parse::<f64>() {
-                Ok(n) if n.is_finite() && (0.0..=1.0).contains(&n) && !raw.contains(['e', 'E']) => {
-                    Ok(n)
-                }
+                Ok(n) if digits(whole) && digits(fraction) && (0.0..=1.0).contains(&n) => Ok(n),
                 _ => Err(Error("invalid_request")),
             }
         };
         let tinyfish_daily_search_limit = limit("TINYFISH_DAILY_SEARCH_LIMIT", 1000, 12000)?;
         let tinyfish_daily_fetch_limit = limit("TINYFISH_DAILY_FETCH_LIMIT", 300, 1000)?;
+        let tinyfish_daily_search_limit_per_space =
+            limit("TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE", 200, 12000)?;
+        let tinyfish_daily_fetch_limit_per_space =
+            limit("TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE", 60, 1000)?;
         let web_min_confidence = probability("WEB_EVIDENCE_MIN_CONFIDENCE", "0.6")?;
         let graph_auto_approve = probability("GRAPH_AUTO_APPROVE", "0.9")?;
         let mode = get("AI_MODE", "disabled");
@@ -166,6 +173,8 @@ impl Config {
             tinyfish_key,
             tinyfish_daily_search_limit,
             tinyfish_daily_fetch_limit,
+            tinyfish_daily_search_limit_per_space,
+            tinyfish_daily_fetch_limit_per_space,
             web_min_confidence,
             graph_auto_approve,
             web_dist: get("WEB_DIST_DIR", "./apps/web/dist").into(),
@@ -248,6 +257,13 @@ mod tests {
             (c.tinyfish_daily_search_limit, c.tinyfish_daily_fetch_limit),
             (1000, 300)
         );
+        assert_eq!(
+            (
+                c.tinyfish_daily_search_limit_per_space,
+                c.tinyfish_daily_fetch_limit_per_space
+            ),
+            (200, 60)
+        );
         assert_eq!((c.web_min_confidence, c.graph_auto_approve), (0.6, 0.9));
         assert!(c.tinyfish().is_none() && c.jev().is_none());
         let with = |k: &str, v: &str| Config::parse(&HashMap::from([(k.to_owned(), v.to_owned())]));
@@ -266,8 +282,41 @@ mod tests {
             ("WEB_EVIDENCE_MIN_CONFIDENCE", "NaN"),
             ("GRAPH_AUTO_APPROVE", "9e-1"),
             ("TINYFISH_API_KEY", "has space"),
+            ("TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE", "0"),
+            ("TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE", "1001"),
         ] {
             assert!(with(k, v).is_err(), "{k}={v}");
+        }
+        // Same rejected forms as tests/foundation/environment.test.ts.
+        for k in [
+            "TINYFISH_DAILY_SEARCH_LIMIT",
+            "TINYFISH_DAILY_FETCH_LIMIT",
+            "TINYFISH_DAILY_SEARCH_LIMIT_PER_SPACE",
+            "TINYFISH_DAILY_FETCH_LIMIT_PER_SPACE",
+        ] {
+            for v in [
+                "1e3", "+5", "-5", "0x10", " 5", "5 ", "5\t", "5.0", "5_0", "Infinity", "NaN",
+            ] {
+                assert!(with(k, v).is_err(), "{k}={v:?}");
+            }
+            assert!(with(k, "5").is_ok(), "{k}");
+        }
+        for k in ["WEB_EVIDENCE_MIN_CONFIDENCE", "GRAPH_AUTO_APPROVE"] {
+            for v in [
+                "9e-1", "1E0", "+0.6", "-0", "0x1", " 0.6 ", "0.6\n", ".6", "6.", "0,6", "NaN",
+                "Infinity", "1.01",
+            ] {
+                assert!(with(k, v).is_err(), "{k}={v:?}");
+            }
+            for (v, n) in [("0", 0.0), ("1", 1.0), ("0.75", 0.75), ("1.0", 1.0)] {
+                let c = with(k, v).unwrap();
+                let got = if k == "GRAPH_AUTO_APPROVE" {
+                    c.graph_auto_approve
+                } else {
+                    c.web_min_confidence
+                };
+                assert_eq!(got, n, "{k}={v}");
+            }
         }
         let live = Config::parse(&HashMap::from([
             ("AI_MODE".to_owned(), "live".to_owned()),
