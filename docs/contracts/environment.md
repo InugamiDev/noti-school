@@ -57,7 +57,9 @@ SMTP configured the flag is ignored and the normal verification email applies; w
 sign-up stays 503 `email` unavailable. Password reset and account deletion still require working mail.
 `configured.password` is identity plus (SMTP or this flag). Passkeys (`configured.passkey`) need only identity:
 the WebAuthn relying party is derived from `APP_ORIGIN` (rpID `localhost` in development, `noti.school` in
-production, rpName `noti.school`, expected origin exactly `APP_ORIGIN`); no extra variable exists. Google requires both
+production, rpName `noti.school`, expected origin exactly `APP_ORIGIN`); no extra variable exists. The plugin does not
+require user verification, so a passkey that only proves presence (a security key without a PIN) still signs in:
+treat a passkey as a possession factor. Google requires both
 credentials. No app secrets in VITE_* or PM2's inherited parent environment: coordinator starts PM2 commands
 from a clean shell and audits actual per-process env isolation. Node's env-file does not override inherited
 values, so stale parent vars must be removed before start/reload.

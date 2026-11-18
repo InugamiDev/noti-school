@@ -131,3 +131,25 @@ test('passkey sign-in has sign-in style per-client limits', async () => {
   for (let i = 0; i < 10; i++) assert.equal((await attempt()).status, 400);
   assert.equal((await attempt()).status, 429);
 });
+
+test('a credential id registers once, names are bounded and a refused authenticator is a client error', async () => {
+  const f = await fixture({ inviteVerifies: true, mailEnabled: false });
+  const session = await signedIn(f);
+  const key = new SoftwareAuthenticator('localhost', origin);
+  assert.equal((await register(f, key, session)).status, 200);
+  // Review finding 1: the same credential id again (here by the same user) must not create a second row.
+  assert.equal((await register(f, key, session)).status, 400);
+  assert.equal(f.db.passkey!.length, 1);
+  // Review finding 5: names beyond the UI's 64 characters are refused before the plugin runs.
+  const options = await f.request('/passkey/generate-register-options', undefined, { cookie: session });
+  const { challenge } = await options.json() as { challenge: string };
+  const other = new SoftwareAuthenticator('localhost', origin);
+  assert.equal((await f.request('/passkey/verify-registration', { response: other.register(challenge), name: 'x'.repeat(65) },
+    { cookie: join(session, cookies(options)) })).status, 400);
+  // Review finding 4: a foreign clientData origin is reported as 400, not as a 500 outage.
+  const again = await f.request('/passkey/generate-register-options', undefined, { cookie: session });
+  const fresh = await again.json() as { challenge: string };
+  assert.equal((await f.request('/passkey/verify-registration', { response: other.register(fresh.challenge, 'https://evil.invalid') },
+    { cookie: join(session, cookies(again)) })).status, 400);
+  assert.equal(f.db.passkey!.length, 1);
+});

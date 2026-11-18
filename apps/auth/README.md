@@ -96,7 +96,7 @@ not a role/institution assertion. It must not be retained in URL history, analyt
    SMTP must be configured, unless `AUTH_INVITE_VERIFIES_EMAIL=true` and SMTP is absent: then the checked
    invitation proves the email, the account is created verified, no mail is sent and the response is
    `{token:null,user:{emailVerified:true,...}}` ("now sign in"). Neither path establishes a session at sign-up.
-4. Passkeys (`@better-auth/passkey` 1.7.6, rpID = APP_ORIGIN host, rpName `noti.school`, expected origin
+2. Passkeys (`@better-auth/passkey` 1.7.6, rpID = APP_ORIGIN host, rpName `noti.school`, expected origin
    exactly APP_ORIGIN). Exposed: GET `/passkey/generate-register-options`, POST `/passkey/verify-registration`,
    GET `/passkey/generate-authenticate-options`, POST `/passkey/verify-authentication`, GET
    `/passkey/list-user-passkeys`, POST `/passkey/delete-passkey` (`update-passkey` is not exposed).
@@ -104,8 +104,10 @@ not a role/institution assertion. It must not be retained in URL history, analyt
    registration is rejected. Passkey sign-in creates a normal session only for an existing verified user and
    never creates users, redeems invitations or grants membership. POSTs need the usual same-origin Origin;
    GETs are refused when Origin is foreign or Sec-Fetch-Site is anything but `same-origin`. Authentication
-   routes use sign-in limits (10/min per client, plus 50/min per credential id on verification).
-2. Google: native `POST /api/auth/sign-in/social` with `{provider:"google",callbackURL,...}` and the
+   routes use sign-in limits (10/min per client, plus 50/min per credential id on verification; an assertion
+   is always keyed by its credential id). A credential id can be registered once; a duplicate is refused.
+   The plugin does not require user verification (PIN or biometric), so a passkey is a possession factor.
+3. Google: native `POST /api/auth/sign-in/social` with `{provider:"google",callbackURL,...}` and the
    invitation header for new users. The server stores the pending token with a five-minute expiry using
    `addOAuthServerContext`; Better Auth stores OAuth state in its existing verification table and binds
    it to a signed browser cookie. No token is sent in the Google URL. The callback's user-create hook
@@ -113,7 +115,7 @@ not a role/institution assertion. It must not be retained in URL history, analyt
    Existing Google accounts may sign in without an invite. ID-token shortcuts and arbitrary scopes,
    login hints, additionalData, role and institution assertions are rejected. Email matching never links
    a password account to Google automatically.
-3. After verified sign-in, `POST /api/auth/invitations/redeem` with `{token}` and `X-Noti-CSRF: 1`.
+4. After verified sign-in, `POST /api/auth/invitations/redeem` with `{token}` and `X-Noti-CSRF: 1`.
    Auth derives user ID/email from the current session, then calls frozen Rust redemption. Rust owns
    atomic token consumption, email HMAC, expiry, institution and role. Existing verified users can
    redeem another invitation. Check never consumes; identity creation alone gives no product membership.

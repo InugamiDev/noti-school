@@ -10,10 +10,17 @@ export function identityPlugins(origin: string) {
     // The relying party is the exact approved APP_ORIGIN; the browser-reported Origin is never trusted.
     rpID: new URL(origin).hostname, rpName: 'noti.school', origin,
     // A passkey is only added to an existing signed-in account; it never creates or resolves a user.
-    registration: { requireSession: true },
+    // A credential id belongs to exactly one account: the plugin does not check this and the column is not
+    // unique, so a second registration of a known id could make sign-in lookups ambiguous (review finding 1).
+    registration: { requireSession: true, afterVerification: async ({ ctx, verification }) => {
+      const id = verification.registrationInfo?.credential.id;
+      const existing = id ? await ctx.context.adapter.findMany({ model: 'passkey', where: [{ field: 'credentialID', value: id }], limit: 1 }) : [];
+      if (!id || existing.length) throw new APIError('BAD_REQUEST', { message: 'Passkey could not be registered' });
+    } },
     authentication: { afterVerification: async ({ ctx, clientData }) => {
-      const key = await ctx.context.adapter.findOne<{ userId: string }>({ model: 'passkey', where: [{ field: 'credentialID', value: clientData.id }] });
-      const user = key ? await ctx.context.internalAdapter.findUserById(key.userId) : null;
+      const keys = await ctx.context.adapter.findMany<{ userId: string }>({ model: 'passkey', where: [{ field: 'credentialID', value: clientData.id }], limit: 2 });
+      // Refuse any ambiguous credential id outright rather than trusting whichever row the plugin read.
+      const user = keys.length === 1 ? await ctx.context.internalAdapter.findUserById(keys[0]!.userId) : null;
       if (user?.emailVerified !== true) throw new APIError('FORBIDDEN', { message: 'Invitation or identity invalid' });
     } },
   })];

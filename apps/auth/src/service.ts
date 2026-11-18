@@ -33,9 +33,10 @@ const accountCeilings: Record<string, number> = {
   '/passkey/verify-authentication': 50,
 };
 function accountKey(body: { email?: unknown; response?: unknown }) {
-  if (typeof body.email === 'string' && body.email.length <= 254) return `email:${body.email.trim().toLowerCase()}`;
+  // A passkey assertion is keyed by its credential id first, so an added email field cannot pick a fresh bucket.
   const credential = (body.response as { id?: unknown } | undefined)?.id;
-  if (body.response && typeof body.response === 'object' && typeof credential === 'string' && credential.length <= 1024) return `passkey:${credential}`;
+  if (body.response && typeof body.response === 'object') return typeof credential === 'string' && credential.length <= 1024 ? `passkey:${credential}` : 'passkey:invalid';
+  if (typeof body.email === 'string' && body.email.length <= 254) return `email:${body.email.trim().toLowerCase()}`;
   return undefined;
 }
 const ENUMERATION_FLOOR_MS = 8500, MAX_PADDED = 256;
@@ -127,7 +128,13 @@ export function createService(deps: {
       // Validate bounded payload/header shape before charging a legitimate flow.
       if (!internal && request.method === 'POST') {
         if (!request.headers.get('content-type')?.startsWith('application/json')) return errorResponse(415, 'unsupported_media');
-        try { const body: unknown = await request.clone().json(); if (!body || typeof body !== 'object' || Array.isArray(body)) return errorResponse(400, 'invalid_request'); }
+        try {
+          const body: unknown = await request.clone().json();
+          if (!body || typeof body !== 'object' || Array.isArray(body)) return errorResponse(400, 'invalid_request');
+          // The plugin accepts any passkey name length; keep it to what the UI allows.
+          const name = (body as { name?: unknown }).name;
+          if (authPath === '/passkey/verify-registration' && name !== undefined && (typeof name !== 'string' || name.length > 64)) return errorResponse(400, 'invalid_request');
+        }
         catch { return errorResponse(400, 'invalid_request'); }
       }
       if (internal) {
@@ -197,6 +204,8 @@ export function createService(deps: {
       // Session-dependent 4xx (e.g. EMAIL_ALREADY_VERIFIED) and validation errors are normalized too; only
       // origin rejection (403), which is independent of any account, keeps its status. All are padded.
       if (padded && response.status !== 403) return Response.json(recoveryMessage, { headers: { 'cache-control': 'no-store' } });
+      // The plugin reports a refused authenticator (foreign origin, wrong rpId) as 500; it is a client error.
+      if (authPath === '/passkey/verify-registration' && response.status === 500) { await response.body?.cancel(); return errorResponse(400, 'invalid_request'); }
       const headers = new Headers(response.headers);
       headers.set('cache-control', 'no-store'); headers.set('referrer-policy', 'no-referrer');
       return new Response(response.body, { status: response.status, headers });
