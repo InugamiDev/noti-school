@@ -10,6 +10,8 @@
     "test": "pnpm build && tsx --test ../../tests/auth/*.test.ts"
   },
   "dependencies": {
+    "@better-auth/passkey": "catalog:",
+    "@better-auth/utils": "0.4.2",
     "@noti/contracts": "workspace:*",
     "better-auth": "catalog:",
     "pg": "catalog:",

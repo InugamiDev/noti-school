@@ -22,7 +22,7 @@ async function setup(page: Page, options: { admin?: boolean; versionMissing?: bo
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
-    if (path.endsWith('/capabilities')) { const cap = { state: 'available', reason: 'ready' }; return route.fulfill({ json: { mode: 'mock', answers: cap, indexing: cap, discovery: cap, google: cap, email: cap, identity: cap } }); }
+    if (path.endsWith('/capabilities')) { const cap = { state: 'available', reason: 'ready' }; return route.fulfill({ json: { mode: 'mock', answers: cap, indexing: cap, discovery: cap, google: cap, email: cap, password: cap, passkey: cap, identity: cap } }); }
     if (path.endsWith('/institutions')) return route.fulfill({ json: { items: [{ id, slug: 'demo', name: 'Demo university', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null } });
     if (path.endsWith('/me')) return route.fulfill({ json: { identity: { user_id: 'synthetic-user', session_id: 's', email_verified: true, expires_at: '2027-01-01T00:00:00Z' }, memberships: [{ institution_id: id, role: options.admin === false ? 'student' : 'admin' }] } });
     if (path.endsWith('/answers') && method === 'POST') return route.fulfill({ json: answer });

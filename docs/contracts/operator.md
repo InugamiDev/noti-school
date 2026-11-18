@@ -12,6 +12,8 @@ Input is strict `{email,role,output,expires_hours?}`. Role is explicitly `admin`
 
 The command creates HCMIU with coverage `none` if absent, preserving an existing institution's coverage. It writes a SHA256 token hash and lowercased email HMAC. Invitation material appears only in the private output file. Distribution is a separate coordinator action; no delivery is claimed.
 
+When the auth service runs with `AUTH_INVITE_VERIFIES_EMAIL=true` and no SMTP (owner decision 2026-11-18), the invitation file is the proof of the invitee's email: whoever presents the token can create a verified password account for the invited address. The operator must therefore hand the invitation file (or its token) directly to the invitee in person or over a channel already proven to belong to that person, never forward it to a shared inbox, group chat or third party, and must confirm the recipient's identity first. Issue one invitation per person and email; if a file may have been exposed, let it expire or revoke it before reissuing. Once SMTP is configured the flag has no effect and normal email verification applies again.
+
 Rust's frozen invitation contract requires a current admin issuer. Each operator-issued invitation therefore has a random `operator:<uuid>` membership principal. It is not an identity account and cannot sign in. No real student is granted membership until authenticated email-bound redemption. This deliberate bootstrap bridge needs coordinator review; expired invitations and unused operator principals are removed by retention. Do not revoke this principal before redemption unless intentionally revoking its invitation.
 
 ## Prices

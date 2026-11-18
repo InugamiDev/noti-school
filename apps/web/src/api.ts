@@ -230,8 +230,11 @@ export function takeAuthCallback(href: string) {
   const hash = new URLSearchParams(query);
   const token = hash.get('token') ?? url.searchParams.get('token') ?? '';
   const deletion = hash.get('delete_token') ?? url.searchParams.get('delete_token') ?? '';
+  // An invitation link is #/auth?invitation=<token>: the operator hands it to the invitee directly.
+  const invitation = hash.get('invitation') ?? url.searchParams.get('invitation') ?? '';
   const error = hash.has('error') || url.searchParams.has('error') || route === '/auth/error';
-  for (const key of ['token', 'delete_token', 'error', 'error_description']) { hash.delete(key); url.searchParams.delete(key); }
+  for (const key of ['token', 'delete_token', 'invitation', 'error', 'error_description']) { hash.delete(key); url.searchParams.delete(key); }
   url.hash = route + (hash.size ? '?' + hash.toString() : '');
-  return { token: token.length <= 256 ? token : '', deletion: deletion.length <= 256 ? deletion : '', error, clean: url.pathname + url.search + url.hash };
+  const bounded = (value: string) => (value.length <= 256 ? value : '');
+  return { token: bounded(token), deletion: bounded(deletion), invitation: bounded(invitation), error, clean: url.pathname + url.search + url.hash };
 }

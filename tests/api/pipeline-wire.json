@@ -60,7 +60,15 @@
       "reason": "ready",
       "state": "available"
     },
-    "mode": "live"
+    "mode": "live",
+    "passkey": {
+      "reason": "ready",
+      "state": "available"
+    },
+    "password": {
+      "reason": "ready",
+      "state": "available"
+    }
   },
   "ChunkPage": {
     "items": [

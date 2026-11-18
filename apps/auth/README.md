@@ -2,7 +2,8 @@
 
 Implemented for NOTI-3 against foundation `18a023ceba2a51af12d17760af26019ca466ae36`.
 Independent audit and live integration are pending. Node 24.18.0 / pnpm 10.29.2,
-Better Auth 1.7.6, PostgreSQL core `auth` schema, no plugins or additional fields.
+Better Auth 1.7.6, PostgreSQL core `auth` schema plus the `@better-auth/passkey` 1.7.6 plugin table (owner
+decision 2026-11-18), no other plugins or additional fields. Schema-shaping options live in `src/schema.ts`.
 
 ## Run locally
 
@@ -92,7 +93,18 @@ not a role/institution assertion. It must not be retained in URL history, analyt
 1. Password: `POST /api/auth/sign-up/email`, native `{email,password,name,callbackURL?}` plus
    `X-Noti-Invitation`. Same-origin Origin is mandatory. The before hook and user-create hook call
    Rust `/internal/invitations/check` with the email/token. Passwords require 12..128 characters.
-   SMTP must be configured. Verification does not automatically establish a session; sign in afterward.
+   SMTP must be configured, unless `AUTH_INVITE_VERIFIES_EMAIL=true` and SMTP is absent: then the checked
+   invitation proves the email, the account is created verified, no mail is sent and the response is
+   `{token:null,user:{emailVerified:true,...}}` ("now sign in"). Neither path establishes a session at sign-up.
+4. Passkeys (`@better-auth/passkey` 1.7.6, rpID = APP_ORIGIN host, rpName `noti.school`, expected origin
+   exactly APP_ORIGIN). Exposed: GET `/passkey/generate-register-options`, POST `/passkey/verify-registration`,
+   GET `/passkey/generate-authenticate-options`, POST `/passkey/verify-authentication`, GET
+   `/passkey/list-user-passkeys`, POST `/passkey/delete-passkey` (`update-passkey` is not exposed).
+   Registration, listing and deletion require a verified session (401 otherwise); `createSession` on
+   registration is rejected. Passkey sign-in creates a normal session only for an existing verified user and
+   never creates users, redeems invitations or grants membership. POSTs need the usual same-origin Origin;
+   GETs are refused when Origin is foreign or Sec-Fetch-Site is anything but `same-origin`. Authentication
+   routes use sign-in limits (10/min per client, plus 50/min per credential id on verification).
 2. Google: native `POST /api/auth/sign-in/social` with `{provider:"google",callbackURL,...}` and the
    invitation header for new users. The server stores the pending token with a five-minute expiry using
    `addOAuthServerContext`; Better Auth stores OAuth state in its existing verification table and binds
@@ -134,7 +146,7 @@ library state read/delete replay window. All markers expire. NOTI-6 rehearses re
 reset, session expiration/revocation and deletion concurrency using the non-owner auth runtime role.
 
 `POST /internal/capabilities` has the same exact Host/bearer and empty-body checks as introspection.
-It returns strict identity/Google/email capability states, including database and mail-circuit failure.
+It returns strict identity/Google/email/password/passkey capability states, including database and mail-circuit failure.
 Supported deletion sends a UI confirmation link; the browser consumes the token without storage and
 confirms through native POST. `beforeDelete` calls strict internal Rust cleanup via an injectable client.
 Cleanup failure leaves identity intact but consumes the confirmation token; request a new confirmation.

@@ -186,6 +186,21 @@ async fn session_cookie_forwarding_revocation_and_redirect_fail_closed() {
         assert_eq!(h.get("cookie").unwrap(),"session=synthetic-cookie");assert_eq!(h.get("authorization").unwrap(),"Bearer 01234567890123456789012345678901");assert!(h.get("x-user-id").is_none());
         match mode {0=>Json(serde_json::json!({"user_id":"synthetic-user","session_id":"synthetic-session","email_verified":true,"expires_at":(chrono::Utc::now()+chrono::Duration::hours(1)).to_rfc3339()})).into_response(),1=>StatusCode::UNAUTHORIZED.into_response(),_=>axum::response::Redirect::temporary("http://127.0.0.1:1/").into_response()}
     }}));
+    // Capabilities share the fixed loopback port with the session mock, so both run in this one test.
+    let caps_mode = Arc::new(AtomicUsize::new(0));
+    let cm = caps_mode.clone();
+    let app = app.route("/internal/capabilities", post(move || {
+        let mode = cm.load(Ordering::SeqCst);
+        async move {
+            let ready = serde_json::json!({"state":"available","reason":"ready"});
+            let off = serde_json::json!({"state":"disabled","reason":"not_configured"});
+            let mut caps = serde_json::json!({"identity":ready,"google":off,"email":off,"password":ready,"passkey":ready});
+            if mode == 1 { caps["password"] = off.clone(); }
+            if mode == 2 { caps.as_object_mut().unwrap().remove("passkey"); }
+            if mode == 3 { caps["passkey"] = serde_json::json!({"state":"available","reason":"not_configured"}); }
+            Json(caps)
+        }
+    }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3811")
         .await
         .expect("fixed internal test port must be unused; no existing service is contacted");
@@ -219,6 +234,35 @@ async fn session_cookie_forwarding_revocation_and_redirect_fail_closed() {
         auth::session(&s, &h).await.unwrap_err().0,
         "core_unavailable"
     );
+    let ready = serde_json::json!({"state":"available","reason":"ready"});
+    let off = serde_json::json!({"state":"disabled","reason":"not_configured"});
+    let failed = serde_json::json!({"state":"unavailable","reason":"core_failed"});
+    for (m, password, passkey) in [
+        (0, &ready, &ready),
+        (1, &off, &ready),
+        (2, &failed, &failed),
+        (3, &failed, &failed),
+    ] {
+        caps_mode.store(m, Ordering::SeqCst);
+        *s.identity_probe.lock().await = None;
+        let r = router(s.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/capabilities")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&to_bytes(r.into_body(), 16384).await.unwrap()).unwrap();
+        assert_eq!(&v["password"], password, "mode {m}");
+        assert_eq!(&v["passkey"], passkey, "mode {m}");
+        // A malformed or old-shape identity answer fails every identity capability closed.
+        if m >= 2 {
+            assert_eq!(v["identity"], failed);
+        }
+    }
     server.abort();
     let _ = server.await;
 }

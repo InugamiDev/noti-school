@@ -7,7 +7,7 @@ const artifacts=fileURLToPath(new URL('./artifacts/',import.meta.url));
 const id='11111111-1111-4111-8111-111111111111';
 const error={error:{code:'provider_unavailable',message:'Synthetic unavailable fixture',request_id:id,retryable:false,capability:'answers'}};
 const capability={state:'disabled',reason:'not_configured'};
-async function fixture(page:Page){await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;if(path.endsWith('/capabilities'))return route.fulfill({json:{mode:'disabled',answers:{state:'available',reason:'ready'},indexing:capability,discovery:capability,google:capability,email:capability,identity:capability}});if(path.endsWith('/institutions'))return route.fulfill({json:{items:[{id,slug:'demo',name:'Demo university · synthetic test',kind: 'school', domains: [], coverage: 'synthetic_demo'}],next_cursor:null}});return route.fulfill({status:503,json:error});});}
+async function fixture(page:Page){await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;if(path.endsWith('/capabilities'))return route.fulfill({json:{mode:'disabled',answers:{state:'available',reason:'ready'},indexing:capability,discovery:capability,google:capability,email:capability,password:capability,passkey:capability,identity:capability}});if(path.endsWith('/institutions'))return route.fulfill({json:{items:[{id,slug:'demo',name:'Demo university · synthetic test',kind: 'school', domains: [], coverage: 'synthetic_demo'}],next_cursor:null}});return route.fulfill({status:503,json:error});});}
 // The cold-load splash covers the hero until the app has mounted; frames are compared only after it is gone.
 async function canvasShot(page:Page,name:string){await expect(page.locator('#splash')).toHaveCount(0);const canvas=page.locator('canvas');await expect(canvas).toBeVisible();const hide=await page.addStyleTag({content:'.hero-content,.motion-control,.archive-shade{visibility:hidden!important}'});const bytes=await canvas.screenshot({path:`${artifacts}${name}.png`,animations:'allow'});await hide.evaluate(el=>el.remove());return createHash('sha256').update(bytes).digest('hex');}
 // A still canvas: two consecutive frames are identical. A scene that is still moving never gets
@@ -22,13 +22,15 @@ for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:192
  expect(await prompt.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;})).toBe(true);
  await page.keyboard.press('Tab');await expect(page.getByLabel('Answer language')).toBeFocused();
  await page.getByRole('button', { name: /^(Ask|Hỏi)$/ }).click();await expect(page.getByRole('alert')).toContainText('Answers are temporarily unavailable');
- await expect(prompt).toHaveValue(/Tôi có thể/);await page.getByRole('link',{name:'Sign in',exact:true}).first().click();await expect(page.getByRole('heading',{name:'Welcome to noti.school'})).toBeVisible();
- await expect(page.locator('form').getByRole('button',{name:'Sign in',exact:true})).toBeDisabled();await expect(page.getByText('Sign-in availability is not confirmed.',{exact:false})).toBeVisible();
+ await expect(prompt).toHaveValue(/Tôi có thể/);await page.getByRole('link',{name:'Sign in',exact:true}).first().click();
+ // The Vietnamese question set the app language, and the account page follows it.
+ await expect(page.getByRole('heading',{name:/^(Welcome to noti\.school|Chào mừng đến với noti\.school)$/})).toBeVisible();
+ await expect(page.getByText(/Sign-in availability is not confirmed\.|Chưa xác nhận được tình trạng đăng nhập\./)).toBeVisible();await expect(page.locator('form').getByRole('button',{name:/^(Sign in|Đăng nhập)$/})).toHaveCount(0);await expect(page.getByRole('button',{name:/passkey/i})).toHaveCount(0);
  await page.getByRole('link',{name:'Sources',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unavailable');
  await page.goto('/#/');await expect(page.getByRole('textbox', { name: /^(Your question|Câu hỏi của bạn)$/ })).toHaveValue(/Tôi có thể/);
 });
 test('available identity still reports a failed sign-in request without claiming success',async({page})=>{
- await fixture(page);await page.route('**/api/v1/capabilities',route=>route.fulfill({json:{mode:'disabled',answers:capability,indexing:capability,discovery:capability,google:capability,email:capability,identity:{state:'available',reason:'ready'}}}));
+ await fixture(page);await page.route('**/api/v1/capabilities',route=>route.fulfill({json:{mode:'disabled',answers:capability,indexing:capability,discovery:capability,google:capability,email:capability,password:{state:'available',reason:'ready'},passkey:capability,identity:{state:'available',reason:'ready'}}}));
  await page.goto('/#/auth');await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Password',{exact:true}).fill('synthetic-password');const submit=page.locator('form').getByRole('button',{name:'Sign in',exact:true});await expect(submit).toBeEnabled();await submit.click();await expect(page.getByRole('status')).toContainText('unavailable');
 });
 for(const size of [{name:'desktop',width:1440,height:900},{name:'wide',width:1920,height:1080},{name:'mobile',width:390,height:844}])test(`actual canvas pixels move, pause, and reduced-motion remain stable: ${size.name}`,async({page})=>{

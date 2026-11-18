@@ -18,7 +18,7 @@ async function fixture(page: Page, admin = false, initial: string | null = 'A') 
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()), path = url.pathname, method = route.request().method();
     let value: unknown;
-    if (path.endsWith('/capabilities')) { const cap = { state: 'available', reason: 'ready' }; value = { mode: 'mock', answers: cap, indexing: cap, discovery: cap, google: cap, email: cap, identity: cap }; }
+    if (path.endsWith('/capabilities')) { const cap = { state: 'available', reason: 'ready' }; value = { mode: 'mock', answers: cap, indexing: cap, discovery: cap, google: cap, email: cap, password: cap, passkey: cap, identity: cap }; }
     else if (path.endsWith('/institutions')) value = { items: [{ id: institution, name: 'Synthetic institution', slug: 'synthetic', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null };
     else if (path.endsWith('/me')) {
       if (!state.user) return route.fulfill({ status: 401, json: error('unauthenticated') });
@@ -331,7 +331,7 @@ test('A-09 unavailable answers are visible and block Ask; failed capability read
   await page.route('**/api/v1/capabilities', route => {
     if (failing) return route.fulfill({ status: 503, json: error('core_unavailable') });
     const cap = { state: 'available', reason: 'ready' };
-    return route.fulfill({ json: { mode: 'live', answers: { state: 'unavailable', reason: 'budget_exhausted' }, indexing: cap, discovery: cap, google: cap, email: cap, identity: cap } });
+    return route.fulfill({ json: { mode: 'live', answers: { state: 'unavailable', reason: 'budget_exhausted' }, indexing: cap, discovery: cap, google: cap, email: cap, password: cap, passkey: cap, identity: cap } });
   });
   await page.goto('/');
   await expect(page.getByRole('status').filter({ hasText: 'Answers are paused for this month.' })).toBeVisible();

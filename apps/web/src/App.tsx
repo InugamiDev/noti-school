@@ -505,6 +505,7 @@ export default function App() {
         ...callback,
         token: '',
         deletion: keepDeletion ? callback.deletion : '',
+        invitation: '',
         error: false,
       });
   }
@@ -1016,7 +1017,10 @@ export default function App() {
                 <Auth
                   callback={authCallback()}
                   capabilities={capabilities()}
+                  checking={capabilities.loading && !capabilities()}
                   authenticated={!!me()}
+                  lang={language()}
+                  setLang={setLanguage}
                   account={
                     me()
                       ? {
@@ -1028,9 +1032,9 @@ export default function App() {
                         }
                       : undefined
                   }
-                  refresh={() => {
-                    void refreshMe();
-                    void refreshCapabilities();
+                  refresh={async () => {
+                    // The account page waits for the session read before it selects a joined institution.
+                    await Promise.allSettled([refreshMe(), refreshCapabilities()]);
                   }}
                   joined={(id) => {
                     void reloadInstitutions();
@@ -1041,6 +1045,11 @@ export default function App() {
                     // Mutate in place: replacing the keyed callback would remount and clear the result message.
                     const callback = untrack(authCallback);
                     if (callback) callback.deletion = '';
+                  }}
+                  invitationTaken={() => {
+                    // Same in-place rule: the account page now holds the invitation in memory.
+                    const callback = untrack(authCallback);
+                    if (callback) callback.invitation = '';
                   }}
                 />
               )}

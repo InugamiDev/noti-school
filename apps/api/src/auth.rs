@@ -28,6 +28,8 @@ pub struct IdentityCapabilities {
     identity: Capability,
     google: Capability,
     email: Capability,
+    password: Capability,
+    passkey: Capability,
 }
 pub type ProbeCache = tokio::sync::Mutex<Option<(std::time::Instant, Option<serde_json::Value>)>>;
 const PROBE_TTL: std::time::Duration = std::time::Duration::from_secs(5);
@@ -64,7 +66,13 @@ async fn probe_capabilities(s: &AppState) -> Result<serde_json::Value> {
     let bytes = crate::http::limited_body(response, 4096).await?;
     let caps: IdentityCapabilities =
         serde_json::from_slice(&bytes).map_err(|_| Error("core_unavailable"))?;
-    for c in [&caps.identity, &caps.google, &caps.email] {
+    for c in [
+        &caps.identity,
+        &caps.google,
+        &caps.email,
+        &caps.password,
+        &caps.passkey,
+    ] {
         if !["available", "disabled", "unavailable"].contains(&c.state.as_str())
             || ![
                 "ready",

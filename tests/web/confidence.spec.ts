@@ -79,7 +79,7 @@ async function setup(page: Page, options: Options = {}) {
     if (path.endsWith('/capabilities')) {
       const cap = { state: 'available', reason: 'ready' };
       const discovery = options.discovery === 'disabled' ? { state: 'disabled', reason: 'not_configured' } : cap;
-      return route.fulfill({ json: { mode: 'mock', answers: cap, indexing: cap, discovery, google: cap, email: cap, identity: cap } });
+      return route.fulfill({ json: { mode: 'mock', answers: cap, indexing: cap, discovery, google: cap, email: cap, password: cap, passkey: cap, identity: cap } });
     }
     if (path.endsWith('/api/v1/institutions')) return route.fulfill({ json: { items: [schoolItem, ...(state.hasSpace && options.listSpace ? [spaceItem] : [])], next_cursor: null } });
     if (path.endsWith('/api/v1/me')) {

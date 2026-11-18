@@ -288,7 +288,7 @@ async fn web_evidence_discovery_runtime() {
             Json(json!({"user_id":user,"session_id":"synthetic-session","email_verified":true,"expires_at":(chrono::Utc::now()+chrono::Duration::hours(1)).to_rfc3339()}))
         }))
         .route("/internal/capabilities", post(|| async {
-            Json(json!({"identity":{"state":"available","reason":"ready"},"google":{"state":"disabled","reason":"not_configured"},"email":{"state":"disabled","reason":"not_configured"}}))
+            Json(json!({"identity":{"state":"available","reason":"ready"},"google":{"state":"disabled","reason":"not_configured"},"email":{"state":"disabled","reason":"not_configured"},"password":{"state":"available","reason":"ready"},"passkey":{"state":"available","reason":"ready"}}))
         }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3811")
         .await

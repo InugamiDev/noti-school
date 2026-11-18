@@ -11,6 +11,11 @@ export function csrf(headers: Headers, origin: string, custom = false) {
   return headers.get('origin') === origin && headers.get('sec-fetch-site') !== 'cross-site'
     && (!custom || headers.get('x-noti-csrf') === '1');
 }
+// Same-origin browser fetches of GET routes omit Origin; reject any cross-site or foreign-origin signal.
+export function sameOriginRead(headers: Headers, origin: string) {
+  const sent = headers.get('origin'), site = headers.get('sec-fetch-site');
+  return (sent === null || sent === origin) && (site === null || site === 'same-origin');
+}
 export function errorResponse(status: number, code: string, capability?: 'identity' | 'email' | 'google') {
   return Response.json({ error: {
     code, message: code.replaceAll('_', ' '), request_id: randomUUID(),

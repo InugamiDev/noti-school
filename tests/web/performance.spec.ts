@@ -26,7 +26,7 @@ test('actual WebGL draw calls per rendered frame', async ({ page, browser }) => 
     const capability = { state: 'disabled', reason: 'not_configured' };
     if (route.request().url().endsWith('/capabilities')) return route.fulfill({ json: {
       mode: 'disabled', answers: capability, indexing: capability, discovery: capability,
-      google: capability, email: capability, identity: capability,
+      google: capability, email: capability, password: capability, passkey: capability, identity: capability,
     } });
     if (route.request().url().endsWith('/institutions')) return route.fulfill({ json: { items: [{
       id: '11111111-1111-4111-8111-111111111111', slug: 'demo',

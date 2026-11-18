@@ -12,6 +12,7 @@ catalog/workspace dependencies as installed or compiled. No provider SDK needed 
 | TypeScript | 7.0.2 | npm registry `pnpm view typescript version`; strict NodeNext foundation |
 | Zod | 4.6.5 | npm registry; JSON Schema generated from executable types |
 | Better Auth / auth CLI | 1.7.6 | [installation](https://better-auth.com/docs/installation), [PostgreSQL](https://better-auth.com/docs/adapters/postgresql), [migration API](https://better-auth.com/docs/concepts/database) |
+| Better Auth passkey plugin | 1.7.6 | Owner decision 2026-11-18; [passkey plugin](https://better-auth.com/docs/plugins/passkey). npm `@better-auth/passkey` 1.7.6, repo better-auth/better-auth `packages/passkey`, published by GitHub Actions OIDC like `better-auth` 1.7.6. Pulls `@simplewebauthn/server` 13.3.3 (MasterKale/SimpleWebAuthn, OIDC publish). `@better-auth/utils` 0.4.2 is pinned directly in apps/auth so the plugin shares the single `@better-auth/core` instance |
 | pg | 8.23.0 | npm registry; Better Auth's supported Pool adapter |
 | Solid | 1.9.15 | npm registry; [client setup](https://docs.solidjs.com/quick-start) |
 | Vite / Solid plugin | 8.3.1 / 2.11.14 | npm registry; [Vite prerequisites](https://vite.dev/guide/) |

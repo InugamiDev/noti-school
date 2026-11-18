@@ -257,7 +257,7 @@ async fn runtime_sql_and_complete_pipeline() {
     })).route("/internal/capabilities",post(|h:HeaderMap| async move {
         assert_eq!(h["authorization"],format!("Bearer {SECRET}"));
         assert_eq!(h["host"],"127.0.0.1:3811");
-        Json(json!({"identity":{"state":"available","reason":"ready"},"google":{"state":"available","reason":"ready"},"email":{"state":"disabled","reason":"not_configured"}}))
+        Json(json!({"identity":{"state":"available","reason":"ready"},"google":{"state":"available","reason":"ready"},"email":{"state":"disabled","reason":"not_configured"},"password":{"state":"available","reason":"ready"},"passkey":{"state":"available","reason":"ready"}}))
     }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3811")
         .await
@@ -343,6 +343,8 @@ async fn runtime_sql_and_complete_pipeline() {
     assert_eq!(status, 200);
     assert_eq!(caps["answers"]["state"], "available");
     assert_eq!(caps["google"]["state"], "available");
+    assert_eq!(caps["password"]["state"], "available");
+    assert_eq!(caps["passkey"]["state"], "available");
     let source_path = format!("/api/v1/institutions/{i}/sources");
     let (status, source) = call(
         &s,

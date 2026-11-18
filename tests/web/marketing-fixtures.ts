@@ -110,6 +110,8 @@ export const test = base.extend<{ marketingAudit: MarketingAudit }>({
               discovery: disabled,
               google: disabled,
               email: disabled,
+              password: disabled,
+              passkey: disabled,
               identity: disabled,
             },
           });

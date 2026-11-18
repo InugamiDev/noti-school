@@ -1,10 +1,10 @@
 import { IdentityCapabilities, PublicInvitationRedeem, Session } from '@noti/contracts';
 import type { Config } from './config.js';
 import type { Identity } from './auth.js';
-import { enumerationPaths, recoveryMessage } from './auth.js';
+import { enumerationPaths, inviteVerifiesEmail, recoveryMessage } from './auth.js';
 import type { Mailer } from './mail.js';
 import { InvitationError, type Invitations } from './invitations.js';
-import { Admission, authorized, csrf, digest, errorResponse, RateLimit } from './security.js';
+import { Admission, authorized, csrf, digest, errorResponse, RateLimit, sameOriginRead } from './security.js';
 
 export const MAX_BODY = 16 * 1024;
 const publicPaths = new Set([
@@ -12,15 +12,32 @@ const publicPaths = new Set([
   '/request-password-reset', '/reset-password', '/send-verification-email', '/verify-email',
   '/change-password', '/list-sessions', '/revoke-session', '/revoke-sessions', '/revoke-other-sessions',
   '/delete-user',
+  // Exactly the @better-auth/passkey 1.7.6 routes the UI needs; update-passkey stays unexposed.
+  '/passkey/generate-register-options', '/passkey/verify-registration', '/passkey/generate-authenticate-options',
+  '/passkey/verify-authentication', '/passkey/list-user-passkeys', '/passkey/delete-passkey',
 ]);
-const getPaths = new Set(['/get-session', '/list-sessions', '/verify-email', '/callback/google']);
+const passkeyReads = new Set(['/passkey/generate-register-options', '/passkey/generate-authenticate-options', '/passkey/list-user-passkeys']);
+const getPaths = new Set(['/get-session', '/list-sessions', '/verify-email', '/callback/google', ...passkeyReads]);
+// Passkey management only for a signed-in user whose email is verified (validSession).
+const verifiedSessionPaths = new Set(['/passkey/generate-register-options', '/passkey/verify-registration',
+  '/passkey/list-user-passkeys', '/passkey/delete-passkey']);
 // Per client (user or admission) and target email; the account ceiling is the absolute cross-client bound.
+// Passkey sign-in is keyed by credential id instead of email, with the same limits as password sign-in.
 const sensitiveLimits: Record<string, number> = {
   '/sign-in/email': 10, '/sign-up/email': 5, '/request-password-reset': 5, '/send-verification-email': 5,
+  '/passkey/generate-authenticate-options': 10, '/passkey/verify-authentication': 10,
+  '/passkey/generate-register-options': 10, '/passkey/verify-registration': 10,
 };
 const accountCeilings: Record<string, number> = {
   '/sign-in/email': 50, '/sign-up/email': 10, '/request-password-reset': 10, '/send-verification-email': 10,
+  '/passkey/verify-authentication': 50,
 };
+function accountKey(body: { email?: unknown; response?: unknown }) {
+  if (typeof body.email === 'string' && body.email.length <= 254) return `email:${body.email.trim().toLowerCase()}`;
+  const credential = (body.response as { id?: unknown } | undefined)?.id;
+  if (body.response && typeof body.response === 'object' && typeof credential === 'string' && credential.length <= 1024) return `passkey:${credential}`;
+  return undefined;
+}
 const ENUMERATION_FLOOR_MS = 8500, MAX_PADDED = 256;
 const sessionCookie = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]*)/;
 export type SessionIdentity = {
@@ -97,6 +114,7 @@ export function createService(deps: {
       || [...original.headers.keys()].some(k => /^(x-internal-|x-user-|x-auth-user|x-noti-user)/.test(k)))) return errorResponse(404, 'not_found');
     if (!internal && !publicPaths.has(authPath) && authPath !== '/callback/google' && authPath !== '/invitations/redeem' && !resetLink) return errorResponse(404, 'not_found');
     if (!internal && original.method !== (getPaths.has(authPath) || resetLink ? 'GET' : 'POST')) return errorResponse(400, 'invalid_request');
+    if (!internal && passkeyReads.has(authPath) && !sameOriginRead(original.headers, config.env.APP_ORIGIN)) return errorResponse(403, 'forbidden');
     if (!internal && original.method !== 'GET' && !csrf(original.headers, config.env.APP_ORIGIN, path === '/api/auth/invitations/redeem')
       && path !== '/api/auth/callback/google') return errorResponse(403, 'forbidden');
     if (!auth && !deps.readSession && path !== '/internal/capabilities') return errorResponse(503, 'core_unavailable', 'identity');
@@ -123,6 +141,7 @@ export function createService(deps: {
           return Response.json(IdentityCapabilities.parse({
             identity: capability(config.configured.identity), google: capability(config.configured.google),
             email: !ready ? unavailable : mail.failed ? { state: 'unavailable', reason: 'provider_failed' } : capability(mail.enabled),
+            password: capability(config.configured.password), passkey: capability(config.configured.passkey),
           }), { headers: { 'cache-control': 'no-store' } });
         }
         const token = digest(sessionCookie.exec(request.headers.get('cookie') ?? '')?.[1] ?? '');
@@ -144,10 +163,11 @@ export function createService(deps: {
         if (admitted.cookie) responseHeaders.append('set-cookie', admitted.cookie);
       }
       if (!limits.get(`${kind}:${flow}`)!.allow(identity)) return errorResponse(429, 'rate_limited');
+      if (verifiedSessionPaths.has(flow) && !validSession(current)) return errorResponse(401, 'unauthenticated');
       if (sensitiveLimits[flow] && request.method === 'POST') {
-        const body = await request.clone().json() as { email?: unknown };
-        if (typeof body.email === 'string' && body.email.length <= 254) {
-          const account = digest(body.email.trim().toLowerCase());
+        const key = accountKey(await request.clone().json() as { email?: unknown; response?: unknown });
+        if (key) {
+          const account = digest(key);
           // A third party spends only its own client/account pair before the higher absolute ceiling.
           if (!limits.get(`pair:${flow}`)!.allow(`${account}:${kind}:${identity}`)
             || !limits.get(`account:${flow}`)!.allow(account)) return errorResponse(429, 'rate_limited');
@@ -165,7 +185,7 @@ export function createService(deps: {
           email: current.user.email, email_verified: true });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       }
-      if ((authPath === '/sign-up/email' || authPath === '/delete-user' || enumerationPaths.has(authPath)) && (!mail.enabled || mail.failed)) return errorResponse(503, 'provider_unavailable', 'email');
+      if (((authPath === '/sign-up/email' && !inviteVerifiesEmail(config, mail)) || authPath === '/delete-user' || enumerationPaths.has(authPath)) && (!mail.enabled || mail.failed)) return errorResponse(503, 'provider_unavailable', 'email');
       if ((authPath === '/sign-in/social' || authPath === '/callback/google') && !config.configured.google) return errorResponse(503, 'provider_unavailable', 'google');
       const padded = enumerationPaths.has(authPath);
       if (padded) {

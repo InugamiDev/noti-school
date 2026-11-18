@@ -6,6 +6,7 @@ import type { Mailer } from './mail.js';
 import { InvitationError, Invitations, invitationHeader, PendingInvitation } from './invitations.js';
 import { csrf, digest, equalSecret } from './security.js';
 import { Accounts } from './accounts.js';
+import { identityPlugins } from './schema.js';
 
 type VerificationStore = {
   createVerificationValue(value: { identifier: string; value: string; expiresAt: Date }): Promise<unknown>;
@@ -14,6 +15,11 @@ type VerificationStore = {
 export const enumerationPaths = new Set(['/request-password-reset', '/send-verification-email']);
 export const recoveryMessage = { status: true, message: 'If this account is eligible, the request is processed. Email delivery is not confirmed.' };
 
+// Owner decision 2026-11-18: only while mail is not configured, an operator-delivered invitation that
+// matches the sign-up email is the proof of that email. Configured mail always uses normal verification.
+export function inviteVerifiesEmail(config: Config, mail: Mailer) {
+  return config.env.AUTH_INVITE_VERIFIES_EMAIL === 'true' && !mail.enabled;
+}
 function forbidden() { return new APIError('FORBIDDEN', { message: 'Invitation or identity invalid' }); }
 function unavailable() { return new APIError('SERVICE_UNAVAILABLE', { message: 'Email unavailable' }); }
 async function checkInvitation(invitations: Invitations, token: string | undefined, email: string) {
@@ -25,15 +31,17 @@ async function checkInvitation(invitations: Invitations, token: string | undefin
   }
 }
 
-// intent: keep identity in Better Auth and product grants in Rust, with request-local OAuth state.
-// status: implemented; next: isolated PostgreSQL and real provider rehearsal by coordinator.
+// intent: keep identity in Better Auth and product grants in Rust, with request-local OAuth state;
+// invitation-verified password sign-up without mail and passkeys for existing verified users.
+// status: implemented; next: isolated PostgreSQL and real provider rehearsal by coordinator | confidence: high
 export function authOptions(config: Config, database: BetterAuthOptions['database'], mail: Mailer,
   invitations: Invitations, verificationStore: () => Promise<VerificationStore>,
   delivery: AsyncLocalStorage<{ failed: boolean }>, accounts: Accounts): BetterAuthOptions {
   const origin = config.env.APP_ORIGIN;
+  const invitationVerifies = inviteVerifiesEmail(config, mail);
   return {
     appName: 'noti.school', baseURL: origin, basePath: '/api/auth', secret: config.env.BETTER_AUTH_SECRET!,
-    database, trustedOrigins: [origin],
+    database, trustedOrigins: [origin], plugins: identityPlugins(origin),
     logger: { disabled: true },
     telemetry: { enabled: false },
     onAPIError: { errorURL: `${origin}/#/auth/error` },
@@ -74,6 +82,8 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
     emailVerification: {
       sendOnSignUp: true, sendOnSignIn: false, autoSignInAfterVerification: false, expiresIn: 1800,
       sendVerificationEmail: async ({ user, url, token }) => {
+        // Better Auth calls this on every sign-up; an invitation-verified account has nothing to confirm.
+        if (invitationVerifies && user.emailVerified) return;
         try {
           await (await verificationStore()).createVerificationValue({
             identifier: `noti-email:${digest(token)}`, value: user.id, expiresAt: new Date(Date.now() + 1800_000),
@@ -101,7 +111,8 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
         if (['/sign-up/email', '/sign-in/social'].includes(path)) {
           if (ctx.body && ['role', 'institution_id', 'emailVerified', 'user_id', 'additionalData'].some(k => k in ctx.body)) throw forbidden();
         }
-        if (path === '/sign-up/email' || path === '/delete-user' || enumerationPaths.has(path)) {
+        if (path === '/passkey/verify-registration' && ctx.body && 'createSession' in ctx.body) throw forbidden();
+        if ((path === '/sign-up/email' && !invitationVerifies) || path === '/delete-user' || enumerationPaths.has(path)) {
           if (!mail.enabled || mail.failed) throw unavailable();
         }
         if (path === '/sign-up/email') {
@@ -154,6 +165,7 @@ export function authOptions(config: Config, database: BetterAuthOptions['databas
           token = pending.data.token;
         }
         await checkInvitation(invitations, token, user.email);
+        if (ctx?.path === '/sign-up/email' && invitationVerifies) return { data: { ...user, emailVerified: true } };
         return { data: user };
       } } },
     },

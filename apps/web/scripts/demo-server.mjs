@@ -6,9 +6,15 @@
 // confidence numbers are hand-written for the demo, not scores from Jev or any other model.
 // An approved passage's "on topic" part follows how well it matches the question, so a passage that
 // merely shares a stray word is scored Low on topic and is not cited.
+// Accounts, sessions, invitations and passkeys are synthetic as well. The demo behaves like a
+// deployment without mail in which an invitation handed over by the operator verifies the email:
+// password sign-up needs an invitation token that starts with "demo-invite", signs the new member
+// in at once and sends nothing. Passwords are kept as typed in memory, one signed-in user is shared
+// by every browser, and a passkey is checked only as far as the demo needs (challenge, origin and
+// signature). None of this is the real identity service or a security boundary.
 // status: done | next: keep in step with packages/contracts when shapes change | confidence: high
 import { createServer } from 'node:http';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -133,7 +139,10 @@ for (const doc of documents) {
 // One older archived version, so the reader can show a historical citation.
 versions.push({ id: uid(n++), source_id: sources[0].id, institution_id: institution.id, label: '2025–26 edition', sha256: sha('previous'), status: 'archived', indexing: 'ready', effective_from: '2025-08-15T00:00:00Z', effective_until: '2026-08-14T00:00:00Z', created_at: '2025-08-15T00:00:00Z' });
 
-const state = { user: 'demo-student', admin: true, personal: false, conversations: [], answers: new Map(), questions: new Map(), feedback: [], jobs: new Map(), spent: 1_240_000, webDocuments: [] };
+// The presenter starts signed in as the demo student. Accounts made through sign-up live in
+// `accounts` (by email) with only the memberships their synthetic invitation granted.
+const demoUser = 'demo-student';
+const state = { user: demoUser, admin: true, personal: null, conversations: [], answers: new Map(), questions: new Map(), feedback: [], jobs: new Map(), spent: 1_240_000, webDocuments: [], accounts: new Map(), passkeys: [], challenge: null, owners: new Map() };
 // Each institution keeps its own cached copy of the synthetic pages, as the real cache is tenant scoped.
 function cacheWebPages(institutionId) {
   webPages.forEach((web) => {
@@ -143,14 +152,18 @@ function cacheWebPages(institutionId) {
 }
 cacheWebPages(institution.id);
 const documentOf = ({ version_id, chunk_id, web, ...document }) => document;
-const institutions = () => [institution, second, ...(state.user && state.personal ? [personal] : [])];
+const ownsSpace = () => !!state.user && state.personal === state.user;
+const institutions = () => [institution, second, ...(ownsSpace() ? [personal] : [])];
+const account = (id = state.user) => [...state.accounts.values()].find((item) => item.id === id);
 // The demo user manages the first school and their own space, and is a student of the second
-// school, which has no documents yet: questions there are answered with an abstention.
+// school, which has no documents yet: questions there are answered with an abstention. An account
+// created through sign-up has only the memberships its invitation granted.
 const roleOf = (id) =>
-  id === institution.id ? (state.admin ? 'admin' : 'student')
-    : id === second.id ? 'student'
-      : state.personal && id === personal.id ? 'admin'
-        : undefined;
+  id === personal.id ? (ownsSpace() ? 'admin' : undefined)
+    : state.user !== demoUser ? account()?.grants.get(id)
+      : id === institution.id ? (state.admin ? 'admin' : 'student')
+        : id === second.id ? 'student'
+          : undefined;
 const memberOf = (id) => roleOf(id) !== undefined;
 const adminOf = (id) => roleOf(id) === 'admin';
 
@@ -221,9 +234,12 @@ const explain = {
   medium: { en: 'This is the closest match in the demo collection; read the passage to confirm it fits your question.', vi: 'Đây là kết quả gần nhất trong bộ dữ liệu demo; hãy đọc đoạn trích để kiểm tra.' },
   low: { en: 'This rests on a web page with low confidence in the demo data. Treat it as a lead, not as a rule.', vi: 'Câu trả lời dựa trên một trang web có độ tin cậy thấp trong dữ liệu demo. Hãy xem đây là gợi ý, không phải quy định.' },
 };
+// A conversation belongs to the account that asked. The owner is kept beside the contract shapes,
+// so another demo account never sees it in History and nothing extra is sent to the client.
+const asked = (conversationId) => state.owners.get(conversationId) === state.user;
 function answer(ask) {
   const hits = retrieve(ask.question, ask.institution_id, ask.discover === true);
-  const conversation_id = ask.conversation_id && state.answers.has(ask.conversation_id) ? ask.conversation_id : randomUUID();
+  const conversation_id = ask.conversation_id && state.answers.has(ask.conversation_id) && asked(ask.conversation_id) ? ask.conversation_id : randomUUID();
   const base = { id: randomUUID(), conversation_id, institution_id: ask.institution_id, language: ask.language, created_at: now() };
   let result;
   if (!hits.length)
@@ -238,6 +254,7 @@ function answer(ask) {
   }
   if (!state.answers.has(conversation_id)) {
     state.answers.set(conversation_id, []);
+    state.owners.set(conversation_id, state.user);
     state.conversations.unshift({ id: conversation_id, institution_id: ask.institution_id, created_at: base.created_at });
   }
   state.answers.get(conversation_id).push(result);
@@ -254,28 +271,143 @@ const cap = (state) => ({ state, reason: state === 'available' ? 'ready' : 'not_
 const error = (code, message, status) => ({ status, body: { error: { code, message, request_id: randomUUID(), retryable: false } } });
 const page = (items) => ({ items, next_cursor: null });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const me = () => ({ identity: { user_id: state.user, session_id: 'demo-session', email_verified: true, expires_at: '2027-12-31T00:00:00Z' }, memberships: institutions().map((item) => ({ institution_id: item.id, role: roleOf(item.id) })) });
+const me = () => ({ identity: { user_id: state.user, session_id: 'demo-session', email_verified: true, expires_at: '2027-12-31T00:00:00Z' }, memberships: institutions().map((item) => ({ institution_id: item.id, role: roleOf(item.id) })).filter((membership) => membership.role) });
 
-async function api(method, path, body) {
+// Synthetic identity. Errors from the identity library keep its own { code, message } shape; the
+// service's own refusals use the contract's ApiError.
+const identityError = (status, code, message) => ({ status, body: { code, message } });
+const mailMissing = () => ({ status: 503, body: { error: { code: 'provider_unavailable', message: 'Email is not set up in the demo.', request_id: randomUUID(), retryable: true, capability: 'email' } } });
+// Any token that starts with "demo-invite" is a valid synthetic invitation, for whichever email uses it.
+const invited = (token) => typeof token === 'string' && /^demo-invite/.test(token);
+const emailOf = (id) => account(id)?.email ?? 'demo.student@example.edu';
+const sessionFor = (id) => ({ token: 'synthetic-demo-session', user: { id, email: emailOf(id), name: emailOf(id).split('@')[0], emailVerified: true } });
+const base64url = (bytes) => Buffer.from(bytes).toString('base64url');
+const passkeysOf = (id) => state.passkeys.filter((passkey) => passkey.userId === id);
+const descriptors = (id) => passkeysOf(id).map((passkey) => ({ id: passkey.credentialID, type: 'public-key' }));
+// One ceremony at a time for the whole demo: the newest challenge replaces the one before it.
+function challenge(type) {
+  state.challenge = { type, value: base64url(randomBytes(32)), user: state.user };
+  return state.challenge.value;
+}
+// The browser's signed client data must answer the challenge this server issued, from this origin.
+function answered(type, credential, origin) {
+  const pending = state.challenge;
+  state.challenge = null;
+  try {
+    const data = JSON.parse(Buffer.from(credential.response.clientDataJSON, 'base64url').toString('utf8'));
+    return !!pending && pending.type === type && data.challenge === pending.value && data.origin === origin
+      && data.type === (type === 'registration' ? 'webauthn.create' : 'webauthn.get') ? pending : null;
+  } catch { return null; }
+}
+function signatureValid(passkey, response) {
+  try {
+    const clientHash = createHash('sha256').update(Buffer.from(response.clientDataJSON, 'base64url')).digest();
+    const signed = Buffer.concat([Buffer.from(response.authenticatorData, 'base64url'), clientHash]);
+    const key = createPublicKey({ key: Buffer.from(passkey.publicKey, 'base64url'), format: 'der', type: 'spki' });
+    return verify(key.asymmetricKeyType === 'ed25519' ? null : 'sha256', signed, key, Buffer.from(response.signature, 'base64url'));
+  } catch { return false; }
+}
+// The plugin's routes and verbs (@better-auth/passkey 1.7.6), with in-memory behaviour.
+function passkeyApi(method, action, body, headers) {
+  const host = headers.host ?? 'localhost';
+  const rpId = host.replace(/:\d+$/, ''), origin = `http://${host}`;
+  const reads = ['generate-register-options', 'generate-authenticate-options', 'list-user-passkeys'];
+  if (method !== (reads.includes(action) ? 'GET' : 'POST')) return error('invalid_request', 'Wrong method.', 400);
+  if (action === 'generate-authenticate-options') {
+    // Signed out, no credential is named: the authenticator offers the passkeys it holds for this site.
+    const allowed = state.user ? descriptors(state.user) : [];
+    return { body: { challenge: challenge('authentication'), rpId, timeout: 60000, userVerification: 'preferred', ...(allowed.length ? { allowCredentials: allowed } : {}) } };
+  }
+  if (action === 'verify-authentication') {
+    const credential = body.response;
+    const passkey = state.passkeys.find((item) => item.credentialID === credential?.id);
+    if (!passkey) return identityError(401, 'PASSKEY_NOT_FOUND', 'Passkey not found');
+    if (!answered('authentication', credential, origin) || !signatureValid(passkey, credential.response)) return identityError(401, 'AUTHENTICATION_FAILED', 'Authentication failed');
+    // A passkey signs in the account it was added to. It never creates one and grants no membership.
+    state.user = passkey.userId;
+    const session = sessionFor(passkey.userId);
+    return { body: { session: { id: 'demo-session', userId: passkey.userId, token: session.token }, user: session.user } };
+  }
+  if (!state.user) return identityError(401, 'UNAUTHORIZED', 'Passkey registration requires an authenticated session');
+  if (action === 'list-user-passkeys') return { body: passkeysOf(state.user) };
+  if (action === 'generate-register-options') {
+    const name = emailOf(state.user);
+    return { body: { challenge: challenge('registration'), rp: { name: 'noti.school', id: rpId }, user: { id: base64url(randomBytes(16)), name, displayName: name }, pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }], timeout: 60000, attestation: 'none', excludeCredentials: descriptors(state.user), authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred', requireResidentKey: false }, extensions: { credProps: true } } };
+  }
+  if (action === 'verify-registration') {
+    const credential = body.response;
+    const pending = answered('registration', credential, origin);
+    const publicKey = credential?.response?.publicKey;
+    const failed = () => identityError(400, 'FAILED_TO_VERIFY_REGISTRATION', 'Failed to verify registration');
+    if (!pending || pending.user !== state.user || typeof credential.id !== 'string' || typeof publicKey !== 'string') return failed();
+    if (state.passkeys.some((item) => item.credentialID === credential.id)) return failed();
+    try { createPublicKey({ key: Buffer.from(publicKey, 'base64url'), format: 'der', type: 'spki' }); } catch { return failed(); }
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 64) : '';
+    const passkey = { id: randomUUID(), ...(name ? { name } : {}), userId: state.user, credentialID: credential.id, publicKey, counter: 0, deviceType: 'singleDevice', backedUp: false, transports: (credential.response.transports ?? []).join(','), createdAt: new Date().toISOString(), aaguid: '00000000-0000-0000-0000-000000000000' };
+    state.passkeys.push(passkey);
+    return { body: passkey };
+  }
+  if (action === 'delete-passkey') {
+    const index = state.passkeys.findIndex((item) => item.id === body.id && item.userId === state.user);
+    if (index < 0) return identityError(404, 'PASSKEY_NOT_FOUND', 'Passkey not found');
+    state.passkeys.splice(index, 1);
+    return { body: { status: true } };
+  }
+  return error('not_found', 'Not available in the demo.', 404);
+}
+async function identityApi(method, action, body, headers) {
+  if (action.startsWith('passkey/')) return passkeyApi(method, action.slice('passkey/'.length), body, headers);
+  if (action === 'sign-out') { state.user = null; return { body: { success: true } }; }
+  if (action === 'sign-up/email') {
+    await sleep(300);
+    const email = String(body.email ?? '').trim().toLowerCase(), password = String(body.password ?? '');
+    // Invite-only, as in the real service: no invitation, no account.
+    if (!invited(headers['x-noti-invitation'])) return error('forbidden', 'Invitation or identity invalid.', 403);
+    if (!/^[^@\s]+@[^@\s]+$/.test(email) || password.length < 12 || password.length > 128) return identityError(400, 'VALIDATION_ERROR', 'Invalid email or password length');
+    if (state.accounts.has(email)) return identityError(422, 'USER_ALREADY_EXISTS', 'User already exists');
+    const created = { id: `demo-account-${state.accounts.size + 1}`, email, password, grants: new Map() };
+    state.accounts.set(email, created);
+    // The synthetic invitation counts as proof of the email, so the new member is signed in at once.
+    state.user = created.id;
+    return { body: sessionFor(created.id) };
+  }
+  if (action === 'sign-in/email') {
+    await sleep(500);
+    const known = state.accounts.get(String(body.email ?? '').trim().toLowerCase());
+    // An account created in this run needs its own password; any other email signs in as the demo student.
+    if (known && known.password !== String(body.password ?? '')) return identityError(401, 'INVALID_EMAIL_OR_PASSWORD', 'Invalid email or password');
+    state.user = known ? known.id : demoUser;
+    return { body: sessionFor(state.user) };
+  }
+  if (action === 'invitations/redeem') {
+    if (!state.user) return error('unauthenticated', 'Sign in first.', 401);
+    if (state.user !== demoUser) {
+      if (!invited(body.token)) return error('forbidden', 'Invitation or identity invalid.', 403);
+      account().grants.set(institution.id, 'student');
+    }
+    return { body: { institution_id: institution.id, role: 'student' } };
+  }
+  // Deletion, password reset and verification all need mail, which the demo does not have.
+  if (['delete-user', 'request-password-reset', 'send-verification-email'].includes(action)) return mailMissing();
+  return { body: { status: true } };
+}
+
+async function api(method, path, body, headers = {}) {
   const route = (pattern) => path.match(new RegExp(`^/api/v1/institutions/[^/]+${pattern}$`));
   // The institution named in the path scopes every read and write below.
   const scope = path.match(/^\/api\/v1\/institutions\/([^/]+)/)?.[1];
   const own = (items) => items.filter((item) => item.institution_id === scope);
-  if (path === '/api/v1/capabilities') return { body: { mode: 'mock', answers: cap('available'), indexing: cap('available'), discovery: cap('available'), google: cap('disabled'), email: cap('available'), identity: cap('available') } };
+  // No mail and no Google in the demo: password accounts (by invitation) and passkeys are what it shows.
+  if (path === '/api/v1/capabilities') return { body: { mode: 'mock', answers: cap('available'), indexing: cap('available'), discovery: cap('available'), google: cap('disabled'), email: cap('disabled'), password: cap('available'), passkey: cap('available'), identity: cap('available') } };
   if (path === '/api/v1/institutions') return { body: page(institutions()) };
-  if (path.startsWith('/api/auth/')) {
-    const action = path.slice('/api/auth/'.length);
-    if (action === 'sign-out') { state.user = null; return { body: { success: true } }; }
-    if (action === 'sign-in/email' || action === 'sign-up/email') { await sleep(500); state.user = 'demo-student'; return { body: { user: { id: state.user } } }; }
-    if (action === 'invitations/redeem') return state.user ? { body: { institution_id: institution.id, role: 'student' } } : error('unauthenticated', 'Sign in first.', 401);
-    if (action === 'delete-user') return { body: { success: true, message: 'Verification email sent' } };
-    return { body: { status: true } };
-  }
+  if (path.startsWith('/api/auth/')) return identityApi(method, path.slice('/api/auth/'.length), body, headers);
   if (path === '/api/v1/me') return state.user ? { body: me() } : error('unauthenticated', 'Sign in to continue.', 401);
   if (!state.user) return error('unauthenticated', 'Sign in to continue.', 401);
   if (path === '/api/v1/me/personal-space' && method === 'POST') {
-    // One private space per user: the first call creates it, later calls return the same one.
-    if (!state.personal) { state.personal = true; cacheWebPages(personal.id); }
+    // One private space in the demo: the first call creates it, later calls return the same one.
+    // It follows whoever opened it last, so another demo account never sees it listed.
+    if (!state.personal) cacheWebPages(personal.id);
+    state.personal = state.user;
     return { status: 201, body: personal };
   }
   if (path === '/api/v1/answers' && method === 'POST') {
@@ -351,8 +483,9 @@ async function api(method, path, body) {
   if ((m = route('/chunks/([^/]+)'))) return chunks.find((c) => c.id === m[1]) ? { body: strip(chunks.find((c) => c.id === m[1])) } : error('not_found', 'Passage not found.', 404);
   if ((m = route('/citations/([^/]+)'))) return evidenceById.get(m[1])?.institution_id === scope ? { body: evidenceById.get(m[1]) } : error('not_found', 'Citation not found.', 404);
   if ((m = route('/jobs/([^/]+)'))) return { body: state.jobs.get(m[1]) ?? { id: m[1], institution_id: scope, version_id: versions[0].id, state: 'succeeded', error_code: null } };
-  if ((m = route('/conversations'))) return { body: page(own(state.conversations)) };
-  if ((m = route('/conversations/([^/]+)/answers'))) return { body: page(own(state.answers.get(m[1]) ?? [])) };
+  if ((m = route('/conversations'))) return { body: page(own(state.conversations).filter((c) => asked(c.id))) };
+  if ((m = route('/conversations/([^/]+)/answers'))) return { body: page(asked(m[1]) ? own(state.answers.get(m[1]) ?? []) : []) };
+  if ((m = route('/conversations/([^/]+)')) && !asked(m[1])) return error('not_found', 'Conversation not found.', 404);
   if ((m = route('/conversations/([^/]+)')) && method === 'DELETE') {
     state.conversations = state.conversations.filter((c) => c.id !== m[1]);
     state.answers.delete(m[1]);
@@ -402,7 +535,7 @@ createServer(async (req, res) => {
       for await (const part of req) raw += part;
       try { body = raw && req.headers['content-type']?.includes('json') ? JSON.parse(raw) : {}; } catch { body = {}; }
     }
-    const result = await api(req.method, url.pathname, body ?? {});
+    const result = await api(req.method, url.pathname, body ?? {}, req.headers);
     if (result.raw !== undefined) { res.writeHead(200, { 'content-type': result.type, ...(result.headers ?? {}) }); return res.end(result.raw); }
     if (result.status === 204) { res.writeHead(204, { 'cache-control': 'no-store' }); return res.end(); }
     res.writeHead(result.status ?? 200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -413,4 +546,5 @@ createServer(async (req, res) => {
   try { if (!(await stat(file)).isFile()) throw new Error(); } catch { file = join(dist, 'index.html'); }
   res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
   res.end(await readFile(file));
-}).listen(port, '127.0.0.1', () => console.log(`noti.school demo: http://127.0.0.1:${port}  (mock data, signed in as a demo admin)`));
+}).listen(port, '127.0.0.1', () => console.log(`noti.school demo: http://127.0.0.1:${port}  (mock data, signed in as a demo admin)
+Synthetic sign-up link: http://localhost:${port}/#/auth?invitation=demo-invite  (passkeys need the localhost address)`));

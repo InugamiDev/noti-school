@@ -15,7 +15,7 @@ async function fixture(page: Page, disable = true) {
     const path = new URL(route.request().url()).pathname;
     const capability = { state: 'disabled', reason: 'not_configured' };
     if (path.endsWith('/capabilities')) return route.fulfill({ json: { mode: 'disabled', answers: { state: 'available', reason: 'ready' },
-      indexing: capability, discovery: capability, google: capability, email: capability, identity: capability } });
+      indexing: capability, discovery: capability, google: capability, email: capability, password: capability, passkey: capability, identity: capability } });
     if (path.endsWith('/institutions')) return route.fulfill({ json: { items: [{ id, slug: 'demo',
       name: 'Synthetic university', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null } });
     return route.fulfill({ status: 503, json: { error: { code: 'provider_unavailable',

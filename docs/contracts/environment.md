@@ -43,8 +43,21 @@ import (or pin `JEV_MODEL=jev-1.13.0` while its prices are current); otherwise a
 Auth restricted file (`shared/auth.env`, 0600): NODE_ENV, APP_ORIGIN, AUTH_DATABASE_URL,
 BETTER_AUTH_SECRET, INTERNAL_AUTH_SECRET, AUTH_BIND_HOST, AUTH_PORT, GOOGLE_CLIENT_ID,
 GOOGLE_CLIENT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TLS_MODE,
-REGISTRATION_MODE. SMTP is STARTTLS or implicit TLS, never disable certificate validation. Missing SMTP
-disables signup/verification/recovery delivery; existing verified logins may work. Google requires both
+REGISTRATION_MODE, AUTH_INVITE_VERIFIES_EMAIL. SMTP is STARTTLS or implicit TLS, never disable certificate
+validation. Missing SMTP disables signup/verification/recovery delivery; existing verified logins may work.
+
+`AUTH_INVITE_VERIFIES_EMAIL` (`true`|`false`, default `false`; owner decision 2026-11-18) only matters while
+SMTP is NOT configured. When `true`, an invite-only password sign-up whose `X-Noti-Invitation` token passes
+Rust's `/internal/invitations/check` for that exact email creates the account with emailVerified set, sends no
+mail, and the user then signs in with the password (sign-up itself issues no session). What it trusts: that
+the operator handed the invitation file directly to the person who owns that email (see operator.md), so
+possession of the token stands in for a verification link. It does not skip the invitation check, does not
+redeem the invitation (redemption stays an explicit signed-in step) and grants no membership or role. With
+SMTP configured the flag is ignored and the normal verification email applies; with the flag off and no SMTP,
+sign-up stays 503 `email` unavailable. Password reset and account deletion still require working mail.
+`configured.password` is identity plus (SMTP or this flag). Passkeys (`configured.passkey`) need only identity:
+the WebAuthn relying party is derived from `APP_ORIGIN` (rpID `localhost` in development, `noti.school` in
+production, rpName `noti.school`, expected origin exactly `APP_ORIGIN`); no extra variable exists. Google requires both
 credentials. No app secrets in VITE_* or PM2's inherited parent environment: coordinator starts PM2 commands
 from a clean shell and audits actual per-process env isolation. Node's env-file does not override inherited
 values, so stale parent vars must be removed before start/reload.

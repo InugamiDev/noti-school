@@ -21,10 +21,18 @@ Approved provisioning sequence:
    `NOTI_MIGRATION_ACK=dedicated-noti-school`; run `pnpm db:migrate`.
 3. Set separate `NOTI_AUTH_MIGRATION_URL` for `noti_school_auth_migrator`; run `pnpm db:auth:migrate`.
    This invokes the **installed Better Auth 1.7.6** `getMigrations` API with `pg.Pool` and search_path=auth.
-   Better Auth generates/applies its own core user/session/account/verification tables; no invented DDL.
-   Frozen schema configuration: built-in PostgreSQL adapter, email/password, no plugins, no additional
-   fields or custom table names. Auth worker must preserve this schema shape. Changes require shared-owner
-   migration review and a disposable DB rehearsal. No automatic migrations on service boot.
+   Better Auth generates/applies its own core user/session/account/verification tables plus the passkey
+   plugin's `passkey` table; no invented DDL.
+   Frozen schema configuration (owner decision 2026-11-18): built-in PostgreSQL adapter, email/password and
+   the official `@better-auth/passkey` 1.7.6 plugin, no other plugins, no additional fields or custom table
+   names. The service and `scripts/auth-migrate.ts` both take these options from `apps/auth/src/schema.ts`
+   (`schemaOptions`), and an auth test asserts the runtime schema equals it. Auth worker must preserve this
+   schema shape. Changes require shared-owner migration review and a disposable DB rehearsal. No automatic
+   migrations on service boot. The passkey table (rehearsed on PostgreSQL 16.15, 2026-11-18) holds `id`,
+   `name`, `publicKey`, `userId` (FK to `user`, ON DELETE CASCADE, indexed), `credentialID` (indexed, not
+   unique by the library's choice), `counter`, `deviceType`, `backedUp`, `transports`, `createdAt`, `aaguid`.
+   The migration is additive on an existing core schema and idempotent on re-run; the runtime role receives
+   the same SELECT/INSERT/UPDATE/DELETE grant as on the core tables. Deleting a user removes their passkeys.
 4. Runtime receives only its own URL. Migration URLs/secrets never reach application processes.
 
 The guard validates URL host, exact database prefix and role before connecting, then checks actual

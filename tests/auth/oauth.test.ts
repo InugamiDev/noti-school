@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getSchema } from 'better-auth/db';
 import { fixture, cookies, origin, signup } from './helpers.js';
+import { schemaOptions } from '../../apps/auth/src/schema.js';
 
 async function oauthFixture(email = signup.email, verified = true) {
   const f = await fixture({ google: true });
@@ -64,11 +65,12 @@ test('OAuth caller cannot inject server state, role, id-token shortcut or automa
   assert.equal(separate.db.account![0]!.providerId, 'credential'); assert.equal(separate.db.session!.length, 0);
 });
 
-test('configured auth schema matches foundation core schema, secure cookies and cache settings', async () => {
+test('configured auth schema matches the shared migration schema (core + passkey), secure cookies and cache settings', async () => {
   const f = await fixture();
   const actual = getSchema(f.auth.options);
-  const foundation = getSchema({ emailAndPassword: { enabled: true }, session: { cookieCache: { enabled: false } } });
-  assert.deepEqual(Object.keys(actual).sort(), ['account', 'session', 'user', 'verification']);
+  const foundation = getSchema(schemaOptions('https://noti.school'));
+  assert.deepEqual(Object.keys(actual).sort(), ['account', 'passkey', 'session', 'user', 'verification']);
+  assert.deepEqual(Object.keys(foundation).sort(), Object.keys(actual).sort());
   for (const table of Object.keys(foundation)) assert.deepEqual(Object.keys(actual[table]!.fields).sort(), Object.keys(foundation[table]!.fields).sort());
   assert.equal(f.auth.options.session?.cookieCache?.enabled, false);
   assert.equal(f.auth.options.account?.accountLinking?.enabled, false);

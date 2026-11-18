@@ -325,9 +325,9 @@ async fn ready(State(s): State<AppState>) -> Response {
 }
 async fn capabilities(State(s): State<AppState>) -> Json<Value> {
     let fail = json!({"state":"unavailable","reason":"core_failed"});
-    let identity = auth::capabilities(&s)
-        .await
-        .unwrap_or(json!({"identity":fail,"google":fail,"email":fail}));
+    let identity = auth::capabilities(&s).await.unwrap_or(
+        json!({"identity":fail,"google":fail,"email":fail,"password":fail,"passkey":fail}),
+    );
     let mut ai = json!({"state":"disabled","reason":"paid_calls_disabled"});
     if s.config.mode == "live" {
         ai = json!({"state":"unavailable","reason":"not_configured"});
@@ -352,7 +352,8 @@ async fn capabilities(State(s): State<AppState>) -> Json<Value> {
     let discovery = discovery_capability(&s, &ai).await;
     Json(
         json!({"mode":s.config.mode,"answers":ai,"indexing":ai,"discovery":discovery,
-        "google":identity["google"],"email":identity["email"],"identity":identity["identity"]}),
+        "google":identity["google"],"email":identity["email"],"password":identity["password"],
+        "passkey":identity["passkey"],"identity":identity["identity"]}),
     )
 }
 // Discovery needs live mode, TinyFish and Jev keys, Jev prices and budget (via answers) and both the

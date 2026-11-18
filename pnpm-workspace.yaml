@@ -4,6 +4,7 @@ packages:
   - apps/web
 catalog:
   better-auth: 1.7.6
+  '@better-auth/passkey': 1.7.6
   auth: 1.7.6
   pg: 8.23.0
   solid-js: 1.9.15

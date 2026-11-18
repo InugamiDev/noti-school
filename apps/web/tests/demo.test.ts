@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { Schemas, validateAnswer } from '@noti/contracts';
+import { ApiError, Schemas, validateAnswer } from '@noti/contracts';
 
 // intent: the local demo must speak the frozen contract, label its web evidence as web, and keep
 // every synthetic page marked synthetic. Loopback only: the demo server makes no outbound calls.
@@ -185,4 +185,80 @@ test('a page saved in the personal space joins answers only after its owner choo
   const answer = await ask(space.id, question, true);
   assert.deepEqual(answer.evidence.map((e) => [e.origin, e.source_id, e.domain]), [['approved', saved.source_id, null]]);
   assert.match(answer.evidence[0]!.quote, /^Synthetic demo text/);
+});
+
+// Runs last: it signs the shared demo user out and back in.
+test('demo identity is invite-only, sends no mail and keeps passkeys behind a session', async () => {
+  const capabilities = Schemas.Capabilities.parse((await call('GET', '/api/v1/capabilities')).json);
+  assert.deepEqual(
+    [capabilities.identity.state, capabilities.password.state, capabilities.passkey.state, capabilities.email.state, capabilities.google.state],
+    ['available', 'available', 'available', 'disabled', 'disabled'],
+  );
+  const signUp = (invitation: string | undefined, email: string, password: string) => fetch(`${base}/api/auth/sign-up/email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(invitation ? { 'x-noti-invitation': invitation } : {}) },
+    body: JSON.stringify({ email, password, name: 'Synthetic' }),
+  });
+  const first = (await school()).id;
+  const seededConversation = Schemas.ConversationPage.parse((await call('GET', `/api/v1/institutions/${first}/conversations`)).json).items.at(-1)!.id;
+  assert.equal((await call('POST', '/api/auth/sign-out', {})).status, 200);
+  assert.equal((await call('GET', '/api/v1/me')).status, 401);
+  // Signed out, a passkey can be asked for but nothing can be registered or listed.
+  const options = await call('GET', '/api/auth/passkey/generate-authenticate-options');
+  assert.equal(options.status, 200);
+  assert.ok(typeof options.json.challenge === 'string' && !('allowCredentials' in options.json));
+  assert.equal((await call('GET', '/api/auth/passkey/generate-register-options')).status, 401);
+  assert.equal((await call('GET', '/api/auth/passkey/list-user-passkeys')).status, 401);
+  assert.equal((await call('POST', '/api/auth/passkey/verify-registration', { response: {} })).status, 401);
+  // An assertion for a credential nobody registered creates nothing and signs nobody in.
+  assert.equal((await call('POST', '/api/auth/passkey/verify-authentication', { response: { id: 'unknown' } })).status, 401);
+  assert.equal((await call('GET', '/api/v1/me')).status, 401);
+
+  // No invitation, no account. A wrong token is refused the same way.
+  for (const invitation of [undefined, 'not-an-invitation']) {
+    const refused = await signUp(invitation, 'synthetic.member@example.edu', 'synthetic-passphrase-1');
+    assert.equal(refused.status, 403);
+    assert.equal(ApiError.parse(await refused.json()).error.code, 'forbidden');
+  }
+  assert.equal((await signUp('demo-invite', 'synthetic.member@example.edu', 'too-short')).status, 400);
+  assert.equal((await call('GET', '/api/v1/me')).status, 401);
+  const created = await signUp('demo-invite', 'synthetic.member@example.edu', 'synthetic-passphrase-1');
+  assert.equal(created.status, 200);
+  assert.equal(typeof (await created.json()).token, 'string');
+  // Signed in at once, with no membership until the invitation is redeemed.
+  const fresh = Schemas.Me.parse((await call('GET', '/api/v1/me')).json);
+  assert.equal(fresh.identity.email_verified, true);
+  assert.deepEqual(fresh.memberships, []);
+  assert.equal((await call('POST', '/api/auth/invitations/redeem', { token: 'not-an-invitation' })).status, 403);
+  Schemas.Membership.parse((await call('POST', '/api/auth/invitations/redeem', { token: 'demo-invite' })).json);
+  assert.deepEqual(Schemas.Me.parse((await call('GET', '/api/v1/me')).json).memberships.map((m) => m.role), ['student']);
+  // The new member joined the demo school but starts with an empty history: the seeded conversation
+  // belongs to the demo student and cannot be read or continued from another account.
+  const joined = Schemas.Me.parse((await call('GET', '/api/v1/me')).json).memberships[0]!.institution_id;
+  assert.deepEqual(Schemas.ConversationPage.parse((await call('GET', `/api/v1/institutions/${joined}/conversations`)).json).items, []);
+  const followUp = validateAnswer((await call('POST', '/api/v1/answers', { institution_id: joined, question: 'How do I get an official transcript?', language: 'en', discover: false, conversation_id: seededConversation })).json);
+  assert.notEqual(followUp.conversation_id, seededConversation);
+  assert.deepEqual(Schemas.AnswerPage.parse((await call('GET', `/api/v1/institutions/${joined}/conversations/${seededConversation}/answers`)).json).items, []);
+  assert.equal(Schemas.ConversationPage.parse((await call('GET', `/api/v1/institutions/${joined}/conversations`)).json).items.length, 1);
+  assert.deepEqual((await call('GET', '/api/auth/passkey/list-user-passkeys')).json, []);
+  // A registration answer that does not match the issued challenge stores nothing.
+  assert.equal((await call('GET', '/api/auth/passkey/generate-register-options')).status, 200);
+  assert.equal((await call('POST', '/api/auth/passkey/verify-registration', { response: { id: 'forged', response: { clientDataJSON: 'e30', publicKey: 'AAAA' } } })).status, 400);
+  assert.deepEqual((await call('GET', '/api/auth/passkey/list-user-passkeys')).json, []);
+  assert.equal((await signUp('demo-invite', 'synthetic.member@example.edu', 'synthetic-passphrase-1')).status, 422);
+
+  // Everything that needs mail says so instead of pretending.
+  for (const action of ['delete-user', 'request-password-reset', 'send-verification-email']) {
+    const response = await call('POST', `/api/auth/${action}`, {});
+    assert.equal(response.status, 503, action);
+    assert.equal(ApiError.parse(response.json).error.capability, 'email', action);
+  }
+  // The account keeps its own password; the demo student is back for whoever runs next.
+  assert.equal((await call('POST', '/api/auth/sign-out', {})).status, 200);
+  assert.equal((await call('POST', '/api/auth/sign-in/email', { email: 'synthetic.member@example.edu', password: 'not-the-right-password' })).status, 401);
+  assert.equal((await call('GET', '/api/v1/me')).status, 401);
+  assert.equal((await call('POST', '/api/auth/sign-in/email', { email: 'synthetic.member@example.edu', password: 'synthetic-passphrase-1' })).status, 200);
+  assert.equal(Schemas.Me.parse((await call('GET', '/api/v1/me')).json).identity.user_id, 'demo-account-1');
+  assert.equal((await call('POST', '/api/auth/sign-in/email', { email: 'presenter@example.edu', password: 'anything-at-all' })).status, 200);
+  assert.equal(Schemas.Me.parse((await call('GET', '/api/v1/me')).json).identity.user_id, 'demo-student');
 });

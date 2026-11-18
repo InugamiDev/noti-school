@@ -5,6 +5,7 @@ import { Schemas } from '../../packages/contracts/src/index.ts';
 import { confidenceLevel, percent } from '../../apps/web/src/ui/confidence-level.ts';
 import { allStrings, fill, t } from '../../apps/web/src/ui/i18n.ts';
 import { asciiHost, parseDomains } from '../../apps/web/src/ui/domains.ts';
+import { passkeySupported } from '../../apps/web/src/passkey.ts';
 test('public endpoint registry excludes internals and encodes IDs',()=>{
   assert.throws(()=>endpoint('/internal/session'));
   assert.throws(()=>endpoint('/internal/accounts/delete'));
@@ -77,4 +78,31 @@ test('the web notice names the school and never calls web pages approved',()=>{
   assert.equal(fill(t('en','webNotice'),{school:'Synthetic School'}),'Includes pages found on the web. They have not been reviewed by Synthetic School staff.');
   assert.match(fill(t('vi','webNotice'),{school:'Synthetic School'}),/Synthetic School/);
   assert.equal(fill('{missing} stays empty',{}),' stays empty');
+});
+test('an invitation link is consumed into memory and scrubbed from the address',()=>{
+  for (const url of ['https://noti.school/?invitation=synthetic#/auth','https://noti.school/#/auth?invitation=synthetic']) {
+    const result=takeAuthCallback(url);assert.equal(result.invitation,'synthetic');assert.equal(result.clean,'/#/auth');assert.equal(result.token,'');assert.equal(result.deletion,'');
+  }
+  assert.equal(takeAuthCallback('https://noti.school/#/auth?invitation='+'a'.repeat(257)).invitation,'');
+  assert.equal(takeAuthCallback('https://noti.school/#/auth').invitation,'');
+});
+test('account copy is bilingual and says plainly what needs email',()=>{
+  assert.equal(t('en','authResetNeedsEmail'),'Password reset needs email, which is not set up yet.');
+  assert.equal(t('vi','authResetNeedsEmail'),'Đặt lại mật khẩu cần email, hiện chưa được thiết lập.');
+  assert.equal(t('en','authDeletionNeedsEmail'),'Account deletion needs email, which is not set up yet.');
+  assert.equal(t('en','authPasskeySignIn'),'Sign in with a passkey');
+  const account=allStrings().filter(({key})=>key.startsWith('auth'));
+  assert.ok(account.length>=100);
+  // Only names shared by both languages may read the same.
+  const shared=new Set(['authEmail','authPasskeyUnnamed']);
+  for(const {key,en,vi} of account){
+    assert.ok(en.trim()&&vi.trim(),key);
+    assert.doesNotMatch(en+vi,/[–—]/,key);
+    if(!shared.has(key))assert.notEqual(en,vi,key);
+  }
+  // A cancelled passkey prompt is never worded as a failure.
+  for(const key of ['authPasskeyAddCancelled','authPasskeySignInCancelled'] as const)assert.doesNotMatch(t('en',key),/error|fail|wrong|denied/i,key);
+});
+test('passkey support is never assumed outside a browser',()=>{
+  assert.equal(passkeySupported(),false);
 });
