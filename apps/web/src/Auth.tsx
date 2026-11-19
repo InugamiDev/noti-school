@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, createUniqueId, on, Show, For, onCleanup, type JSX } from 'solid-js';
-import { ArrowLeft, Building2, ChevronDown, Eye, EyeOff, Fingerprint, KeyRound, LogOut, MailCheck, ShieldCheck, Ticket, Trash2, UserPlus, UserRound } from 'lucide-solid';
+import { ArrowLeft, Building2, ChevronDown, Circle, CircleCheck, Eye, EyeOff, Fingerprint, KeyRound, LogOut, MailCheck, ShieldCheck, Ticket, Trash2, UserPlus, UserRound } from 'lucide-solid';
 import { z } from 'zod';
 import type { Schemas } from '@noti/contracts';
 import { request, get, post, RequestError, takeAuthCallback } from './api';
@@ -11,10 +11,13 @@ import type { Lang } from './ui/format';
 import { t, type StringKey } from './ui/i18n';
 import './ui/account.css';
 
-// intent: the account page. Signed out it offers only the sign-in methods the server reports as
-// available (password, passkey, Google) and invited sign-up with a password; signed in it shows the
-// account, its passkeys and invitation redemption. Registration stays invite-only: sign-up always
-// carries the invitation, and a passkey only signs in an account that already exists.
+// intent: the account page. Signed out it is one card: email, password and the action, plus only
+// the other sign-in methods the server reports as available (passkey, Google) and invited sign-up
+// with a password. The pilot is password-only (owner decision, 19 Nov 2026): with the passkey
+// capability off, no passkey button, divider, autofill request, account section or offer exists.
+// Signed in it shows the account, invitation redemption and, when available, its passkeys.
+// Registration stays invite-only: sign-up always carries the invitation, and a passkey only signs
+// in an account that already exists.
 // status: done | next: rehearse against the real auth worker (mail off with invitation-verified
 // email, and mail on) and with real authenticators
 // confidence: medium (flows verified against route mocks and the synthetic demo server only)
@@ -25,6 +28,9 @@ const nativeSuccess = z.union([
   z.object({ url: z.url(), redirect: z.boolean().optional() }),
 ]);
 type Mode = 'signIn' | 'create' | 'redeem' | 'verify' | 'reset';
+// The identity service's password length bounds, as the field's native limits.
+const PASSWORD_MIN = 12;
+const PASSWORD_MAX = 128;
 const title: Record<Mode, StringKey> = {
   signIn: 'authModeSignIn',
   create: 'authModeCreate',
@@ -100,6 +106,8 @@ export default function Auth(props: {
   account?: { userId: string; memberships: { institution: string; role: 'student' | 'admin' }[] } | undefined;
   /** A redeemed invitation selects the new institution so the next question goes to it. */
   joined?: (institutionId: string) => void;
+  /** A question draft is waiting in this tab; only then does the page say it is kept. */
+  draftWaiting?: boolean;
 }) {
   let disposed = false;
   onCleanup(() => {
@@ -159,6 +167,34 @@ export default function Auth(props: {
   };
   const signInScreen = () => !props.authenticated && shown() === 'signIn';
   const formShown = () => !signInScreen() || canPassword();
+  // An attached invitation is accepted; the action it leads to is still "Create account".
+  const invited = () => shown() === 'create' && !!invitation();
+  const heading = (): StringKey => (invited() ? 'authModeAccept' : title[shown()]);
+  const headingId = createUniqueId();
+  const emailHintId = createUniqueId();
+  // What the fields start with. Memos, because a field's value is written again every time its
+  // expression re-runs: without them a re-read of the session or capabilities (the tab regaining
+  // focus) would write the same prefill over whatever the visitor has typed.
+  const emailPrefill = createMemo(() => (shown() === 'signIn' ? knownEmail() : ''));
+  const tokenPrefill = createMemo(() => (shown() === 'reset' ? resetToken() : shown() === 'redeem' ? invitation() : ''));
+  let emailField: HTMLInputElement | undefined;
+  let tokenField: HTMLInputElement | undefined;
+  /** Focus moves after the frame, once the route's own heading focus and any re-render have settled. */
+  const focusSoon = (field: () => HTMLInputElement | undefined) => {
+    const frame = requestAnimationFrame(() => { if (!disposed) field()?.focus({ preventScroll: true }); });
+    onCleanup(() => cancelAnimationFrame(frame));
+  };
+  // Create mode starts in the email field, from an invitation link or from the sign-in form. The
+  // memo makes this fire on entering the mode only, never when capabilities are merely re-read.
+  const creating = createMemo(() => formShown() && shown() === 'create');
+  createEffect(on(creating, (entered) => {
+    if (entered) focusSoon(() => emailField);
+  }));
+  const otherInvitation = () => {
+    setInvitation('');
+    // The link that was pressed is gone; continue in the field that replaces it.
+    requestAnimationFrame(() => { if (!disposed) tokenField?.focus(); });
+  };
   let panel: HTMLDivElement | undefined;
   createEffect(on(shown, () => enter(panel, { opacity: [0, 1], y: [10, 0] }, { duration: 0.34 }), { defer: true }));
 
@@ -230,7 +266,8 @@ export default function Auth(props: {
     await call('sign-up/email', { email, password, name: email.split('@')[0] || email, callbackURL: callbackURL() }, nativeSuccess, token);
     if (disposed) return;
     setInvitation(token);
-    setPasskeyOffer(true);
+    // The offer belongs to the passkey section, which exists only while passkeys are available.
+    setPasskeyOffer(identityReady() && ready('passkey'));
     // The server either signs the new member in (the invitation verified the email) or wants the
     // email verified first. Only a readable session counts as signed in.
     const session = await get('/api/v1/me', 'Me').then(() => true, () => false);
@@ -248,6 +285,8 @@ export default function Auth(props: {
     const membership = await post('/api/auth/invitations/redeem', 'Membership', { token });
     if (disposed) return;
     setInvitation('');
+    // A spent token does not stay in the field, typed or prefilled.
+    if (tokenField) tokenField.value = '';
     setNotice(done('authMsgRedeemed'));
     await refreshed();
     props.joined?.(membership.institution_id);
@@ -362,8 +401,32 @@ export default function Auth(props: {
   return (
     <section class="auth" classList={{ 'account-view': props.authenticated }} lang={props.lang}>
       <div class="auth-intro">
-        <div class="auth-top">
-          <span class="auth-badge">{label(props.authenticated ? 'authBadgeAccount' : 'authBadgeInvite')}</span>
+        <span class="auth-badge">{label(props.authenticated ? 'authBadgeAccount' : 'authBadgeInvite')}</span>
+        <h1 tabIndex={-1}>{label(props.authenticated ? 'authTitleAccount' : 'authTitleWelcome')}</h1>
+        <Show
+          when={props.authenticated}
+          fallback={
+            <>
+              <p class="muted">{label('authIntroGuest')}</p>
+              <ul class="auth-points">
+                <li>{label('authPointPilot')}</li>
+                <li>{label('authPointCitations')}</li>
+                <Show when={props.draftWaiting}><li>{label('authPointDraft')}</li></Show>
+              </ul>
+            </>
+          }
+        >
+          <p class="muted">{label('authIntroAccount')}</p>
+          <ul class="auth-points">
+            <li>{label('authPointMemberships')}</li>
+            <li>{label('authPointJoin')}</li>
+          </ul>
+        </Show>
+      </div>
+      {/* The stage only gives the glass card something to sit on; it has no content of its own. */}
+      <div class="auth-stage">
+      <div class="auth-card">
+        <div class="auth-card-top">
           <div class="auth-lang" role="group" aria-label={label('authLanguage')}>
             <For each={languages}>
               {(language) => (
@@ -379,27 +442,6 @@ export default function Auth(props: {
             </For>
           </div>
         </div>
-        <h1 tabIndex={-1}>{label(props.authenticated ? 'authTitleAccount' : 'authTitleWelcome')}</h1>
-        <Show
-          when={props.authenticated}
-          fallback={
-            <>
-              <p class="muted">{label('authIntroGuest')}</p>
-              <ul class="auth-points">
-                <li>{label('authPointCitations')}</li>
-                <li>{label('authPointDraft')}</li>
-              </ul>
-            </>
-          }
-        >
-          <p class="muted">{label('authIntroAccount')}</p>
-          <ul class="auth-points">
-            <li>{label('authPointMemberships')}</li>
-            <li>{label('authPointJoin')}</li>
-          </ul>
-        </Show>
-      </div>
-      <div class="auth-card">
         <Show when={props.authenticated}>
           <section class="account-identity" aria-labelledby="account-identity-title">
             <div class="account-who">
@@ -462,7 +504,8 @@ export default function Auth(props: {
           </Show>
         </Show>
         <div class="auth-panel" classList={{ 'account-section': props.authenticated }} ref={panel}>
-          <Show when={shown() !== 'signIn' && !(props.authenticated && shown() === 'redeem')}>
+          {/* Create mode has its way back under the form ("Already have an account? Sign in"). */}
+          <Show when={shown() !== 'signIn' && shown() !== 'create' && !(props.authenticated && shown() === 'redeem')}>
             <button type="button" class="link-button auth-back" onClick={() => go(props.authenticated ? 'redeem' : 'signIn')}>
               <ArrowLeft size={16} /> {label(props.authenticated ? 'authBackAccount' : 'authBackSignIn')}
             </button>
@@ -500,11 +543,14 @@ export default function Auth(props: {
             </Show>
           </Show>
           <Show when={formShown()}>
-          <form class="auth-form" onSubmit={submit}>
+          <form class="auth-form" aria-labelledby={headingId} onSubmit={submit}>
             <div class="auth-heading">
-              <span class="auth-icon" aria-hidden="true">{icon[shown()]()}</span>
+              {/* Signed out, the title leads on its own; the account sections keep their icons. */}
+              <Show when={props.authenticated}>
+                <span class="auth-icon" aria-hidden="true">{icon[shown()]()}</span>
+              </Show>
               <div>
-                <h2>{label(title[shown()])}</h2>
+                <h2 id={headingId}>{label(heading())}</h2>
                 <p class="muted">
                   {label(
                     shown() === 'signIn' ? 'authIntroSignIn'
@@ -516,18 +562,35 @@ export default function Auth(props: {
                 </p>
               </div>
             </div>
+            <Show when={invited()}>
+              {/* Says only that a link's invitation is attached: the token does not reveal its email. */}
+              <div class="auth-invitation">
+                <span class="auth-chip"><CircleCheck size={16} aria-hidden="true" /> {label('authInvitationAttached')}</span>
+                <button type="button" class="link-button auth-quiet" onClick={otherInvitation}>
+                  {label('authInvitationOther')}
+                </button>
+              </div>
+            </Show>
             <Show when={shown() !== 'redeem'}>
-              <label>
-                {label('authEmail')}
-                <input
-                  name="email"
-                  type="email"
-                  // "webauthn" lets the browser offer saved passkeys from this field.
-                  autocomplete={shown() === 'signIn' && canPasskey() ? 'username webauthn' : 'email'}
-                  value={shown() === 'signIn' ? knownEmail() : ''}
-                  required={shown() !== 'reset' || !resetToken()}
-                />
-              </label>
+              <div class="auth-field">
+                <label>
+                  {label('authEmail')}
+                  <input
+                    ref={emailField}
+                    name="email"
+                    type="email"
+                    // "webauthn" lets the browser offer saved passkeys from this field.
+                    autocomplete={shown() === 'signIn' && canPasskey() ? 'username webauthn' : 'email'}
+                    autofocus={shown() === 'create'}
+                    value={emailPrefill()}
+                    required={shown() !== 'reset' || !resetToken()}
+                    aria-describedby={shown() === 'create' ? emailHintId : undefined}
+                  />
+                </label>
+                <Show when={shown() === 'create'}>
+                  <p id={emailHintId} class="muted auth-fine auth-hint">{label('authEmailHint')}</p>
+                </Show>
+              </div>
             </Show>
             <Show when={shown() === 'signIn' || shown() === 'create' || shown() === 'reset'}>
               <PasswordField
@@ -535,7 +598,7 @@ export default function Auth(props: {
                 label={label(shown() === 'reset' ? 'authNewPassword' : 'authPassword')}
                 autocomplete={shown() === 'signIn' ? 'current-password' : 'new-password'}
                 required={shown() !== 'reset' || !!resetToken()}
-                hint={shown() === 'signIn' ? '' : label('authPasswordHint')}
+                rule={shown() !== 'signIn'}
               >
                 <Show when={shown() === 'signIn'}>
                   <Show
@@ -549,23 +612,16 @@ export default function Auth(props: {
                 </Show>
               </PasswordField>
             </Show>
-            <Show when={shown() === 'create' && invitation()}>
-              <p class="muted auth-fine auth-attached">
-                <Ticket size={15} aria-hidden="true" /> {label('authInvitationAttached')}{' '}
-                <button type="button" class="link-button" onClick={() => setInvitation('')}>
-                  {label('authInvitationOther')}
-                </button>
-              </p>
-            </Show>
             <Show when={(shown() === 'create' && !invitation()) || shown() === 'redeem' || shown() === 'reset'}>
               <label>
                 {label(shown() === 'reset' ? 'authResetToken' : 'authInvitationToken')}
                 <input
+                  ref={tokenField}
                   name="token"
                   type="password"
                   autocomplete="off"
                   maxLength={256}
-                  value={shown() === 'reset' ? resetToken() : shown() === 'redeem' ? invitation() : ''}
+                  value={tokenPrefill()}
                   onInput={(e) => {
                     if (shown() === 'reset') setResetToken(e.currentTarget.value);
                   }}
@@ -624,6 +680,7 @@ export default function Auth(props: {
         <p role="status" class="auth-message" data-tone={notice()?.tone} tabIndex={-1} ref={line}>
           {message()}
         </p>
+        {/* No passkey capability, no passkey section: nothing is listed, offered or requested. */}
         <Show when={props.authenticated && identityReady() && ready('passkey')}>
           <Passkeys
             lang={props.lang}
@@ -659,21 +716,29 @@ export default function Auth(props: {
           </details>
         </Show>
       </div>
+      </div>
     </section>
   );
 }
 
-/** A password box with a show/hide switch. The switch sits outside the label so the field keeps its plain name. */
+/**
+ * A password box with a show/hide switch. The switch sits outside the label so the field keeps its
+ * plain name. With `rule`, a line under the box follows the length as it is typed: its icon and
+ * its wording both change once the length fits, and the change is announced politely. It only
+ * informs; submitting is left to the field's own minlength and maxlength.
+ */
 function PasswordField(props: {
   lang: Lang;
   label: string;
   autocomplete: 'current-password' | 'new-password';
   required: boolean;
-  hint: string;
+  rule: boolean;
   children?: JSX.Element;
 }) {
   const id = createUniqueId();
   const [visible, setVisible] = createSignal(false);
+  const [length, setLength] = createSignal(0);
+  const met = () => length() >= PASSWORD_MIN && length() <= PASSWORD_MAX;
   return (
     <div class="auth-password">
       <label for={id}>{props.label}</label>
@@ -683,10 +748,11 @@ function PasswordField(props: {
           name="password"
           type={visible() ? 'text' : 'password'}
           autocomplete={props.autocomplete}
-          minlength={12}
-          maxlength={128}
+          minlength={PASSWORD_MIN}
+          maxlength={PASSWORD_MAX}
           required={props.required}
-          aria-describedby={props.hint ? `${id}-hint` : undefined}
+          aria-describedby={props.rule ? `${id}-rule` : undefined}
+          onInput={(event) => setLength(event.currentTarget.value.length)}
         />
         <button
           type="button"
@@ -701,8 +767,13 @@ function PasswordField(props: {
           </Show>
         </button>
       </div>
-      <Show when={props.hint}>
-        <p id={`${id}-hint`} class="muted auth-fine auth-hint">{props.hint}</p>
+      <Show when={props.rule}>
+        <p id={`${id}-rule`} class="auth-fine auth-rule" data-met={met() ? 'true' : 'false'} aria-live="polite">
+          <Show when={met()} fallback={<Circle size={16} aria-hidden="true" />}>
+            <CircleCheck size={16} aria-hidden="true" />
+          </Show>
+          <span>{t(props.lang, met() ? 'authPasswordRuleMet' : 'authPasswordHint')}</span>
+        </p>
       </Show>
       {props.children}
     </div>

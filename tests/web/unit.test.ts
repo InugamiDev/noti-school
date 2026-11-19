@@ -87,8 +87,14 @@ test('an invitation link is consumed into memory and scrubbed from the address',
   assert.equal(takeAuthCallback('https://noti.school/#/auth').invitation,'');
 });
 test('account copy is bilingual and says plainly what needs email',()=>{
-  assert.equal(t('en','authResetNeedsEmail'),'Password reset needs email, which is not set up yet.');
-  assert.equal(t('vi','authResetNeedsEmail'),'Đặt lại mật khẩu cần email, hiện chưa được thiết lập.');
+  assert.equal(t('en','authResetNeedsEmail'),'Password reset is not available yet.');
+  assert.equal(t('vi','authResetNeedsEmail'),'Hiện chưa thể đặt lại mật khẩu.');
+  // The invitation screen's wording, as the owner gave it.
+  assert.equal(t('en','authModeAccept'),'Accept your invitation');
+  assert.equal(t('en','authIntroCreateInvited'),'Create a password for the email address your invitation was sent to.');
+  assert.equal(t('en','authInvitationAttached'),'Invitation attached');
+  assert.equal(t('en','authInvitationOther'),'Use a different invitation');
+  assert.equal(t('en','authEmailHint'),'Use the address the invitation was sent to.');
   assert.equal(t('en','authDeletionNeedsEmail'),'Account deletion needs email, which is not set up yet.');
   assert.equal(t('en','authPasskeySignIn'),'Sign in with a passkey');
   const account=allStrings().filter(({key})=>key.startsWith('auth'));

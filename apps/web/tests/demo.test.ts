@@ -18,28 +18,46 @@ const freePort = () => new Promise<number>((resolve, reject) => {
     probe.close(() => (address && typeof address === 'object' ? resolve(address.port) : reject(new Error('No port'))));
   });
 });
-before(async () => {
+/** Starts a demo server as it ships (password-only); `passkeys` is its DEMO_PASSKEYS opt-in. */
+async function startDemo(options: { passkeys?: boolean } = {}) {
   const port = await freePort();
-  base = `http://127.0.0.1:${port}`;
-  server = spawn(process.execPath, [fileURLToPath(new URL('../scripts/demo-server.mjs', import.meta.url)), String(port)], {
-    env: { ...process.env, DEMO_ANSWER_DELAY_MS: '0' },
+  const { DEMO_PASSKEYS: _inherited, ...env } = process.env;
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../scripts/demo-server.mjs', import.meta.url)), String(port)], {
+    env: { ...env, DEMO_ANSWER_DELAY_MS: '0', ...(options.passkeys ? { DEMO_PASSKEYS: 'true' } : {}) },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.once('exit', (code) => reject(new Error(`Demo server exited early with ${code}`)));
-    server.stdout!.once('data', () => resolve());
+    child.once('error', reject);
+    child.once('exit', (code) => reject(new Error(`Demo server exited early with ${code}`)));
+    child.stdout!.once('data', () => resolve());
   });
+  return { origin: `http://127.0.0.1:${port}`, child };
+}
+before(async () => {
+  const demo = await startDemo();
+  base = demo.origin;
+  server = demo.child;
 });
 after(() => { server?.kill(); });
 
-const call = async (method: string, path: string, body?: unknown) => {
-  const response = await fetch(base + path, {
+const callAt = (origin: string) => async (method: string, path: string, body?: unknown) => {
+  const response = await fetch(origin + path, {
     method,
     ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
   });
   return { status: response.status, json: response.status === 204 ? null : await response.json() };
 };
+const call = (method: string, path: string, body?: unknown) => callAt(base)(method, path, body);
+const signUpAt = (origin: string) => (invitation: string | undefined, email: string, password: string) => fetch(`${origin}/api/auth/sign-up/email`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', ...(invitation ? { 'x-noti-invitation': invitation } : {}) },
+  body: JSON.stringify({ email, password, name: 'Synthetic' }),
+});
+// Every route of the passkey plugin the web app or a visitor could call.
+const passkeyRoutes = [
+  ['GET', 'generate-authenticate-options'], ['POST', 'verify-authentication'], ['GET', 'generate-register-options'],
+  ['POST', 'verify-registration'], ['GET', 'list-user-passkeys'], ['POST', 'delete-passkey'],
+] as const;
 const school = async () => Schemas.InstitutionPage.parse((await call('GET', '/api/v1/institutions')).json).items[0]!;
 const ask = async (institution_id: string, question: string, discover: boolean, language: 'en' | 'vi' = 'en') =>
   validateAnswer((await call('POST', '/api/v1/answers', { institution_id, question, language, discover })).json);
@@ -188,30 +206,28 @@ test('a page saved in the personal space joins answers only after its owner choo
 });
 
 // Runs last: it signs the shared demo user out and back in.
-test('demo identity is invite-only, sends no mail and keeps passkeys behind a session', async () => {
+test('demo identity is password-only by default, invite-only, and sends no mail', async () => {
   const capabilities = Schemas.Capabilities.parse((await call('GET', '/api/v1/capabilities')).json);
   assert.deepEqual(
     [capabilities.identity.state, capabilities.password.state, capabilities.passkey.state, capabilities.email.state, capabilities.google.state],
-    ['available', 'available', 'available', 'disabled', 'disabled'],
+    ['available', 'available', 'disabled', 'disabled', 'disabled'],
   );
-  const signUp = (invitation: string | undefined, email: string, password: string) => fetch(`${base}/api/auth/sign-up/email`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(invitation ? { 'x-noti-invitation': invitation } : {}) },
-    body: JSON.stringify({ email, password, name: 'Synthetic' }),
-  });
+  assert.equal(capabilities.passkey.reason, 'not_configured');
+  // Signed in or out, no passkey route exists.
+  const noPasskeyRoutes = async () => {
+    for (const [method, action] of passkeyRoutes) {
+      const response = await call(method, `/api/auth/passkey/${action}`, method === 'POST' ? { response: {} } : undefined);
+      assert.equal(response.status, 404, action);
+      assert.equal(ApiError.parse(response.json).error.code, 'not_found', action);
+    }
+  };
+  await noPasskeyRoutes();
+  const signUp = signUpAt(base);
   const first = (await school()).id;
   const seededConversation = Schemas.ConversationPage.parse((await call('GET', `/api/v1/institutions/${first}/conversations`)).json).items.at(-1)!.id;
   assert.equal((await call('POST', '/api/auth/sign-out', {})).status, 200);
   assert.equal((await call('GET', '/api/v1/me')).status, 401);
-  // Signed out, a passkey can be asked for but nothing can be registered or listed.
-  const options = await call('GET', '/api/auth/passkey/generate-authenticate-options');
-  assert.equal(options.status, 200);
-  assert.ok(typeof options.json.challenge === 'string' && !('allowCredentials' in options.json));
-  assert.equal((await call('GET', '/api/auth/passkey/generate-register-options')).status, 401);
-  assert.equal((await call('GET', '/api/auth/passkey/list-user-passkeys')).status, 401);
-  assert.equal((await call('POST', '/api/auth/passkey/verify-registration', { response: {} })).status, 401);
-  // An assertion for a credential nobody registered creates nothing and signs nobody in.
-  assert.equal((await call('POST', '/api/auth/passkey/verify-authentication', { response: { id: 'unknown' } })).status, 401);
+  await noPasskeyRoutes();
   assert.equal((await call('GET', '/api/v1/me')).status, 401);
 
   // No invitation, no account. A wrong token is refused the same way.
@@ -240,11 +256,6 @@ test('demo identity is invite-only, sends no mail and keeps passkeys behind a se
   assert.notEqual(followUp.conversation_id, seededConversation);
   assert.deepEqual(Schemas.AnswerPage.parse((await call('GET', `/api/v1/institutions/${joined}/conversations/${seededConversation}/answers`)).json).items, []);
   assert.equal(Schemas.ConversationPage.parse((await call('GET', `/api/v1/institutions/${joined}/conversations`)).json).items.length, 1);
-  assert.deepEqual((await call('GET', '/api/auth/passkey/list-user-passkeys')).json, []);
-  // A registration answer that does not match the issued challenge stores nothing.
-  assert.equal((await call('GET', '/api/auth/passkey/generate-register-options')).status, 200);
-  assert.equal((await call('POST', '/api/auth/passkey/verify-registration', { response: { id: 'forged', response: { clientDataJSON: 'e30', publicKey: 'AAAA' } } })).status, 400);
-  assert.deepEqual((await call('GET', '/api/auth/passkey/list-user-passkeys')).json, []);
   assert.equal((await signUp('demo-invite', 'synthetic.member@example.edu', 'synthetic-passphrase-1')).status, 422);
 
   // Everything that needs mail says so instead of pretending.
@@ -261,4 +272,35 @@ test('demo identity is invite-only, sends no mail and keeps passkeys behind a se
   assert.equal(Schemas.Me.parse((await call('GET', '/api/v1/me')).json).identity.user_id, 'demo-account-1');
   assert.equal((await call('POST', '/api/auth/sign-in/email', { email: 'presenter@example.edu', password: 'anything-at-all' })).status, 200);
   assert.equal(Schemas.Me.parse((await call('GET', '/api/v1/me')).json).identity.user_id, 'demo-student');
+});
+
+// Its own server: the opt-in is read once, when the demo starts.
+test('with DEMO_PASSKEYS=true the demo offers passkeys and keeps them behind a session', async () => {
+  const demo = await startDemo({ passkeys: true });
+  try {
+    const at = callAt(demo.origin);
+    const capabilities = Schemas.Capabilities.parse((await at('GET', '/api/v1/capabilities')).json);
+    assert.deepEqual([capabilities.password.state, capabilities.passkey.state], ['available', 'available']);
+    assert.equal((await at('POST', '/api/auth/sign-out', {})).status, 200);
+    // Signed out, a passkey can be asked for but nothing can be registered or listed.
+    const options = await at('GET', '/api/auth/passkey/generate-authenticate-options');
+    assert.equal(options.status, 200);
+    assert.ok(typeof options.json.challenge === 'string' && !('allowCredentials' in options.json));
+    assert.equal((await at('GET', '/api/auth/passkey/generate-register-options')).status, 401);
+    assert.equal((await at('GET', '/api/auth/passkey/list-user-passkeys')).status, 401);
+    assert.equal((await at('POST', '/api/auth/passkey/verify-registration', { response: {} })).status, 401);
+    // An assertion for a credential nobody registered creates nothing and signs nobody in.
+    assert.equal((await at('POST', '/api/auth/passkey/verify-authentication', { response: { id: 'unknown' } })).status, 401);
+    assert.equal((await at('GET', '/api/v1/me')).status, 401);
+    // A passkey never stands in for the invitation: the account is still created by invited sign-up.
+    assert.equal((await signUpAt(demo.origin)(undefined, 'synthetic.member@example.edu', 'synthetic-passphrase-1')).status, 403);
+    assert.equal((await signUpAt(demo.origin)('demo-invite', 'synthetic.member@example.edu', 'synthetic-passphrase-1')).status, 200);
+    assert.deepEqual((await at('GET', '/api/auth/passkey/list-user-passkeys')).json, []);
+    // A registration answer that does not match the issued challenge stores nothing.
+    assert.equal((await at('GET', '/api/auth/passkey/generate-register-options')).status, 200);
+    assert.equal((await at('POST', '/api/auth/passkey/verify-registration', { response: { id: 'forged', response: { clientDataJSON: 'e30', publicKey: 'AAAA' } } })).status, 400);
+    assert.deepEqual((await at('GET', '/api/auth/passkey/list-user-passkeys')).json, []);
+  } finally {
+    demo.child.kill();
+  }
 });

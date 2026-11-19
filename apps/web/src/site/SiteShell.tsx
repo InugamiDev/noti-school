@@ -165,13 +165,16 @@ export function SiteHeader(props: { route: string; signedIn: boolean; app?: bool
         <a href="#/history" aria-current={props.route.startsWith('/history') ? 'page' : undefined}>
           History
         </a>
-        <a
-          class="site-account"
-          href="#/auth"
-          aria-current={props.route.startsWith('/auth') ? 'page' : undefined}
-        >
-          {props.signedIn ? 'Account' : 'Sign in'}
-        </a>
+        {/* A signed-out visitor on the account page is already at sign-in, so the pill would point at itself. */}
+        <Show when={props.signedIn || !props.route.startsWith('/auth')}>
+          <a
+            class="site-account"
+            href="#/auth"
+            aria-current={props.route.startsWith('/auth') ? 'page' : undefined}
+          >
+            {props.signedIn ? 'Account' : 'Sign in'}
+          </a>
+        </Show>
         <button
           class="site-menu-toggle"
           ref={(node) => {

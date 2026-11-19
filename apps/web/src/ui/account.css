@@ -182,14 +182,11 @@
   }
 }
 
-/* Language switch: two words in a pressed well, beside the badge. */
-.auth .auth-top {
+/* Language switch: two words in a pressed well. Its one home is the top edge of the card. */
+.auth .auth-card-top {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
-  max-width: 420px;
+  justify-content: flex-end;
+  margin: -8px -8px 14px 0;
 }
 .auth .auth-lang {
   display: inline-flex;
@@ -200,7 +197,7 @@
   box-shadow: var(--clay-well);
 }
 .auth .auth-lang button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 14px;
   border-color: transparent;
   background: transparent;
@@ -232,9 +229,9 @@
 .auth .auth-reveal {
   position: absolute;
   top: 50%;
-  right: 4px;
+  right: 2px;
   width: 44px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0;
   transform: translateY(-50%);
   border-color: transparent;
@@ -248,25 +245,75 @@
   box-shadow: none;
   color: var(--cyan);
 }
+.auth .auth-field {
+  display: grid;
+  gap: 6px;
+}
 .auth .auth-hint,
+.auth .auth-rule,
 .auth .auth-fine.auth-forgot {
   text-align: left;
 }
 .auth .auth-fine.auth-forgot {
   justify-self: stretch;
 }
-.auth .auth-attached {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: var(--r-sm);
-  background: var(--cyan-soft);
-  color: var(--ink-soft);
-  text-align: left;
-  line-height: 1.55;
+/* Password length: the icon and the wording both change when it fits; the tint only supports them. */
+.auth .auth-rule {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
 }
-.auth .auth-attached svg {
-  vertical-align: -2px;
+.auth .auth-rule[data-met='true'] {
+  color: var(--ink);
+}
+.auth .auth-rule[data-met='true'] svg {
   color: var(--cyan);
+}
+/* Invitation from a link: a small confirmed chip above the fields, with a quiet way to replace it. */
+.auth .auth-invitation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+}
+.auth .auth-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 9px;
+  border-radius: var(--r-pill);
+  background: var(--sage-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 620;
+}
+.auth .auth-chip svg {
+  color: var(--cyan);
+}
+/* Text links in the card keep a 44px touch target without growing the line they sit in. */
+.auth .auth-quiet,
+.auth .auth-switch .link-button,
+.auth .auth-back,
+.auth button.auth-forgot {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.auth .auth-quiet {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 560;
+  text-decoration-color: rgb(101 91 83 / 0.4);
+}
+.auth .auth-quiet:hover {
+  color: var(--action-deep);
+}
+.auth .auth-switch {
+  margin-top: 14px;
+}
+.auth .auth-switch p {
+  margin: 0;
 }
 
 /* The outcome line says how it went in words; the tint only supports them. */

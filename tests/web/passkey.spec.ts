@@ -1,60 +1,16 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
-import { mkdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs';
+import { createLink, failure, fixture, googleButton, noOverflow, passkeyButton, password, prepareArtifacts, shot, signInButton, startDemo, stored, type Demo } from './auth-fixtures';
 
-// intent: password and passkey sign-in on the account page. Real WebAuthn ceremonies run in
-// Chromium against a virtual authenticator (CDP) and the synthetic demo server on loopback; the
-// capability and fallback cases use intercepted fixtures. No mail, OAuth, key or real account.
+// intent: password and passkey sign-in on the account page with passkeys switched ON. Real WebAuthn
+// ceremonies run in Chromium against a virtual authenticator (CDP) and the synthetic demo server on
+// loopback, started with its passkey opt-in; the capability and fallback cases use intercepted
+// fixtures. The password-only default lives in signin.spec.ts. No mail, OAuth, key or real account.
 // status: done | next: the same journeys against the real auth worker belong to the coordinator
 // confidence: medium (a passing demo server says nothing about the real identity service)
-const artifacts = fileURLToPath(new URL('./artifacts/', import.meta.url));
-const demoScript = fileURLToPath(new URL('../../apps/web/scripts/demo-server.mjs', import.meta.url));
-const password = 'synthetic-passphrase-1';
 const today = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date());
-const noOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
-const stored = (page: Page) => page.evaluate(() => JSON.stringify(localStorage) + JSON.stringify(sessionStorage));
-// The cold-load splash is a fixed overlay; a full-page picture is taken only after it has lifted.
-async function shot(page: Page, name: string) {
-  await expect(page.locator('#splash')).toHaveCount(0);
-  await page.screenshot({ path: `${artifacts}${name}.png`, fullPage: true });
-}
 
-test.beforeAll(async () => { await mkdir(artifacts, { recursive: true }); });
+test.beforeAll(prepareArtifacts);
 
-// ---- Synthetic demo server: one fresh process per test, so accounts and passkeys never leak across tests.
-type Demo = { site: string; call: (method: string, path: string, body?: unknown, headers?: Record<string, string>) => Promise<{ status: number; json: unknown }>; stop: () => void };
-const freePort = () => new Promise<number>((resolve, reject) => {
-  const probe = createServer();
-  probe.once('error', reject);
-  probe.listen(0, '127.0.0.1', () => {
-    const address = probe.address();
-    probe.close(() => (address && typeof address === 'object' ? resolve(address.port) : reject(new Error('No port'))));
-  });
-});
-async function startDemo(): Promise<Demo> {
-  const port = await freePort();
-  const child: ChildProcess = spawn(process.execPath, [demoScript, String(port)], {
-    env: { ...process.env, DEMO_ANSWER_DELAY_MS: '0' },
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  await new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code) => reject(new Error(`Demo server exited early with ${code}`)));
-    child.stdout!.once('data', () => resolve());
-  });
-  const call: Demo['call'] = async (method, path, body, headers = {}) => {
-    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
-      method,
-      headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    return { status: response.status, json: await response.json() };
-  };
-  // WebAuthn needs a registrable name: the page is opened on localhost, never on the bare IP.
-  return { site: `http://localhost:${port}`, call, stop: () => { child.kill(); } };
-}
 /** Chromium's virtual authenticator: an internal CTAP2 device with resident keys and user verification. */
 async function virtualAuthenticator(page: Page) {
   const client = await page.context().newCDPSession(page);
@@ -74,7 +30,7 @@ async function virtualAuthenticator(page: Page) {
 test.describe('synthetic demo server with a virtual authenticator', () => {
   let demo: Demo;
   test.beforeEach(async ({ page }) => {
-    demo = await startDemo();
+    demo = await startDemo({ passkeys: true });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     // The demo starts signed in as its demo student; these journeys start signed out.
     expect((await demo.call('POST', '/api/auth/sign-out', {})).status).toBe(200);
@@ -92,10 +48,10 @@ test.describe('synthetic demo server with a virtual authenticator', () => {
     page.on('request', (request) => { if (request.url().includes('/api/auth/')) requests.push(`${request.method()} ${new URL(request.url()).pathname}`); });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${demo.site}/#/auth?invitation=demo-invite`);
-    await expect(page.locator('form h2')).toHaveText('Create account');
+    await expect(page.locator('form h2')).toHaveText('Accept your invitation');
     // The token leaves the address at once and is never written to storage.
     expect(page.url()).not.toContain('demo-invite');
-    await expect(page.getByText('Your invitation link is attached.', { exact: false })).toBeVisible();
+    await expect(page.getByText('Invitation attached', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Invitation token', { exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Name', { exact: true })).toHaveCount(0);
     const secret = page.getByLabel('Password', { exact: true });
@@ -157,13 +113,13 @@ test.describe('synthetic demo server with a virtual authenticator', () => {
     expect(await noOverflow(page)).toBe(true);
   });
 
-  test('password sign-in refuses a wrong password in plain words and accepts the right one; reset says it needs email', async ({ page }) => {
+  test('password sign-in refuses a wrong password in plain words and accepts the right one; reset is said to be unavailable', async ({ page }) => {
     await createAccount('returning.student@example.edu');
     await demo.call('POST', '/api/auth/sign-out', {});
     await page.goto(`${demo.site}/#/auth`);
     await expect(page.locator('form h2')).toHaveText('Sign in');
     // The demo has no mail and no Google: neither a dead reset link nor a Google button is shown.
-    await expect(page.getByText('Password reset needs email, which is not set up yet.')).toBeVisible();
+    await expect(page.getByText('Password reset is not available yet.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Forgot password?' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Resend verification email' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
@@ -316,7 +272,7 @@ test.describe('synthetic demo server with a virtual authenticator', () => {
     await page.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Tiếng Việt' }).click();
     await expect(page.locator('section.auth')).toHaveAttribute('lang', 'vi');
     await expect(page.getByRole('heading', { name: 'Chào mừng đến với noti.school' })).toBeVisible();
-    await expect(page.locator('form h2')).toHaveText('Tạo tài khoản');
+    await expect(page.locator('form h2')).toHaveText('Chấp nhận lời mời của bạn');
     await expect(page.getByText('Dùng từ 12 đến 128 ký tự.')).toBeVisible();
     expect(await noOverflow(page)).toBe(true);
     await shot(page, 'passkey-signup-vi-390');
@@ -343,7 +299,7 @@ test.describe('synthetic demo server with a virtual authenticator', () => {
     await authenticator.presence(false);
     await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText('Đã đăng xuất.');
-    await expect(page.getByText('Đặt lại mật khẩu cần email, hiện chưa được thiết lập.')).toBeVisible();
+    await expect(page.getByText('Hiện chưa thể đặt lại mật khẩu.')).toBeVisible();
     expect(await noOverflow(page)).toBe(true);
     await shot(page, 'passkey-signin-vi-390');
     await page.getByRole('button', { name: 'Đăng nhập bằng passkey', exact: true }).click();
@@ -362,57 +318,6 @@ test.describe('synthetic demo server with a virtual authenticator', () => {
 });
 
 // ---- Intercepted fixtures: what the account page shows for each capability and reply shape.
-const id = '11111111-1111-4111-8111-111111111111';
-const on = { state: 'available', reason: 'ready' }, off = { state: 'disabled', reason: 'not_configured' };
-type Method = 'google' | 'email' | 'password' | 'passkey' | 'identity';
-type Fixture = {
-  user: string | null;
-  available: Method[];
-  capabilitiesFail?: boolean;
-  /** What sign-up answers with: a session at once, or an account that still has to sign in. */
-  signUpSession?: boolean;
-  passkeys?: { id: string; name?: string; createdAt: string }[];
-  calls: { method: string; path: string; body: unknown; invitation: string | undefined }[];
-};
-const failure = (code: string, message = 'Synthetic failure') => ({ error: { code, message, request_id: id, retryable: false } });
-async function fixture(page: Page, options: Omit<Fixture, 'calls'>) {
-  const state: Fixture = { ...options, calls: [] };
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.route('**/api/**', async (route) => {
-    const request = route.request(), path = new URL(request.url()).pathname, method = request.method();
-    const body: unknown = method === 'POST' ? request.postDataJSON() : undefined;
-    if (path.startsWith('/api/auth/')) state.calls.push({ method, path: path.slice('/api/auth/'.length), body, invitation: request.headers()['x-noti-invitation'] });
-    if (path.endsWith('/capabilities')) {
-      if (state.capabilitiesFail) return route.fulfill({ status: 503, json: failure('core_unavailable') });
-      const cap = (name: Method) => (state.available.includes(name) ? on : off);
-      return route.fulfill({ json: { mode: 'mock', answers: on, indexing: on, discovery: on, google: cap('google'), email: cap('email'), password: cap('password'), passkey: cap('passkey'), identity: cap('identity') } });
-    }
-    if (path.endsWith('/institutions')) return route.fulfill({ json: { items: [{ id, slug: 'synthetic', name: 'Synthetic School', kind: 'school', domains: [], coverage: 'synthetic_demo' }], next_cursor: null } });
-    if (path.endsWith('/api/v1/me')) {
-      if (!state.user) return route.fulfill({ status: 401, json: failure('unauthenticated') });
-      return route.fulfill({ json: { identity: { user_id: state.user, session_id: 'synthetic-session', email_verified: true, expires_at: '2027-01-01T00:00:00Z' }, memberships: [] } });
-    }
-    if (path.endsWith('/sign-up/email')) {
-      if (state.signUpSession) state.user = 'synthetic-new-member';
-      return route.fulfill({ json: { token: state.signUpSession ? 'synthetic-session-token' : null, user: { id: 'synthetic-new-member' } } });
-    }
-    if (path.endsWith('/sign-in/email')) { state.user = 'synthetic-new-member'; return route.fulfill({ json: { token: 'synthetic-session-token', user: { id: state.user } } }); }
-    if (path.endsWith('/sign-out')) { state.user = null; return route.fulfill({ json: { success: true } }); }
-    if (path.endsWith('/invitations/redeem')) return route.fulfill({ json: { institution_id: id, role: 'student' } });
-    if (path.endsWith('/passkey/list-user-passkeys') && state.passkeys) return route.fulfill({ json: state.passkeys });
-    if (path.endsWith('/passkey/delete-passkey') && state.passkeys) {
-      state.passkeys = state.passkeys.filter((passkey) => passkey.id !== (body as { id: string }).id);
-      return route.fulfill({ json: { status: true } });
-    }
-    return route.fulfill({ status: 503, json: failure('core_unavailable') });
-  });
-  return state;
-}
-const passkeyButton = (page: Page) => page.getByRole('button', { name: 'Sign in with a passkey', exact: true });
-const googleButton = (page: Page) => page.getByRole('button', { name: 'Continue with Google', exact: true });
-const signInButton = (page: Page) => page.locator('form').getByRole('button', { name: 'Sign in', exact: true });
-const createLink = (page: Page) => page.getByRole('button', { name: 'Create account', exact: true });
-
 test('the sign-in screen offers exactly the methods the server reports as available', async ({ page }) => {
   const state = await fixture(page, { user: null, available: ['identity', 'google', 'email', 'password', 'passkey'] });
   await page.goto('/#/auth');
@@ -423,7 +328,7 @@ test('the sign-in screen offers exactly the methods the server reports as availa
   await expect(page.getByRole('button', { name: 'Forgot password?' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Resend verification email' })).toBeVisible();
   await expect(createLink(page)).toBeVisible();
-  await expect(page.getByText('Password reset needs email', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('Password reset is not available yet.')).toHaveCount(0);
 
   // Password only, no mail: the form stays, the mail-dependent paths become one calm line.
   state.available = ['identity', 'password'];
@@ -434,7 +339,7 @@ test('the sign-in screen offers exactly the methods the server reports as availa
   await expect(page.getByText('or with email')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Forgot password?' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Resend verification email' })).toHaveCount(0);
-  await expect(page.getByText('Password reset needs email, which is not set up yet.')).toBeVisible();
+  await expect(page.getByText('Password reset is not available yet.')).toBeVisible();
   await expect(page.getByLabel('Email', { exact: true })).toHaveAttribute('autocomplete', 'email');
   await expect(createLink(page)).toBeVisible();
 
@@ -489,7 +394,7 @@ for (const mail of [false, true]) test(`sign-up that returns no session goes to 
   const state = await fixture(page, { user: null, available: mail ? ['identity', 'password', 'email'] : ['identity', 'password'], signUpSession: false });
   await page.goto('/?invitation=synthetic-invite#/auth');
   expect(page.url()).not.toContain('synthetic-invite');
-  await expect(page.locator('form h2')).toHaveText('Create account');
+  await expect(page.locator('form h2')).toHaveText('Accept your invitation');
   await page.getByLabel('Email', { exact: true }).fill('synthetic@example.test');
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.locator('form').getByRole('button', { name: 'Create account', exact: true }).click();

@@ -12,6 +12,7 @@ Use the repository's pinned Node 24.18.0 and pnpm 10.29.2. Install the workspace
 - `pnpm --filter @noti/web test:e2e` (build first; starts and stops an isolated preview at localhost:3304)
 - `pnpm --filter @noti/web dev` (localhost:3000, existing auth/API proxy contracts)
 - `pnpm --filter @noti/web assets:optimize` (approved input default path; explicit source can be passed as an argument)
+- `pnpm --filter @noti/web demo` (build first; synthetic local demo on 127.0.0.1:4173, password-only like the pilot. `DEMO_PASSKEYS=true` turns the synthetic passkey routes and capability on.)
 
 Production delivery is the static `dist/` directory served by the Rust app. No production Vite process or deployment changes are included.
 

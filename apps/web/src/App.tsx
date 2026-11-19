@@ -1011,7 +1011,7 @@ export default function App() {
           </div>
         </Show>
         <Show when={route().startsWith('/auth') ? authCallback() : undefined} keyed>
-          <div class="page">
+          <div class="page auth-page">
             <Show when={accessScope()} keyed>
               {(_scope) => (
                 <Auth
@@ -1021,6 +1021,7 @@ export default function App() {
                   authenticated={!!me()}
                   lang={language()}
                   setLang={setLanguage}
+                  draftWaiting={!!draft().trim()}
                   account={
                     me()
                       ? {

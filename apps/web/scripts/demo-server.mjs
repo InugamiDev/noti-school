@@ -12,6 +12,9 @@
 // in at once and sends nothing. Passwords are kept as typed in memory, one signed-in user is shared
 // by every browser, and a passkey is checked only as far as the demo needs (challenge, origin and
 // signature). None of this is the real identity service or a security boundary.
+// Sign-in is password-only by default, as in the pilot (AUTH_PASSKEYS=false): the passkey
+// capability reports disabled and every /api/auth/passkey/* route answers 404. DEMO_PASSKEYS=true
+// opts the passkey routes and capability back in.
 // status: done | next: keep in step with packages/contracts when shapes change | confidence: high
 import { createServer } from 'node:http';
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto';
@@ -22,6 +25,8 @@ import { fileURLToPath } from 'node:url';
 const port = Number(process.argv[2] || process.env.PORT || 4173);
 // Tests shorten the pause before an answer; the demo keeps it long enough to show the waiting state.
 const answerDelay = Number(process.env.DEMO_ANSWER_DELAY_MS ?? 1800);
+// Mirrors AUTH_PASSKEYS: only the exact value "true" turns passkeys on.
+const passkeysEnabled = process.env.DEMO_PASSKEYS === 'true';
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const uid = (n) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 const sha = (text) => createHash('sha256').update(text).digest('hex');
@@ -356,7 +361,11 @@ function passkeyApi(method, action, body, headers) {
   return error('not_found', 'Not available in the demo.', 404);
 }
 async function identityApi(method, action, body, headers) {
-  if (action.startsWith('passkey/')) return passkeyApi(method, action.slice('passkey/'.length), body, headers);
+  if (action.startsWith('passkey/')) {
+    // Off by default: the routes do not exist, whatever the method or session.
+    if (!passkeysEnabled) return error('not_found', 'Passkeys are not enabled in the demo.', 404);
+    return passkeyApi(method, action.slice('passkey/'.length), body, headers);
+  }
   if (action === 'sign-out') { state.user = null; return { body: { success: true } }; }
   if (action === 'sign-up/email') {
     await sleep(300);
@@ -397,8 +406,9 @@ async function api(method, path, body, headers = {}) {
   // The institution named in the path scopes every read and write below.
   const scope = path.match(/^\/api\/v1\/institutions\/([^/]+)/)?.[1];
   const own = (items) => items.filter((item) => item.institution_id === scope);
-  // No mail and no Google in the demo: password accounts (by invitation) and passkeys are what it shows.
-  if (path === '/api/v1/capabilities') return { body: { mode: 'mock', answers: cap('available'), indexing: cap('available'), discovery: cap('available'), google: cap('disabled'), email: cap('disabled'), password: cap('available'), passkey: cap('available'), identity: cap('available') } };
+  // No mail and no Google in the demo: password accounts (by invitation) are what it shows, plus
+  // passkeys when DEMO_PASSKEYS=true.
+  if (path === '/api/v1/capabilities') return { body: { mode: 'mock', answers: cap('available'), indexing: cap('available'), discovery: cap('available'), google: cap('disabled'), email: cap('disabled'), password: cap('available'), passkey: cap(passkeysEnabled ? 'available' : 'disabled'), identity: cap('available') } };
   if (path === '/api/v1/institutions') return { body: page(institutions()) };
   if (path.startsWith('/api/auth/')) return identityApi(method, path.slice('/api/auth/'.length), body, headers);
   if (path === '/api/v1/me') return state.user ? { body: me() } : error('unauthenticated', 'Sign in to continue.', 401);
@@ -547,4 +557,5 @@ createServer(async (req, res) => {
   res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
   res.end(await readFile(file));
 }).listen(port, '127.0.0.1', () => console.log(`noti.school demo: http://127.0.0.1:${port}  (mock data, signed in as a demo admin)
-Synthetic sign-up link: http://localhost:${port}/#/auth?invitation=demo-invite  (passkeys need the localhost address)`));
+Synthetic sign-up link: http://localhost:${port}/#/auth?invitation=demo-invite
+${passkeysEnabled ? 'Passkeys are on (DEMO_PASSKEYS=true); they need the localhost address.' : 'Sign-in is password-only. Start with DEMO_PASSKEYS=true to show passkeys.'}`));

@@ -330,30 +330,39 @@
   color: var(--vermilion);
 }
 
-/* Auth: brand column beside one focused card. */
+/* Auth: one focused card with a short brand column beside it. The column is a few quiet lines so
+   the card is what the eye lands on; on phones the sign-in card comes first and the column follows. */
 .auth {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
   gap: clamp(32px, 6vw, 88px);
-  align-items: start;
-  max-width: 1080px;
+  align-items: center;
+  max-width: 1060px;
   margin: auto;
 }
+/* The signed-in card is long: its column stays pinned beside it instead of centring. */
+.auth.account-view {
+  align-items: start;
+}
 .auth-intro {
+  max-width: 400px;
+}
+.account-view .auth-intro {
   position: sticky;
   top: 120px;
   padding-top: 24px;
 }
 .auth-intro h1 {
-  font-size: 52px;
-  line-height: 1.04;
-  letter-spacing: -0.035em;
-  margin: 18px 0 16px;
+  font-size: 44px;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  margin: 14px 0 12px;
 }
 .auth-intro > .muted {
-  font-size: 18px;
-  max-width: 420px;
+  margin: 0;
+  font-size: 17px;
 }
+/* The pill sits on the heading's left edge, directly above it. */
 .auth-badge {
   display: inline-flex;
   padding: 6px 12px;
@@ -365,12 +374,13 @@
   letter-spacing: 0.02em;
 }
 .auth-points {
-  margin: 28px 0 0;
+  margin: 22px 0 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 12px;
-  max-width: 420px;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.45;
   color: var(--ink-soft);
 }
 .auth-points li {
@@ -493,12 +503,15 @@
   margin-bottom: 4px;
 }
 .auth-heading h2 {
-  font-size: 24px;
-  margin: 0 0 2px;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0 0 6px;
 }
 .auth-heading .muted {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.5;
 }
 .auth-icon {
   display: grid;
@@ -550,26 +563,39 @@
 @media (max-width: 860px) {
   .auth {
     grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
-    max-width: 520px;
+    gap: 28px;
+    max-width: 480px;
+  }
+  /* Sign-in: the card first. The column has nothing focusable, so the tab order is unchanged. */
+  .auth:not(.account-view) .auth-stage {
+    order: -1;
   }
   .auth-intro {
+    max-width: none;
+  }
+  .account-view .auth-intro {
     position: static;
     padding-top: 0;
   }
   .auth-intro h1 {
-    font-size: 38px;
+    font-size: 30px;
   }
   .auth-intro > .muted {
     font-size: 16px;
   }
-  .auth-points {
+  .account-view .auth-points {
     display: none;
+  }
+}
+@media (max-width: 700px) {
+  /* 16px gutters on phones, and the card starts close under the header. */
+  .page.auth-page {
+    padding: 20px 16px 56px;
   }
 }
 @media (max-width: 480px) {
   .auth-card {
-    padding: 20px 18px;
+    padding: 18px 18px 22px;
     border-radius: 26px;
   }
 }
