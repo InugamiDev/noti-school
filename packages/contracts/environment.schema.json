@@ -198,6 +198,14 @@
         "false"
       ]
     },
+    "AUTH_PASSKEYS": {
+      "default": "false",
+      "type": "string",
+      "enum": [
+        "true",
+        "false"
+      ]
+    },
     "WEB_DIST_DIR": {
       "default": "./apps/web/dist",
       "type": "string"

@@ -43,7 +43,7 @@ import (or pin `JEV_MODEL=jev-1.13.0` while its prices are current); otherwise a
 Auth restricted file (`shared/auth.env`, 0600): NODE_ENV, APP_ORIGIN, AUTH_DATABASE_URL,
 BETTER_AUTH_SECRET, INTERNAL_AUTH_SECRET, AUTH_BIND_HOST, AUTH_PORT, GOOGLE_CLIENT_ID,
 GOOGLE_CLIENT_SECRET, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_TLS_MODE,
-REGISTRATION_MODE, AUTH_INVITE_VERIFIES_EMAIL. SMTP is STARTTLS or implicit TLS, never disable certificate
+REGISTRATION_MODE, AUTH_INVITE_VERIFIES_EMAIL, AUTH_PASSKEYS. SMTP is STARTTLS or implicit TLS, never disable certificate
 validation. Missing SMTP disables signup/verification/recovery delivery; existing verified logins may work.
 
 `AUTH_INVITE_VERIFIES_EMAIL` (`true`|`false`, default `false`; owner decision 2026-11-18) only matters while
@@ -55,7 +55,10 @@ possession of the token stands in for a verification link. It does not skip the 
 redeem the invitation (redemption stays an explicit signed-in step) and grants no membership or role. With
 SMTP configured the flag is ignored and the normal verification email applies; with the flag off and no SMTP,
 sign-up stays 503 `email` unavailable. Password reset and account deletion still require working mail.
-`configured.password` is identity plus (SMTP or this flag). Passkeys (`configured.passkey`) need only identity:
+`configured.password` is identity plus (SMTP or this flag). `AUTH_PASSKEYS` (`true`|`false`, default `false`; owner
+decision 2026-11-19: password-only sign-in for the pilot) gates passkeys: when not `true`, `configured.passkey` is false,
+the capability reports `disabled/not_configured`, every `/api/auth/passkey/*` route answers 404 and the UI shows no
+passkey option. Stored passkey rows are kept. When `true`, passkeys (`configured.passkey`) need only identity:
 the WebAuthn relying party is derived from `APP_ORIGIN` (rpID `localhost` in development, `noti.school` in
 production, rpName `noti.school`, expected origin exactly `APP_ORIGIN`); no extra variable exists. The plugin does not
 require user verification, so a passkey that only proves presence (a security key without a PIN) still signs in:

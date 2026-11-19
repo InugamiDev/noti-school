@@ -52,6 +52,8 @@ export const Environment = z.object({
   // Owner decision 2026-11-18: when true, a valid invitation handed to the invitee by the operator counts as
   // proof of that email, so invite-only password sign-up works without SMTP. Off by default.
   AUTH_INVITE_VERIFIES_EMAIL: z.enum(['true', 'false']).default('false'),
+  // Owner decision 2026-11-19: password-only sign-in for the pilot. Passkeys stay built but off unless 'true'.
+  AUTH_PASSKEYS: z.enum(['true', 'false']).default('false'),
   WEB_DIST_DIR: z.string().default('./apps/web/dist'),
   UPLOAD_DIR: z.string().default('./data/uploads'),
 });
@@ -137,7 +139,8 @@ export function parseEnvironment(
       // Password sign-up needs a way to prove the email: working mail, or operator-delivered invitations.
       password: identity && (!!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD && env.SMTP_FROM) || env.AUTH_INVITE_VERIFIES_EMAIL === 'true'),
       // WebAuthn relying party is derived from APP_ORIGIN (localhost in development, noti.school in production).
-      passkey: identity,
+      // Off by default (owner decision 2026-11-19); AUTH_PASSKEYS=true turns the built passkey flow back on.
+      passkey: identity && env.AUTH_PASSKEYS === 'true',
     },
   };
 }
