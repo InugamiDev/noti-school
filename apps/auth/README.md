@@ -96,7 +96,10 @@ not a role/institution assertion. It must not be retained in URL history, analyt
    SMTP must be configured, unless `AUTH_INVITE_VERIFIES_EMAIL=true` and SMTP is absent: then the checked
    invitation proves the email, the account is created verified, no mail is sent and the response is
    `{token:null,user:{emailVerified:true,...}}` ("now sign in"). Neither path establishes a session at sign-up.
-2. Passkeys (`@better-auth/passkey` 1.7.6, rpID = APP_ORIGIN host, rpName `noti.school`, expected origin
+2. Passkeys are off unless `AUTH_PASSKEYS=true` (owner decision 2026-11-19, password-only pilot). While off, every
+   `/api/auth/passkey/*` route answers 404 `not_found` and capabilities report passkey `disabled`/`not_configured`;
+   the plugin and table stay registered. The rest of this item describes the enabled behaviour.
+   Passkeys (`@better-auth/passkey` 1.7.6, rpID = APP_ORIGIN host, rpName `noti.school`, expected origin
    exactly APP_ORIGIN). Exposed: GET `/passkey/generate-register-options`, POST `/passkey/verify-registration`,
    GET `/passkey/generate-authenticate-options`, POST `/passkey/verify-authentication`, GET
    `/passkey/list-user-passkeys`, POST `/passkey/delete-passkey` (`update-passkey` is not exposed).

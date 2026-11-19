@@ -29,7 +29,7 @@ async function authenticate(f: Fixture, authenticator: SoftwareAuthenticator, as
 }
 
 test('passkey registration needs a verified session, then passkey sign-in yields a normal session', async () => {
-  const f = await fixture({ inviteVerifies: true, mailEnabled: false });
+  const f = await fixture({ inviteVerifies: true, mailEnabled: false, passkeys: true });
   assert.equal((await f.request('/passkey/generate-register-options')).status, 401);
   assert.equal((await f.request('/passkey/verify-registration', { response: {} })).status, 401);
   assert.equal((await f.request('/passkey/list-user-passkeys')).status, 401);
@@ -58,7 +58,7 @@ test('passkey registration needs a verified session, then passkey sign-in yields
 });
 
 test('passkey routes reject cross-origin requests, session-minting registration and unexposed routes', async () => {
-  const f = await fixture({ inviteVerifies: true, mailEnabled: false });
+  const f = await fixture({ inviteVerifies: true, mailEnabled: false, passkeys: true });
   const session = await signedIn(f);
   for (const headers of [{ origin: 'https://evil.invalid' }, { 'sec-fetch-site': 'cross-site' }]) {
     assert.equal((await f.request('/passkey/verify-authentication', { response: { id: 'x' } }, headers)).status, 403);
@@ -81,7 +81,7 @@ test('passkey routes reject cross-origin requests, session-minting registration 
 });
 
 test('users list and delete only their own passkeys', async () => {
-  const f = await fixture({ inviteVerifies: true, mailEnabled: false });
+  const f = await fixture({ inviteVerifies: true, mailEnabled: false, passkeys: true });
   const owner = await signedIn(f);
   assert.equal((await register(f, new SoftwareAuthenticator('localhost', origin), owner)).status, 200);
   const passkeyId = String(f.db.passkey![0]!.id);
@@ -105,7 +105,7 @@ test('users list and delete only their own passkeys', async () => {
 });
 
 test('unverified sessions cannot manage passkeys and passkey sign-in to an unverified user is refused', async () => {
-  const f = await fixture({ inviteVerifies: true, mailEnabled: false });
+  const f = await fixture({ inviteVerifies: true, mailEnabled: false, passkeys: true });
   const unverified: SessionIdentity = { user: { id: 'u', email: 'u@example.invalid', emailVerified: false },
     session: { id: 's', userId: 'u', expiresAt: new Date(Date.now() + 60_000) } };
   const service = createService({ config: f.cfg, auth: f.auth, mail: f.mail, invitations: f.invitations,
@@ -125,7 +125,7 @@ test('unverified sessions cannot manage passkeys and passkey sign-in to an unver
 });
 
 test('passkey sign-in has sign-in style per-client limits', async () => {
-  const f = await fixture({ inviteVerifies: true, mailEnabled: false });
+  const f = await fixture({ inviteVerifies: true, mailEnabled: false, passkeys: true });
   const client = cookies(await f.request('/get-session'));
   const attempt = () => f.request('/passkey/verify-authentication', { response: { id: 'synthetic-credential' } }, { cookie: client });
   for (let i = 0; i < 10; i++) assert.equal((await attempt()).status, 400);
@@ -133,7 +133,7 @@ test('passkey sign-in has sign-in style per-client limits', async () => {
 });
 
 test('a credential id registers once, names are bounded and a refused authenticator is a client error', async () => {
-  const f = await fixture({ inviteVerifies: true, mailEnabled: false });
+  const f = await fixture({ inviteVerifies: true, mailEnabled: false, passkeys: true });
   const session = await signedIn(f);
   const key = new SoftwareAuthenticator('localhost', origin);
   assert.equal((await register(f, key, session)).status, 200);

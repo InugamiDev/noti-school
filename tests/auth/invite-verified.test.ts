@@ -59,8 +59,8 @@ test('flag on with mail configured keeps the normal verification flow', async ()
 });
 
 test('identity capabilities report password and passkey per configuration and fail closed on core failure', async () => {
-  const probe = async (options: { inviteVerifies?: boolean; ready?: boolean }) => {
-    const f = await fixture({ inviteVerifies: options.inviteVerifies ?? false, mailEnabled: false });
+  const probe = async (options: { inviteVerifies?: boolean; passkeys?: boolean; ready?: boolean }) => {
+    const f = await fixture({ inviteVerifies: options.inviteVerifies ?? false, passkeys: options.passkeys ?? true, mailEnabled: false });
     const service = createService({ config: f.cfg, auth: f.auth, mail: f.mail, invitations: f.invitations,
       ready: async () => options.ready ?? true });
     const response = await service(new Request('http://127.0.0.1:3811/internal/capabilities', {
@@ -74,6 +74,8 @@ test('identity capabilities report password and passkey per configuration and fa
   const on = await probe({ inviteVerifies: true });
   assert.deepEqual(on.password, { state: 'available', reason: 'ready' });
   assert.deepEqual(on.passkey, { state: 'available', reason: 'ready' });
+  const flagOff = await probe({ inviteVerifies: true, passkeys: false });
+  assert.deepEqual(flagOff.passkey, { state: 'disabled', reason: 'not_configured' });
   const failed = await probe({ inviteVerifies: true, ready: false });
   for (const key of ['identity', 'password', 'passkey']) assert.deepEqual(failed[key], { state: 'unavailable', reason: 'core_failed' });
 });

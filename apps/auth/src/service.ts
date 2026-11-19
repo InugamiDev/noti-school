@@ -16,6 +16,7 @@ const publicPaths = new Set([
   '/passkey/generate-register-options', '/passkey/verify-registration', '/passkey/generate-authenticate-options',
   '/passkey/verify-authentication', '/passkey/list-user-passkeys', '/passkey/delete-passkey',
 ]);
+const passkeyPaths = [...publicPaths].filter(path => path.startsWith('/passkey/'));
 const passkeyReads = new Set(['/passkey/generate-register-options', '/passkey/generate-authenticate-options', '/passkey/list-user-passkeys']);
 const getPaths = new Set(['/get-session', '/list-sessions', '/verify-email', '/callback/google', ...passkeyReads]);
 // Passkey management only for a signed-in user whose email is verified (validSession).
@@ -114,6 +115,8 @@ export function createService(deps: {
     if (!internal && (!path.startsWith('/api/auth/') || original.headers.has('authorization')
       || [...original.headers.keys()].some(k => /^(x-internal-|x-user-|x-auth-user|x-noti-user)/.test(k)))) return errorResponse(404, 'not_found');
     if (!internal && !publicPaths.has(authPath) && authPath !== '/callback/google' && authPath !== '/invitations/redeem' && !resetLink) return errorResponse(404, 'not_found');
+    // AUTH_PASSKEYS off: the plugin stays registered (schema, migrations) but its routes are unknown paths.
+    if (!internal && !config.configured.passkey && passkeyPaths.includes(authPath)) return errorResponse(404, 'not_found');
     if (!internal && original.method !== (getPaths.has(authPath) || resetLink ? 'GET' : 'POST')) return errorResponse(400, 'invalid_request');
     if (!internal && passkeyReads.has(authPath) && !sameOriginRead(original.headers, config.env.APP_ORIGIN)) return errorResponse(403, 'forbidden');
     if (!internal && original.method !== 'GET' && !csrf(original.headers, config.env.APP_ORIGIN, path === '/api/auth/invitations/redeem')
